@@ -1,0 +1,6 @@
+timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-10T15:30:00Z,trade,BTC,0.1,USDT,4000,USDT,5,Binance,Spot trade
+2024-02-12T10:00:00Z,transfer,ETH,1,,,,,Metamask,Move to cold wallet
+2024-03-01T12:00:00Z,income,ADA,100,,,,,Bybit,Staking reward
+2024-03-15T08:45:00Z,trade,ETH,0.5,USDT,1600,USDT,2,Binance,Partial sell
+2024-03-20T16:00:00Z,transfer,BTC,0.05,,,,,Metamask,Move to exchange
