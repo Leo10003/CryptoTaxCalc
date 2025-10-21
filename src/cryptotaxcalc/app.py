@@ -54,6 +54,22 @@ init_db()
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Compute project root:  .../CryptoTaxCalc
+# (app.py lives in .../CryptoTaxCalc/src/cryptotaxcalc/app.py)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Load .env from the project root (optional but recommended)
+try:
+    from dotenv import load_dotenv  # pip install python-dotenv (already common in your setup)
+    load_dotenv(PROJECT_ROOT / ".env")
+except Exception:
+    # Safe to ignore if python-dotenv isn't installed; ENV variables still work.
+    pass
+
+# Admin token used by /admin/git-sync endpoint
+# Prefer to set this in .env (see below). The default is only for dev!
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "dev-token-change-me")
+
 # Load .env early so BUNDLE_TOKEN is available
 try:
     from dotenv import load_dotenv
@@ -422,6 +438,27 @@ def _latest_zip_path() -> str | None:
         return None
     zips.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return str(zips[0])
+
+def run_git_auto_push():
+    script_path = PROJECT_ROOT / "automation" / "git_auto_push.ps1"
+    if not script_path.exists():
+        raise FileNotFoundError(f"Script not found: {script_path}")
+
+    # Run PowerShell with encoding-safe output
+    process = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=str(PROJECT_ROOT)
+    )
+    return {
+        "return_code": process.returncode,
+        "stdout": process.stdout,
+        "stderr": process.stderr,
+        "log_file": str((PROJECT_ROOT / "automation" / "logs" / f"git_auto_push_{__import__('datetime').datetime.now().strftime('%Y-%m-%d')}.log"))
+    }
 
 # -----------------------------------------------------------------------------
 # Application factory & startup
@@ -1812,3 +1849,22 @@ def create_support_bundle(
         "stderr": stderr,
         "return_code": proc.returncode,
     }
+
+@app.post("/admin/git-sync")
+def admin_git_sync(request: Request, token: str = Query(...)):
+    if token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        result = run_git_auto_push()
+        status = "ok" if result["return_code"] == 0 else "error"
+        return {
+            "status": status,
+            "script": str(PROJECT_ROOT / "automation" / "git_auto_push.ps1"),
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
+            "return_code": result["return_code"],
+            "log_path": result["log_file"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
