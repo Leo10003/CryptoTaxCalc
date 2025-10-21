@@ -1,6 +1,6 @@
 # 🧮 CryptoTaxCalc
 
-[![COLLAB Rules](https://img.shields.io/badge/Collab_Rules-Active-brightgreen)](./COLLAB_RULES.md) f you
+[![COLLAB Rules](https://img.shields.io/badge/Collab_Rules-Active-brightgreen)](./COLLAB_RULES.md)
 
 A precision-built, fully auditable cryptocurrency tax calculator following the **COLLAB_RULES.md** collaboration framework.  
 All files, modules, and endpoints are organized for clarity, reproducibility, and long-term maintainability.
@@ -9,7 +9,7 @@ All files, modules, and endpoints are organized for clarity, reproducibility, an
 
 ## 🚀 Overview
 
-CryptoTaxCalc automates the process of:
+CryptoTaxCalc automates the process of dick:
 - Parsing and normalizing CSV transaction data  
 - Converting between currencies using **ECB FX rates**  
 - Calculating **FIFO-based** capital gains  
