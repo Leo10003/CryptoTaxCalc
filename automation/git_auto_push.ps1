@@ -1,52 +1,49 @@
-# automation/git_auto_push.ps1
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-$ErrorActionPreference = "Stop"
+param(
+    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)
+)
 
-# --- config ---
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$logDir   = Join-Path $PSScriptRoot "logs"
-New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$logPath  = Join-Path $logDir ("git_auto_push_{0}.log" -f (Get-Date -Format "yyyy-MM-dd"))
+$ErrorActionPreference = 'Continue'   # don't abort before we capture output
 
+# --- logging setup ---
+$LogDir = Join-Path $ProjectRoot "automation\logs"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$ts = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+$LogPath = Join-Path $LogDir "git_auto_push_$ts.log"
 function Write-Log([string]$msg) {
-    $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $line  = "[$stamp] $msg"
-    $line | Out-File -FilePath $logPath -Append -Encoding utf8
-    Write-Output $line
+    Add-Content -Path $LogPath -Value ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg)
 }
 
-# Retain 30 days of logs
-Get-ChildItem $logDir -Filter "git_auto_push_*.log" |
-    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
-    Remove-Item -Force -ErrorAction SilentlyContinue
+Set-Location $ProjectRoot
+Write-Log "=== Auto-push started ==="
+Write-Log "ProjectRoot: $ProjectRoot"
 
-# --- work ---
-$commitOut = ""
-$pushOut   = ""
+# Optional: show remote for troubleshooting
+$remoteOut = & git remote -v 2>&1
+Write-Log "git remote -v:`n$remoteOut"
 
-try {
-    Set-Location $repoRoot
-    Write-Log "Running git add -A"
-    git add -A | Out-Null
+# Stage
+Write-Log "Running git add -A"
+& git add -A | Out-Null
 
-    Write-Log "Running git commit"
-    $commitOut = git commit -m ("auto: sync {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")) 2>&1
-    if (-not $commitOut -or $commitOut -match "nothing to commit") {
-        Write-Log "No changes to commit."
-    } else {
-        Write-Log "Commit output:`n$commitOut"
-    }
+# Commit (will no-op if nothing to commit)
+$commitMsg = "auto: sync $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Log "Running git commit"
+$commitOut = & git commit -m $commitMsg 2>&1
+$commitCode = $LASTEXITCODE
+Write-Log "Commit exit: $commitCode"
+Write-Log "Commit output:`n$commitOut"
 
-    Write-Log "Running git push"
-    $pushOut = git push 2>&1
-    Write-Log "Push output:`n$pushOut"
+# Push (capture output regardless of success/failure)
+Write-Log "Running git push"
+$pushOut = & git push 2>&1
+$pushCode = $LASTEXITCODE
+Write-Log "Push exit: $pushCode"
+Write-Log "Push output:`n$pushOut"
 
-    exit 0
-}
-catch {
-    Write-Log ("ERROR: {0}" -f $_.Exception.Message)
-    if ($_.InvocationInfo.PositionMessage) {
-        Write-Log $_.InvocationInfo.PositionMessage
-    }
+# Return non-zero on failure so FastAPI can indicate error
+if ($pushCode -ne 0) {
+    Write-Log "ERROR: git push failed with exit code $pushCode"
     exit 1
 }
+Write-Log "SUCCESS: push completed"
+exit 0
