@@ -1,6 +1,6 @@
 # 🧮 CryptoTaxCalc
 
-[![COLLAB Rules](https://img.shields.io/badge/Collab_Rules-Active-brightgreen)](./COLLAB_RULES.md)
+[![COLLAB Rules](https://img.shields.io/badge/Collab_Rules-Active-brightgreen)](./COLLAB_RULES.md) f you
 
 A precision-built, fully auditable cryptocurrency tax calculator following the **COLLAB_RULES.md** collaboration framework.  
 All files, modules, and endpoints are organized for clarity, reproducibility, and long-term maintainability.
