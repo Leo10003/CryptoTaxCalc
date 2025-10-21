@@ -1,38 +1,76 @@
+# automation/git_auto_push.ps1
+# Purpose: Auto-commit & push any local changes to GitHub.
+# Adds: logging (daily files) + 30-day retention cleanup.
+
 param(
-  [string]$RepoPath = "C:\Users\picci\Desktop\CryptoTaxCalc",
-  [string]$Branch = "main",
-  [string]$Remote = "origin"
+    [string]$ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# 1) Go to repo
-Set-Location $RepoPath
+# --- Paths -------------------------------------------------------
+$logsDir = Join-Path $PSScriptRoot "logs"
+if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Force -Path $logsDir | Out-Null }
 
-# 2) Ensure we are on the right branch
+$logPath = Join-Path $logsDir ("git_auto_push_{0}.log" -f (Get-Date -Format "yyyy-MM-dd"))
+
+function Write-Log {
+    param([string]$msg)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:sszzz"
+    $line = "[{0}] {1}" -f $timestamp, $msg
+    $line | Out-File -FilePath $logPath -Append -Encoding UTF8
+}
+
+# --- Log header --------------------------------------------------
+Write-Log "=== Auto-push started ==="
+Write-Log "ProjectRoot: $ProjectRoot"
+Push-Location $ProjectRoot
+
 try {
-  git rev-parse --is-inside-work-tree | Out-Null
-} catch {
-  Write-Host "Not a git repo at $RepoPath" -ForegroundColor Red
-  exit 1
+    # Ensure repo
+    if (-not (Test-Path ".git")) {
+        throw "No .git directory found at $ProjectRoot. Initialize git before using this script."
+    }
+
+    # Configure safe directory (for some Git installations)
+    git config --global --add safe.directory "$ProjectRoot" | Out-Null
+
+    # Status
+    $status = git status --porcelain
+    if ([string]::IsNullOrWhiteSpace($status)) {
+        Write-Log "No changes to commit."
+    }
+    else {
+        # Stage & commit
+        git add -A
+        $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ssK"
+        $commitMsg = "Auto-sync: $stamp"
+        git commit -m "$commitMsg" | Out-Null
+        Write-Log "Committed: $commitMsg"
+    }
+
+    # Always attempt push (safe even if nothing to push)
+    git push | Tee-Object -Variable pushOut | Out-Null
+    Write-Log "Push output: $pushOut"
+
+    Write-Log "=== Auto-push complete ==="
+}
+catch {
+    Write-Log "ERROR: $($_.Exception.Message)"
+    throw
+}
+finally {
+    Pop-Location
 }
 
-# 3) Pull latest (avoid diverging histories)
-git fetch $Remote $Branch
-# Try fast-forward if possible (ignore if nothing to update)
-git merge --ff-only "$Remote/$Branch" 2>$null | Out-Null
-
-# 4) Check for changes
-$changes = git status --porcelain
-if ([string]::IsNullOrWhiteSpace($changes)) {
-  Write-Host "No changes to commit."
-  exit 0
+# --- Cleanup old logs (>30 days) --------------------------------
+try {
+    Get-ChildItem -Path $logsDir -File |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    Write-Log "Old logs cleanup completed (kept last 30 days)."
 }
-
-# 5) Add, commit, push
-git add -A
-$stamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ssK")
-git commit -m "Auto-sync: $stamp"
-git push $Remote $Branch
-
-Write-Host "Auto-push complete at $stamp."
+catch {
+    Write-Log "Log cleanup failed: $($_.Exception.Message)"
+}
