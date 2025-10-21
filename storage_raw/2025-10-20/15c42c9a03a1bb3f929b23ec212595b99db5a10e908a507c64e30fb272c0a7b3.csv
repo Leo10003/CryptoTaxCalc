@@ -1,0 +1,3 @@
+timestamp,type,base_asset,base_amount,fair_value,exchange,memo
+2024-03-01T12:00:00Z,income,ADA,100,0.5,Bybit,Staking reward
+2024-03-10T12:00:00Z,income,ETH,0.25,2200,Binance,Staking reward

@@ -1,20 +1,26 @@
-# Python cache and compiled files
+# Python
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
 
-# Virtual environment
+# Virtual env
 .venv/
 
-# IDE
+# Local data / caches / bundles
+support_bundles/
+support_bundles_temp/
+*.zip
+*.log
+last_alert.txt
+
+# OS / editors
+.DS_Store
+Thumbs.db
 .vscode/
 .idea/
 
-# Data files
-*.db
-*.sqlite3
+# Secrets (RECOMMENDED to exclude)
+.env
 
-# System files
-.DS_Store
-Thumbs.db
+# SQLite (usually exclude; include only if you want DB in git)
+data.db
