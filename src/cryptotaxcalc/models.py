@@ -7,8 +7,8 @@ SQLAlchemy ORM models (database tables).
 """
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, DateTime, Integer, Index, Date, Text, Column
-from datetime import datetime, date
+from sqlalchemy import String, DateTime, Integer, Index, Date, Text, Column, JSON, text
+from datetime import datetime, date, timezone
 
 class Base(DeclarativeBase):
     """Base class required by SQLAlchemy's ORM to register models."""
@@ -60,3 +60,36 @@ class FxRate(Base):
     batch_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
 Index("idx_transaction_hash", TransactionRow.hash)
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+class CalcRun(Base):
+    __tablename__ = "calc_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    # lifecycle
+    status: Mapped[str] = mapped_column(default="running", index=True)   # running|ok|error
+    started_at: Mapped[datetime] = mapped_column(default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # parameters / environment
+    rule_version: Mapped[str | None] = mapped_column(nullable=True)
+    lot_method: Mapped[str | None] = mapped_column(nullable=True)        # e.g., FIFO
+    fx_set_id: Mapped[int | None] = mapped_column(nullable=True)
+
+    params_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # integrity artifacts
+    input_hash: Mapped[str | None] = mapped_column(nullable=True, index=True)
+    output_hash: Mapped[str | None] = mapped_column(nullable=True, index=True)
+    manifest_hash: Mapped[str | None] = mapped_column(nullable=True, index=True)
+    manifest_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # persisted outputs (lightweight summary only; events stay on-demand)
+    summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(default=utcnow, server_default=text("(datetime('now'))"))
+    

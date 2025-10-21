@@ -20,8 +20,8 @@ Endpoints kept for continuity:
 
 import os, shutil, tempfile, csv, io, json, csv as _csv, sys, glob, time, subprocess
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request
-from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request, Path as PathParam
+from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction, CalcRunOut, CalcRunList
 from .db import SessionLocal, engine
 from .models import Base, TransactionRow, FxRate
 from decimal import Decimal, InvalidOperation
@@ -39,8 +39,10 @@ from .fx_utils import usd_to_eur, get_rate_for_date, get_or_create_current_fx_ba
 from .audit_digest import build_run_manifest, compute_digests
 from .audit_utils import audit
 from .utils_files import persist_uploaded_file
-from pathlib import Path
+from pathlib import Path as FSPath
 from .__about__ import __title__, __version__
+from sqlalchemy.orm import Session
+import uuid
 
 # ReportLab (pure-Python PDF generation)
 from reportlab.lib.pagesizes import A4
@@ -56,7 +58,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Compute project root:  .../CryptoTaxCalc
 # (app.py lives in .../CryptoTaxCalc/src/cryptotaxcalc/app.py)
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # .../CryptoTaxCalc
+PROJECT_ROOT = FSPath(__file__).resolve().parents[2]  # .../CryptoTaxCalc
 AUTOMATION = PROJECT_ROOT / "automation"
 GIT_SCRIPT = AUTOMATION / "git_auto_push.ps1"
 LOG_DIR = AUTOMATION / "logs"
@@ -77,7 +79,7 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "dev-token-change-me")
 try:
     from dotenv import load_dotenv
     # project_root/.env  (src/cryptotaxcalc/app.py -> parents[2] == project root)
-    load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
+    load_dotenv(dotenv_path=FSPath(__file__).resolve().parents[2] / ".env")
 except Exception:
     # If python-dotenv isn't installed or .env missing, we just skip;
     # endpoint will detect missing token and return 500 with a safe message.
@@ -424,13 +426,13 @@ persist_uploaded_file = _locals["persist_uploaded_file"]
 
 # --- Support-bundle helpers ---------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = FSPath(__file__).resolve().parents[2]
 SUPPORT_BUNDLES_DIR = PROJECT_ROOT / "support_bundles"
 BUNDLE_SCRIPT = os.getenv("AUTOMATION_BUNDLE_PS", r"automation\collect_support_bundle.ps1")
 BUNDLE_TOKEN = os.getenv("BUNDLE_TOKEN", "")
 
 def _abs_script_path() -> str:
-    p = Path(BUNDLE_SCRIPT)
+    p = FSPath(BUNDLE_SCRIPT)
     if not p.is_absolute():
         p = PROJECT_ROOT / p
     return str(p.resolve())
@@ -469,6 +471,82 @@ def _latest_log():
     files = sorted(LOG_DIR.glob("git_auto_push_*.log"))
     return files[-1] if files else None
 
+def _summarize_fifo(fifo_obj) -> dict:
+    """
+    Create a small, stable summary from your FIFO result object.
+    Adjust to your fifo structure if names differ.
+    """
+    events = getattr(fifo_obj, "events", []) or []
+    totals = getattr(fifo_obj, "totals", None)
+
+    realized_gain = None
+    proceeds_total = None
+    cost_total = None
+    if totals:
+        realized_gain = totals.get("gain") or totals.get("realized_gain")
+        proceeds_total = totals.get("proceeds")
+        cost_total = totals.get("cost_basis")
+
+    return {
+        "events_count": len(events),
+        "realized_gain": realized_gain,
+        "proceeds_total": proceeds_total,
+        "cost_basis_total": cost_total,
+    }
+
+def _hash_bytes(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+def _save_calc_run_json(payload: dict) -> str:
+    """
+    Writes one calc run to a JSON file and returns the run_id (filename stem).
+    """
+    run_id = payload.get("run_id") or str(uuid.uuid4())
+    payload["run_id"] = run_id
+
+    # Write a compact JSON to reduce footprint.
+    out_path = CALC_HISTORY_DIR / f"{run_id}.json"
+    out_path.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    return run_id
+
+def _list_calc_runs_meta() -> list[dict]:
+    """
+    Returns basic metadata for all stored calc runs (id, created_at, counts, etc.).
+    """
+    items = []
+    for p in sorted(CALC_HISTORY_DIR.glob("*.json")):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        items.append({
+            "run_id": data.get("run_id", p.stem),
+            "created_at": data.get("created_at"),
+            "events_count": (len(data.get("events", [])) if isinstance(data.get("events"), list) else None),
+            "inputs_hash": data.get("inputs_hash"),
+            "outputs_hash": data.get("outputs_hash"),
+            "manifest": data.get("manifest"),
+        })
+    # newest first
+    items.sort(key=lambda d: (d.get("created_at") or ""), reverse=True)
+    return items
+
+def _load_calc_run(run_id: str) -> dict | None:
+    path = CALC_HISTORY_DIR / f"{run_id}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+def _delete_calc_run(run_id: str) -> bool:
+    path = CALC_HISTORY_DIR / f"{run_id}.json"
+    if path.exists():
+        path.unlink()
+        return True
+    return False
+
 # -----------------------------------------------------------------------------
 # Application factory & startup
 # -----------------------------------------------------------------------------
@@ -477,6 +555,10 @@ app = FastAPI(
     version=__version__,
     description="Backend API for parsing crypto transactions and storing them safely.",
 )
+
+# --- History storage (file-based) ---
+CALC_HISTORY_DIR = FSPath("storage_raw/calc_runs")
+CALC_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
 def _ensure_transactions_has_fair_value_column():
     with engine.connect() as conn:
@@ -907,6 +989,33 @@ def calculate_fifo() -> Dict[str, Any]:
 
     # Compute FIFO
     events, summary, warnings = compute_fifo(tx_models)
+
+    # --- Persist calc run (file-based) ---
+    created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+    # Serialize events to pure dicts
+    try:
+        # Pydantic v2
+        events_payload = [e.model_dump() for e in events]
+    except AttributeError:
+        # Pydantic v1 fallback
+        events_payload = [e.dict() for e in events]
+
+    payload = {
+        "run_id": str(uuid.uuid4()),
+        "created_at": created_at,
+        "inputs_hash": None,   # fill if you have a deterministic input hash
+        "outputs_hash": _hash_bytes(json.dumps(events_payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")),
+        "manifest": {
+            "params": {
+                "lot_method": "FIFO",
+            }
+        },
+        "events": events_payload,
+    }
+
+    _save_calc_run_json(payload)
+    run_id = payload["run_id"]
 
     # EUR totals (same as your original logic)
     eur_totals = {"proceeds": Decimal("0"), "cost_basis": Decimal("0"), "gain": Decimal("0")}
@@ -1899,3 +2008,53 @@ def admin_git_sync(token: str = Query(..., description="Admin token")):
         "log_path": str(log_path) if log_path else None,
         "log_tail": log_tail,
     }
+
+@app.get("/history/runs", response_class=JSONResponse, tags=["history"])
+def history_list_runs():
+    """
+    List all stored calculation runs with light metadata.
+    """
+    return JSONResponse({"items": _list_calc_runs_meta()})
+
+@app.get("/history/run/{run_id}", response_class=JSONResponse, tags=["history"])
+def history_get_run(run_id: str = PathParam(..., description="The run_id (UUID) stored on disk")):
+    data = _load_calc_run(run_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return JSONResponse(data)
+
+@app.delete("/history/run/{run_id}", response_class=JSONResponse, tags=["history"])
+def history_delete_run(run_id: str = PathParam(...)):
+    ok = _delete_calc_run(run_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return JSONResponse({"status": "deleted", "run_id": run_id})
+
+@app.get("/history/run/{run_id}/events.csv", tags=["history"])
+def history_download_run_csv(run_id: str = PathParam(...)):
+    """
+    Rehydrate a stored run and stream its events as CSV.
+    """
+    data = _load_calc_run(run_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    # In-memory CSV
+    buf = StringIO()
+    writer = csv.writer(buf)
+    # header from first row keys (if present)
+    events = data.get("events") or []
+    if events:
+        header = list(events[0].keys())
+        writer.writerow(header)
+        for row in events:
+            writer.writerow([row.get(k) for k in header])
+    else:
+        writer.writerow(["no_data"])
+
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="calc_run_{run_id}.csv"'},
+    )

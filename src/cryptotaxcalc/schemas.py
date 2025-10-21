@@ -63,3 +63,20 @@ class ImportCSVResponse(BaseModel):
     skipped_duplicates: int
     skipped_errors: int
     note: str
+
+class CalcRunOut(BaseModel):
+    id: int
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    rule_version: str | None
+    lot_method: str | None
+    fx_set_id: int | None
+    input_hash: str | None
+    output_hash: str | None
+    manifest_hash: str | None
+    summary: dict[str, Any] | None
+
+class CalcRunList(BaseModel):
+    items: list[CalcRunOut]
+
