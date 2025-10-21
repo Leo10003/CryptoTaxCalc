@@ -1,76 +1,52 @@
 # automation/git_auto_push.ps1
-# Purpose: Auto-commit & push any local changes to GitHub.
-# Adds: logging (daily files) + 30-day retention cleanup.
-
-param(
-    [string]$ProjectRoot = (Resolve-Path "$PSScriptRoot\..").Path
-)
-
-Set-StrictMode -Version Latest
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $ErrorActionPreference = "Stop"
 
-# --- Paths -------------------------------------------------------
-$logsDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Force -Path $logsDir | Out-Null }
+# --- config ---
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$logDir   = Join-Path $PSScriptRoot "logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$logPath  = Join-Path $logDir ("git_auto_push_{0}.log" -f (Get-Date -Format "yyyy-MM-dd"))
 
-$logPath = Join-Path $logsDir ("git_auto_push_{0}.log" -f (Get-Date -Format "yyyy-MM-dd"))
-
-function Write-Log {
-    param([string]$msg)
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:sszzz"
-    $line = "[{0}] {1}" -f $timestamp, $msg
-    $line | Out-File -FilePath $logPath -Append -Encoding UTF8
+function Write-Log([string]$msg) {
+    $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line  = "[$stamp] $msg"
+    $line | Out-File -FilePath $logPath -Append -Encoding utf8
+    Write-Output $line
 }
 
-# --- Log header --------------------------------------------------
-Write-Log "=== Auto-push started ==="
-Write-Log "ProjectRoot: $ProjectRoot"
-Push-Location $ProjectRoot
+# Retain 30 days of logs
+Get-ChildItem $logDir -Filter "git_auto_push_*.log" |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
+# --- work ---
+$commitOut = ""
+$pushOut   = ""
 
 try {
-    # Ensure repo
-    if (-not (Test-Path ".git")) {
-        throw "No .git directory found at $ProjectRoot. Initialize git before using this script."
-    }
+    Set-Location $repoRoot
+    Write-Log "Running git add -A"
+    git add -A | Out-Null
 
-    # Configure safe directory (for some Git installations)
-    git config --global --add safe.directory "$ProjectRoot" | Out-Null
-
-    # Status
-    $status = git status --porcelain
-    if ([string]::IsNullOrWhiteSpace($status)) {
+    Write-Log "Running git commit"
+    $commitOut = git commit -m ("auto: sync {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")) 2>&1
+    if (-not $commitOut -or $commitOut -match "nothing to commit") {
         Write-Log "No changes to commit."
-    }
-    else {
-        # Stage & commit
-        git add -A
-        $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ssK"
-        $commitMsg = "Auto-sync: $stamp"
-        git commit -m "$commitMsg" | Out-Null
-        Write-Log "Committed: $commitMsg"
+    } else {
+        Write-Log "Commit output:`n$commitOut"
     }
 
-    # Always attempt push (safe even if nothing to push)
-    git push | Tee-Object -Variable pushOut | Out-Null
-    Write-Log "Push output: $pushOut"
+    Write-Log "Running git push"
+    $pushOut = git push 2>&1
+    Write-Log "Push output:`n$pushOut"
 
-    Write-Log "=== Auto-push complete ==="
+    exit 0
 }
 catch {
-    Write-Log "ERROR: $($_.Exception.Message)"
-    throw
-}
-finally {
-    Pop-Location
-}
-
-# --- Cleanup old logs (>30 days) --------------------------------
-try {
-    Get-ChildItem -Path $logsDir -File |
-        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
-        Remove-Item -Force -ErrorAction SilentlyContinue
-    Write-Log "Old logs cleanup completed (kept last 30 days)."
-}
-catch {
-    Write-Log "Log cleanup failed: $($_.Exception.Message)"
+    Write-Log ("ERROR: {0}" -f $_.Exception.Message)
+    if ($_.InvocationInfo.PositionMessage) {
+        Write-Log $_.InvocationInfo.PositionMessage
+    }
+    exit 1
 }

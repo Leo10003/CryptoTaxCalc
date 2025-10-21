@@ -1850,7 +1850,7 @@ def create_support_bundle(
         "return_code": proc.returncode,
     }
 
-@app.post("/admin/git-sync")
+@app.post("/admin/git-sync", tags=["admin"])
 def admin_git_sync(request: Request, token: str = Query(...)):
     if token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
