@@ -56,7 +56,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Compute project root:  .../CryptoTaxCalc
 # (app.py lives in .../CryptoTaxCalc/src/cryptotaxcalc/app.py)
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # .../CryptoTaxCalc
+AUTOMATION = PROJECT_ROOT / "automation"
+GIT_SCRIPT = AUTOMATION / "git_auto_push.ps1"
+LOG_DIR = AUTOMATION / "logs"
 
 # Load .env from the project root (optional but recommended)
 try:
@@ -459,6 +462,12 @@ def run_git_auto_push():
         "stderr": process.stderr,
         "log_file": str((PROJECT_ROOT / "automation" / "logs" / f"git_auto_push_{__import__('datetime').datetime.now().strftime('%Y-%m-%d')}.log"))
     }
+
+def _latest_log():
+    if not LOG_DIR.exists():
+        return None
+    files = sorted(LOG_DIR.glob("git_auto_push_*.log"))
+    return files[-1] if files else None
 
 # -----------------------------------------------------------------------------
 # Application factory & startup
@@ -1851,20 +1860,42 @@ def create_support_bundle(
     }
 
 @app.post("/admin/git-sync", tags=["admin"])
-def admin_git_sync(request: Request, token: str = Query(...)):
-    if token != ADMIN_TOKEN:
+def admin_git_sync(token: str = Query(..., description="Admin token")):
+    # auth guard
+    if token != os.getenv("ADMIN_TOKEN", "12345"):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    try:
-        result = run_git_auto_push()
-        status = "ok" if result["return_code"] == 0 else "error"
-        return {
-            "status": status,
-            "script": str(PROJECT_ROOT / "automation" / "git_auto_push.ps1"),
-            "stdout": result["stdout"],
-            "stderr": result["stderr"],
-            "return_code": result["return_code"],
-            "log_path": result["log_file"]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # run the script
+    proc = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy", "Bypass",
+            "-File", str(GIT_SCRIPT),
+        ],
+        cwd=str(PROJECT_ROOT),        # ensure we run in repo root
+        text=True,
+        capture_output=True,
+        encoding="utf-8",
+        errors="ignore",
+    )
+
+    log_path = _latest_log()
+    log_tail = ""
+    if log_path and log_path.exists():
+        try:
+            text = log_path.read_text(encoding="utf-8", errors="ignore")
+            log_tail = text[-4000:]  # last ~4k chars
+        except Exception:
+            log_tail = "<could not read log>"
+
+    return {
+        "status": "ok" if proc.returncode == 0 else "error",
+        "script": str(GIT_SCRIPT),
+        "return_code": proc.returncode,
+        "stdout": proc.stdout,     # often empty—use log_tail for real info
+        "stderr": proc.stderr,
+        "log_path": str(log_path) if log_path else None,
+        "log_tail": log_tail,
+    }
