@@ -8,12 +8,13 @@ SQLAlchemy ORM models (database tables).
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import String, DateTime, Integer, Index, Date, Text, Column, JSON, text
-from datetime import datetime, date, timezone
+from datetime import datetime, date as dt_date, timezone
+from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from typing import Any, Optional
 
 class Base(DeclarativeBase):
     """Base class required by SQLAlchemy's ORM to register models."""
     pass
-
 
 class TransactionRow(Base):
     """
@@ -45,7 +46,6 @@ class TransactionRow(Base):
     fair_value: Mapped[str | None] = mapped_column(String(64), nullable=True)
     raw_event_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
-
 class FxRate(Base):
     """
     Daily EUR↔USD rate from ECB (or equivalent).
@@ -55,7 +55,7 @@ class FxRate(Base):
     __tablename__ = "fx_rates"
 
     # One row per calendar day
-    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    date: Mapped[dt_date] = mapped_column(Date, primary_key=True)
     usd_per_eur: Mapped[str] = mapped_column(String(32), nullable=False)
     batch_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
@@ -92,4 +92,16 @@ class CalcRun(Base):
     error_message: Mapped[str | None] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utcnow, server_default=text("(datetime('now'))"))
-    
+
+class CalcAudit(Base):
+    __tablename__ = "calc_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    actor: Mapped[str] = mapped_column(String)
+    action: Mapped[str] = mapped_column(String)
+
+    # ✅ Python type on the left; SQLAlchemy DB type on the right
+    meta_json: Mapped[Optional[dict[str, Any]]] = mapped_column(SQLiteJSON, nullable=True)
+
+    created_at: Mapped[str] = mapped_column(String)  # or DateTime if you prefer

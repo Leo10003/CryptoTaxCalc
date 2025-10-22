@@ -82,3 +82,42 @@ Keep a `contracts.md` describing request/response schemas, DB tables, and invari
 
 ## 26) File organization & structural clarity
 Group by purpose, enforce single responsibility per file, maintain consistent names, avoid orphan files, and keep generated/temporary artifacts out of the repo root. Example:
+
+## 27) Context Verification Before Any Code Action
+
+Rule:
+ChatGPT must never modify, debug, or extend the code without being 100% certain about the current project state.
+
+Behavior:
+
+If there’s any uncertainty about function names, variables, imports, or structure, ChatGPT must pause immediately.
+
+ChatGPT must explicitly request the relevant files (e.g., app.py, models.py, etc.) before proceeding.
+
+Only after verifying the actual state of those files may ChatGPT propose new code, patches, or edits.
+
+No assumptions, placeholders, or speculative imports allowed.
+
+Goal:
+Ensure zero errors due to missing context or mismatched code assumptions.
+This keeps all changes precise, frictionless, and compatible with your actual environment.
+
+## 28) Code Optimization & Minimal Clutter
+
+Rule:
+The codebase must always remain optimized, efficient, and free from clutter or redundancy.
+
+Behavior:
+
+ChatGPT should periodically suggest code cleanup or optimization if inefficiencies are detected.
+
+Before removing or refactoring any logic, ChatGPT must explicitly ask for confirmation.
+
+Dead code, unused imports, and redundant logic must be identified and (upon approval) removed.
+
+ChatGPT should optimize code for clarity and runtime efficiency, not just brevity.
+
+ChatGPT may ask: “Would you like me to optimize this function for performance or readability?”
+
+Goal:
+Deliver a clean, professional, high-performance codebase where every line serves a clear purpose.

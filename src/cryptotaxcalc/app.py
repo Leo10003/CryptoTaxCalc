@@ -18,31 +18,31 @@ Endpoints kept for continuity:
   Command to start the server: uvicorn app:app --reload
 """
 
-import os, shutil, tempfile, csv, io, json, csv as _csv, sys, glob, time, subprocess
-from typing import Dict, Any, List, Optional
+import os, shutil, tempfile, csv, io, json, csv as _csv, sys, time, subprocess
+from typing import Dict, Any, List
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request, Path as PathParam
-from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction, CalcRunOut, CalcRunList
+from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction
 from .db import SessionLocal, engine
-from .models import Base, TransactionRow, FxRate
-from decimal import Decimal, InvalidOperation
+from .models import Base, TransactionRow, FxRate, CalcRun
+from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, date, date as _date, timezone
 from csv import DictReader
 from io import StringIO, BytesIO
-from sqlalchemy import text, and_, func
+from sqlalchemy import text, and_
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from .utils_files import persist_uploaded_file
 from datetime import datetime as _dt
 from .csv_normalizer import parse_csv
 from .fifo_engine import compute_fifo
-from .fx_utils import usd_to_eur, get_rate_for_date, get_or_create_current_fx_batch_id
-from .audit_digest import build_run_manifest, compute_digests
+from .fx_utils import usd_to_eur, get_rate_for_date
 from .audit_utils import audit
 from .utils_files import persist_uploaded_file
 from pathlib import Path as FSPath
 from .__about__ import __title__, __version__
-from sqlalchemy.orm import Session
 import uuid
+from dataclasses import is_dataclass, asdict
+from uuid import UUID
 
 # ReportLab (pure-Python PDF generation)
 from reportlab.lib.pagesizes import A4
@@ -471,32 +471,6 @@ def _latest_log():
     files = sorted(LOG_DIR.glob("git_auto_push_*.log"))
     return files[-1] if files else None
 
-def _summarize_fifo(fifo_obj) -> dict:
-    """
-    Create a small, stable summary from your FIFO result object.
-    Adjust to your fifo structure if names differ.
-    """
-    events = getattr(fifo_obj, "events", []) or []
-    totals = getattr(fifo_obj, "totals", None)
-
-    realized_gain = None
-    proceeds_total = None
-    cost_total = None
-    if totals:
-        realized_gain = totals.get("gain") or totals.get("realized_gain")
-        proceeds_total = totals.get("proceeds")
-        cost_total = totals.get("cost_basis")
-
-    return {
-        "events_count": len(events),
-        "realized_gain": realized_gain,
-        "proceeds_total": proceeds_total,
-        "cost_basis_total": cost_total,
-    }
-
-def _hash_bytes(b: bytes) -> str:
-    return hashlib.sha256(b).hexdigest()
-
 def _save_calc_run_json(payload: dict) -> str:
     """
     Writes one calc run to a JSON file and returns the run_id (filename stem).
@@ -506,7 +480,7 @@ def _save_calc_run_json(payload: dict) -> str:
 
     # Write a compact JSON to reduce footprint.
     out_path = CALC_HISTORY_DIR / f"{run_id}.json"
-    out_path.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    out_path.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False, default=_json_default), encoding="utf-8")
     return run_id
 
 def _list_calc_runs_meta() -> list[dict]:
@@ -546,6 +520,133 @@ def _delete_calc_run(run_id: str) -> bool:
         path.unlink()
         return True
     return False
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def _to_jsonable(obj):
+    # primitives
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    # Decimal → str (keeps precision), or float if you prefer
+    if isinstance(obj, Decimal):
+        return str(obj)
+
+    # dates / datetimes → ISO
+    if isinstance(obj, (date, datetime)):
+        # ensure naive datetimes don’t crash
+        try:
+            return obj.isoformat()
+        except Exception:
+            return str(obj)
+
+    # dataclasses
+    if is_dataclass(obj):
+        return {k: _to_jsonable(v) for k, v in asdict(obj).items()}
+
+    # dict-like
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+
+    # list / tuple / set
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_jsonable(x) for x in obj]
+
+    # generic python objects (fall back to __dict__)
+    if hasattr(obj, "__dict__"):
+        return {k: _to_jsonable(v) for k, v in vars(obj).items()}
+
+    # last resort: string
+    return str(obj)
+
+def _json_default(obj):
+    # Use strings for exactness (no float rounding)
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", errors="replace")
+    if isinstance(obj, set):
+        return list(obj)
+    # Let json raise for anything unexpected (helps catch bugs)
+    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
+# --- JSON + hashing helpers (safe for Decimal, UUID, dataclasses, etc.) ---
+
+def _hash_text(s: str) -> str:
+    """Return hex SHA256 of an input string."""
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+def _to_plain_data(obj):
+    """
+    Recursively convert objects to JSON-serializable structures:
+    - Decimal -> float
+    - set/tuple -> list
+    - dataclass / pydantic / attr / arbitrary objects -> dict via __dict__
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, Decimal):
+        # keep 2 dp if you prefer fixed precision: float(Decimal) is fine for API outputs
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _to_plain_data(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_plain_data(v) for v in obj]
+    # Try pydantic model
+    if hasattr(obj, "model_dump"):
+        return _to_plain_data(obj.model_dump())
+    # Try dataclass-like / simple objects
+    if hasattr(obj, "__dict__"):
+        return _to_plain_data(vars(obj))
+    # Fallback to string
+    return str(obj)
+
+def _decimal_to_float(o):
+    if isinstance(o, Decimal):
+        return float(o)
+    return o
+
+def json_dumps(data) -> str:
+    # compact, ASCII-safe JSON with Decimal handling
+    return json.dumps(data, separators=(",", ":"), ensure_ascii=False, default=_decimal_to_float)
+
+def ev_to_dict(ev) -> Dict[str, Any]:
+    # All numbers as strings -> avoids Decimal issues and keeps precision
+    return {
+        "timestamp": getattr(ev, "timestamp", None),
+        "asset": getattr(ev, "asset", None),
+        "qty_sold": dec_to_str(getattr(ev, "qty_sold", Decimal("0"))),
+        "proceeds": dec_to_str(getattr(ev, "proceeds", Decimal("0"))),
+        "cost_basis": dec_to_str(getattr(ev, "cost_basis", Decimal("0"))),
+        "gain": dec_to_str(getattr(ev, "gain", Decimal("0"))),
+        "quote_asset": getattr(ev, "quote_asset", None),
+        "fee_applied": dec_to_str(getattr(ev, "fee_applied", Decimal("0"))),
+        "matches": [
+            {
+                "from_qty":        dec_to_str(getattr(m, "from_qty", Decimal("0"))),
+                "lot_cost_per_unit": dec_to_str(getattr(m, "lot_cost_per_unit", Decimal("0"))),
+                "lot_cost_total":  dec_to_str(getattr(m, "lot_cost_total", Decimal("0"))),
+            }
+            for m in getattr(ev, "matches", []) or []
+        ],
+    }
+
+def _get_client_ip(request: Request) -> str:
+    """Extract client IP address from FastAPI Request."""
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        # If behind a proxy, X-Forwarded-For may contain multiple IPs
+        ip = x_forwarded_for.split(",")[0].strip()
+    else:
+        ip = request.client.host if request.client else "unknown"
+    return ip
 
 # -----------------------------------------------------------------------------
 # Application factory & startup
@@ -928,7 +1029,7 @@ def list_transactions(
         }
 
 @app.get("/calculate")
-def calculate_fifo() -> Dict[str, Any]:
+def calculate_fifo(request: Request) -> Dict[str, Any]:
     """
     Run the FIFO engine on all stored transactions and return:
       - realized events (each sale: proceeds, cost basis, gain)
@@ -939,8 +1040,10 @@ def calculate_fifo() -> Dict[str, Any]:
       - persist realized_events for audit
       - include run_id in the response
     """
-    from models import TransactionRow
-    from db import SessionLocal
+    run_id = getattr(request.state, "run_id", None)
+    if not run_id:
+        run_id = str(uuid.uuid4())
+        request.state.run_id = run_id
 
     # Load transactions oldest-first
     tx_models: List[Transaction] = []
@@ -963,8 +1066,23 @@ def calculate_fifo() -> Dict[str, Any]:
                 fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
             ))
 
+    _tx_inputs_view = [
+        {
+            "timestamp": str(getattr(t, "timestamp", "")),
+            "base": getattr(t, "base_asset", None),
+            "quote": getattr(t, "quote_asset", None),
+            "side": getattr(t, "side", None),
+            "quantity": str(getattr(t, "quantity", "")),
+            "price": str(getattr(t, "price", "")),
+            "fee": str(getattr(t, "fee", "")),
+            "txid": getattr(t, "txid", None),
+        }
+        for t in tx_models
+    ]
+    inputs_hash = _hash_text(json.dumps(_tx_inputs_view, separators=(",", ":"), ensure_ascii=False))
+
     # Create calc_runs row (freeze metadata)
-    started_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     rule_version = "2025.01.fifo.v1"
     jurisdiction = "HR"
     lot_method = "FIFO"
@@ -979,37 +1097,38 @@ def calculate_fifo() -> Dict[str, Any]:
     }
 
     with engine.begin() as conn:
-        run_id = conn.execute(
+        run_id_db = conn.execute(
             text("""
             INSERT INTO calc_runs (started_at, jurisdiction, rule_version, lot_method, fx_set_id, params_json)
             VALUES (:sa, :j, :rv, :lm, :fx, :pj)
             """),
-            dict(sa=started_at, j=jurisdiction, rv=rule_version, lm=lot_method, fx=fx_set_id, pj=json.dumps(params))
+            dict(sa=started_at, j=jurisdiction, rv=rule_version, lm=lot_method, fx=fx_set_id, pj=json.dumps(params, default=_json_default))
         ).lastrowid
+
+    int_run_id = run_id_db            # internal integer PK for DB relations
+    run_id_str = run_id               # <-- the UUID string generated at the top of the handler
 
     # Compute FIFO
     events, summary, warnings = compute_fifo(tx_models)
+
+    # Build fully JSON-safe events payload (no custom classes, no Decimals)
+    events_payload = [ev_to_dict(e) for e in events]
+
+    # Hash the outputs deterministically from the normalized payload
+    outputs_hash = _hash_text(json.dumps(events_payload, separators=(",", ":"), ensure_ascii=False))
 
     # --- Persist calc run (file-based) ---
     created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
     # Serialize events to pure dicts
-    try:
-        # Pydantic v2
-        events_payload = [e.model_dump() for e in events]
-    except AttributeError:
-        # Pydantic v1 fallback
-        events_payload = [e.dict() for e in events]
-
+    events_payload = [ev_to_dict(e) for e in events]
     payload = {
-        "run_id": str(uuid.uuid4()),
+        "run_id": run_id_str,
         "created_at": created_at,
-        "inputs_hash": None,   # fill if you have a deterministic input hash
-        "outputs_hash": _hash_bytes(json.dumps(events_payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")),
+        "inputs_hash": inputs_hash,
+        "outputs_hash": outputs_hash,
         "manifest": {
-            "params": {
-                "lot_method": "FIFO",
-            }
+            "params": {"lot_method": "FIFO"}
         },
         "events": events_payload,
     }
@@ -1058,7 +1177,7 @@ def calculate_fifo() -> Dict[str, Any]:
                 VALUES (:rid, :tx, :ts, :asset, :qty, :p, :cb, :g, :qa, :fee, :mj)
                 """),
                 dict(
-                    rid=run_id,
+                    rid=int_run_id,
                     tx=None,  # if you later track tx_id → set it here
                     ts=ev.timestamp,
                     asset=ev.asset,
@@ -1071,15 +1190,18 @@ def calculate_fifo() -> Dict[str, Any]:
                     mj=json.dumps([
                         {"from_qty": str(m.from_qty), "lot_cost_per_unit": str(m.lot_cost_per_unit), "lot_cost_total": str(m.lot_cost_total)}
                         for m in ev.matches
-                    ])
+                    ], default=_json_default)
                 )
             )
         finished_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-        conn.execute(text("UPDATE calc_runs SET finished_at=:fa WHERE id=:rid"), dict(fa=finished_at, rid=run_id))
+        conn.execute(
+            text("UPDATE calc_runs SET finished_at=:fa WHERE id=:rid"),
+            dict(fa=finished_at, rid=int_run_id)
+        )
 
     # --- NEW: build manifest + compute digests + persist in run_digests
     from .audit_digest import build_run_manifest, compute_digests
-    manifest = build_run_manifest(int(run_id))
+    manifest = build_run_manifest(int_run_id)  # run_id is a UUID string
     digests = compute_digests(manifest)
 
     created_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
@@ -1098,38 +1220,49 @@ def calculate_fifo() -> Dict[str, Any]:
                 created_at=excluded.created_at
             """),
             dict(
-                rid=int(run_id),
+                rid=int_run_id,
                 ih=digests["input_hash"],
                 oh=digests["output_hash"],
                 mh=digests["manifest_hash"],
-                mj=json.dumps(manifest),
+                mj=json.dumps(manifest, default=_json_default),
                 ts=created_at,
             ),
         )
 
-    audit("local-user", "calc:run", "calc_runs", run_id, {"rule_version": rule_version, "fx_set_id": fx_set_id})
+    audit_meta = {
+        "rule_version": rule_version,
+        "fx_set_id": manifest["fx_batch"]["id"] if "fx_batch" in manifest else None,
+        "run_id": run_id_str,
+        "timestamp": started_at,
+    }
 
-    # Serialize events for JSON
-    def ev_to_dict(ev) -> Dict[str, Any]:
-        return {
-            "timestamp": ev.timestamp,
-            "asset": ev.asset,
-            "qty_sold": dec_to_str(ev.qty_sold),
-            "proceeds": dec_to_str(ev.proceeds),
-            "cost_basis": dec_to_str(ev.cost_basis),
-            "gain": dec_to_str(ev.gain),
-            "quote_asset": ev.quote_asset,
-            "fee_applied": dec_to_str(ev.fee_applied),
-            "matches": [
-                {"from_qty": dec_to_str(m.from_qty),
-                 "lot_cost_per_unit": dec_to_str(m.lot_cost_per_unit),
-                 "lot_cost_total": dec_to_str(m.lot_cost_total)}
-                for m in ev.matches
-            ],
-        }
+    audit(
+        actor="local-user",
+        action="calc:run",
+        target_type="calc_runs",
+        target_id=int_run_id,
+        details=audit_meta,
+        ip=_get_client_ip(request),
+    )
+
+    # Persist in lightweight calc_audit table for quick lookup
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO calc_audit (run_id, actor, action, meta_json, created_at)
+                VALUES (:rid, :actor, :action, :meta, :ts)
+            """),
+            dict(
+                rid=int_run_id,
+                actor="local-user",
+                action="calc:run",
+                meta=json.dumps(audit_meta, default=_json_default),
+                ts=now_utc_iso(),
+            ),
+        )
 
     return {
-        "run_id": int(run_id),   # <-- include in response for stamping PDFs later
+        "run_id": run_id_str,
         "events": [ev_to_dict(e) for e in events],
         "summary": summary,
         "eur_summary": eur_summary,
@@ -1825,7 +1958,7 @@ def audit_get_run(run_id: int):
     with engine.begin() as conn:
         row = conn.execute(
             text("SELECT input_hash, output_hash, manifest_hash, created_at FROM run_digests WHERE run_id = :rid"),
-            dict(rid=run_id)
+            dict(rid=int(run_id))
         ).mappings().first()
     
     # Compare ONLY the three hashes (ignore created_at to avoid false negatives)
@@ -1859,7 +1992,7 @@ def audit_verify_run(run_id: int):
     with engine.begin() as conn:
         row = conn.execute(
             text("SELECT input_hash, output_hash, manifest_hash FROM run_digests WHERE run_id = :rid"),
-            dict(rid=run_id)
+            dict(rid=int(run_id))
         ).fetchone()
 
     if not row:
@@ -2009,6 +2142,13 @@ def admin_git_sync(token: str = Query(..., description="Admin token")):
         "log_tail": log_tail,
     }
 
+@app.get("/history", response_class=JSONResponse, tags=["history"])
+def history_index():
+    """
+    Alias of /history/runs that returns a plain list (tests expect an array).
+    """
+    return JSONResponse(_list_calc_runs_meta())
+
 @app.get("/history/runs", response_class=JSONResponse, tags=["history"])
 def history_list_runs():
     """
@@ -2058,3 +2198,17 @@ def history_download_run_csv(run_id: str = PathParam(...)):
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="calc_run_{run_id}.csv"'},
     )
+
+@app.get("/audit/history")
+def audit_history_list(limit: int = Query(50, le=500)):
+    with engine.begin() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT id, run_id, actor, action, meta_json, created_at
+                FROM calc_audit
+                ORDER BY id DESC
+                LIMIT :lim
+            """),
+            dict(lim=limit),
+        ).mappings().all()
+    return {"items": rows}

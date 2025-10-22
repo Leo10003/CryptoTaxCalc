@@ -53,7 +53,6 @@ class CSVPreviewResponse(BaseModel):
     preview_first_5: List[Transaction]
     errors: List[Any]
 
-
 class ImportCSVResponse(BaseModel):
     """
     API response model for /import/csv (persists to DB).
@@ -79,4 +78,12 @@ class CalcRunOut(BaseModel):
 
 class CalcRunList(BaseModel):
     items: list[CalcRunOut]
+
+class CalcAuditEntry(BaseModel):
+    id: int
+    run_id: int
+    actor: str
+    action: str
+    meta_json: dict[str, Any] | None
+    created_at: datetime
 

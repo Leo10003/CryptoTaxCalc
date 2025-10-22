@@ -109,18 +109,73 @@ DDL = [
         created_at TEXT NOT NULL
     );
     """,
+
+        # Add a small new table for lightweight audit lookup if it doesn’t already exist.
+    """
+    CREATE TABLE IF NOT EXISTS calc_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL,
+        actor TEXT,
+        action TEXT,
+        meta_json TEXT,
+        created_at TEXT,
+        FOREIGN KEY(run_id) REFERENCES calc_runs(id)
+    );
+    """,
 ]
+
+# --- ensure transactions table exists for SQLite dev/test ---
+TRANSACTIONS_DDL = """
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY,
+    hash TEXT,
+    timestamp TEXT,
+    type TEXT,
+    base_asset TEXT,
+    base_amount TEXT,
+    quote_asset TEXT,
+    quote_amount TEXT,
+    fee_asset TEXT,
+    fee_amount TEXT,
+    exchange TEXT,
+    memo TEXT,
+    fair_value TEXT,
+    raw_event_id INTEGER
+);
+"""
 
 def init_db():
     # Run DDL and ensure helpful columns/indexes exist
     with engine.begin() as conn:
         for ddl in DDL:
             conn.exec_driver_sql(ddl)
-        # Try to add raw_event_id to transactions (ignore if it already exists)
-        try:
-            conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN raw_event_id INTEGER")
-        except Exception:
-            pass
+
+        # Ensure base tables exist (especially transactions, required for indexes)
+        conn.exec_driver_sql(TRANSACTIONS_DDL)
+
+        # --- Add any missing columns (SQLite >= 3.35 supports IF NOT EXISTS) ---
+        missing_cols = [
+            "hash TEXT",
+            "timestamp TEXT",
+            "type TEXT",
+            "base_asset TEXT",
+            "base_amount TEXT",
+            "quote_asset TEXT",
+            "quote_amount TEXT",
+            "fee_asset TEXT",
+            "fee_amount TEXT",
+            "exchange TEXT",
+            "memo TEXT",
+            "fair_value TEXT",
+            "raw_event_id INTEGER",
+        ]
+        for coldef in missing_cols:
+            try:
+                conn.exec_driver_sql(f"ALTER TABLE transactions ADD COLUMN IF NOT EXISTS {coldef}")
+            except Exception:
+                # Older SQLite (very rare on Py3.12) doesn’t support IF NOT EXISTS; ignore if column exists
+                pass
+        
         # Indexes for speed
         conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_fx_rates_date ON fx_rates(date)")
         conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_fx_rates_pair ON fx_rates(date, usd_per_eur)")
