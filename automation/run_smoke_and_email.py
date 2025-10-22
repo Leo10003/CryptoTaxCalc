@@ -1,8 +1,21 @@
-import os, sys, subprocess, smtplib, ssl
+import os, sys, subprocess, smtplib, ssl, time
 from email.message import EmailMessage
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import urllib.request
+from pathlib import Path
+
+try:
+    import requests  # used for Telegram
+except ImportError:
+    print("requests not found. Install with: pip install requests", flush=True)
+    sys.exit(2)
+
+def _print(msg: str):
+    print(msg, flush=True)
+
+def _now_iso():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 # --- Config from environment or .env ---
 ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
@@ -124,28 +137,33 @@ def send_failure_email(subject: str, body: str):
     except Exception as e2:
         sys.stderr.write(f"SMTP SSL (465) also failed: {repr(e2)}\n")
 
-def send_telegram_alert(subject: str, body: str):
-    token = os.getenv("TELEGRAM_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    if not (token and chat_id):
-        return  # not configured
-    text = f"*{subject}*\n```\n{body[:3500]}\n```"
-    data = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    req = urllib.request.Request(
-        url=f"https://api.telegram.org/bot{token}/sendMessage",
-        data=json.dumps(data).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+def send_telegram_alert(message: str, body: str | None = None) -> bool:
+    """
+    Sends a Telegram message.
+    If 'body' is provided, the final text is 'subject\\n\\nbody'.
+    Looks for TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID (or legacy TELEGRAM_TOKEN/TELEGRAM_CHATID).
+    """
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHATID")
+
+    if not token or not chat_id:
+        _print("⚠️  Telegram not configured (missing TELEGRAM_BOT_TOKEN/TELEGRAM_TOKEN or TELEGRAM_CHAT_ID/TELEGRAM_CHATID).")
+        return False
+
+    text = f"{message}\n\n{body}" if body else message
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            resp.read()
+        r = requests.post(url, json=payload, timeout=10)
+        if r.status_code == 200 and (r.json().get("ok") is True):
+            _print("✅ Telegram message sent.")
+            return True
+        _print(f"❌ Telegram send failed: HTTP {r.status_code} / {r.text}")
+        return False
     except Exception as e:
-        sys.stderr.write(f"Telegram alert failed: {repr(e)}\n")
+        _print(f"❌ Telegram send exception: {e}")
+        return False
 
 def _read_last_alert_time():
     try:
@@ -167,13 +185,30 @@ def _within_cooldown(now_utc: datetime) -> bool:
     if not last:
         return False
     delta = now_utc - last
-    return delta.total_seconds() < COOLDOWN_MINUTES * 60
+    return delta.total_seconds() < COOLDOWN_MINUTES * 1
+
+if __name__ == "__main__" and "--ping" in sys.argv:
+    _print("Sending startup ping (--ping) ...")
+    ok = send_telegram_alert(f"🚀 Smoke test monitor started successfully at {_now_iso()} ✅")
+    sys.exit(0 if ok else 1)
 
 # --- Main ---
 def main():
+    _print("=== CryptoTaxCalc smoke runner ===")
+    _print(f"Started at {_now_iso()}")
+
+    # Optional opt-out via env
+    if os.environ.get("SMOKE_STARTUP_PING", "1") not in ("0", "false", "False"):
+        send_telegram_alert(f"🚀 Smoke test monitor started successfully at {_now_iso()} ✅")
+
     # Prefer venv python; fallback to "python" if missing
     py = PYTHON_EXE if os.path.exists(PYTHON_EXE) else "python"
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if "--ping-start" in sys.argv:
+        send_telegram_alert(
+            "[CryptoTaxCalc] Smoke Test Monitor Started ✅",
+            f"Task scheduler launched successfully at {ts}."
+        )
 
     try:
         proc = subprocess.run(
