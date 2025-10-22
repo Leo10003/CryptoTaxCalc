@@ -1,6 +1,14 @@
-import os, sys, subprocess, smtplib, ssl, time
+import os, sys, io
+
+if sys.stdout:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr:
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
+import subprocess, smtplib, ssl, time
 from email.message import EmailMessage
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 import json
 import urllib.request
 from pathlib import Path
@@ -16,6 +24,11 @@ def _print(msg: str):
 
 def _now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+LOGS = Path(__file__).resolve().parent / "logs"
+LOGS.mkdir(exist_ok=True, parents=True)
+with (LOGS / "smoke_runner_trace.log").open("a", encoding="utf-8") as f:
+    f.write(f"[{datetime.now(UTC).isoformat(timespec='seconds')}] runner import OK\n")
 
 # --- Config from environment or .env ---
 ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
@@ -44,10 +57,6 @@ COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "60"))
 LOG_DIR    = os.path.join(os.path.dirname(__file__), "logs")
 LAST_ALERT = os.path.join(LOG_DIR, "last_alert.txt")
 os.makedirs(LOG_DIR, exist_ok=True)
-
-# --- Paths ---
-PYTHON_EXE  = os.path.join(APP_ROOT, ".venv", "Scripts", "python.exe")
-SMOKE_PATH  = os.path.join(APP_ROOT, "smoke_test.py")
 
 # --- Helpers ---
 def send_failure_email(subject: str, body: str):
@@ -185,12 +194,58 @@ def _within_cooldown(now_utc: datetime) -> bool:
     if not last:
         return False
     delta = now_utc - last
-    return delta.total_seconds() < COOLDOWN_MINUTES * 1
+    return delta.total_seconds() < COOLDOWN_MINUTES
 
 if __name__ == "__main__" and "--ping" in sys.argv:
     _print("Sending startup ping (--ping) ...")
     ok = send_telegram_alert(f"🚀 Smoke test monitor started successfully at {_now_iso()} ✅")
     sys.exit(0 if ok else 1)
+
+def project_root() -> Path:
+    # .../CryptoTaxCalc/automation/run_smoke_and_email.py -> /CryptoTaxCalc
+    return Path(__file__).resolve().parents[1]
+
+def run_smoke_tests() -> tuple[int, str, str]:
+    """
+    Run the smoke test via pytest from the project root, targeting tests/smoke_test.py.
+    Returns: (returncode, stdout, stderr)
+    """
+    root = project_root()
+
+    # Prefer venv python if present; fall back to current interpreter
+    venv_python = root / ".venv" / "Scripts" / "python.exe"
+    python_exe = str(venv_python) if venv_python.exists() else sys.executable
+
+    # Explicitly run pytest module against the correct test path
+    cmd = [
+        python_exe,
+        "-m", "pytest",
+        "-q",
+        "-m", "smoke",
+        "tests/smoke_test.py",
+    ]
+
+    proc = subprocess.run(
+        cmd,
+        cwd=str(root),             # IMPORTANT: run from repo root
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+def get_python_exe() -> str:
+    """Return path to venv Python if available, else current interpreter."""
+    root = Path(__file__).resolve().parents[1]
+    venv_python = root / ".venv" / "Scripts" / "python.exe"
+    return str(venv_python) if venv_python.exists() else sys.executable
+
+def get_smoke_test_path() -> str:
+    """Return path to the smoke test file (inside /tests)."""
+    root = project_root()
+    test_path = root / "tests" / "smoke_test.py"
+    return str(test_path)
 
 # --- Main ---
 def main():
@@ -202,7 +257,8 @@ def main():
         send_telegram_alert(f"🚀 Smoke test monitor started successfully at {_now_iso()} ✅")
 
     # Prefer venv python; fallback to "python" if missing
-    py = PYTHON_EXE if os.path.exists(PYTHON_EXE) else "python"
+    py = get_python_exe()
+    smoke_path = get_smoke_test_path()
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if "--ping-start" in sys.argv:
         send_telegram_alert(
@@ -212,7 +268,7 @@ def main():
 
     try:
         proc = subprocess.run(
-            [py, SMOKE_PATH],
+            [py, smoke_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=False,
@@ -263,8 +319,8 @@ def main():
 
     try:
         proc = subprocess.run(
-            [py, SMOKE_PATH],
-            stdout=subprocess.PIPE,
+            [py, smoke_path],
+            stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,
             text=False,                  
             timeout=300
