@@ -1,64 +1,91 @@
-# run_smoke_wrapper.ps1 (hardened)
+# automation/run_smoke_wrapper.ps1
+# Runs the Python smoke runner and makes sure .env variables are injected into the child process.
+# Writes a log to automation/task_wrapper.log that Task Scheduler can show in "Last Run Result".
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ABSOLUTE paths (no reliance on working dir)
-$ProjectRoot = 'C:\Users\picci\Desktop\CryptoTaxCalc'
-$Automation  = Join-Path $ProjectRoot 'automation'
-$LogsDir     = Join-Path $ProjectRoot 'automation\logs'
-$VenvPython  = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
-$PyScript    = Join-Path $Automation 'run_smoke_and_email.py'
-$WrapperLog  = Join-Path $LogsDir "task_wrapper.log"
-$EnvFile     = Join-Path $ProjectRoot '.env'
+function Write-Log([string]$msg) {
+    $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    Add-Content -LiteralPath $Global:LogPath -Value "[$ts] $msg" -Encoding UTF8
+}
 
-# Make sure logs dir exists
-if (-not (Test-Path $LogsDir)) { New-Item -ItemType Directory -Path $LogsDir | Out-Null }
+# --- paths --------------------------------------------------------------
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot  = Resolve-Path (Join-Path $ScriptDir '..')
+$Global:LogPath = Join-Path $ScriptDir 'logs\task_wrapper.log'
+$EnvFile   = Join-Path $RepoRoot '.env'
+$PyExe     = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+$Runner    = Join-Path $ScriptDir 'run_smoke_and_email.py'
 
-# Start log with time stamp
-$ts = (Get-Date).ToUniversalTime().ToString("s") + "Z"
-"[$ts] wrapper start" | Out-File -FilePath $WrapperLog -Encoding UTF8
+# --- start --------------------------------------------------------------
+New-Item -ItemType File -Path $Global:LogPath -Force | Out-Null
+Write-Log 'wrapper start'
 
-# Sanity checks
-foreach ($p in @($ProjectRoot, $Automation, $VenvPython, $PyScript)) {
-  if (-not (Test-Path $p)) {
-    $ts = (Get-Date).ToUniversalTime().ToString("s") + "Z"
-    "[$ts] MISSING: $p" | Out-File -FilePath $WrapperLog -Append -Encoding UTF8
+# --- sanity -------------------------------------------------------------
+if (-not (Test-Path -LiteralPath $Runner)) {
+    Write-Log "ERROR: runner not found at $Runner"
     exit 2
-  }
 }
 
-# (Optional) surface .env existence for troubleshooting
-if (Test-Path $EnvFile) {
-  $ts = (Get-Date).ToUniversalTime().ToString("s") + "Z"
-  "[$ts] .env found" | Out-File -FilePath $WrapperLog -Append -Encoding UTF8
+# --- load .env into *process* environment for child Python -------------
+if (Test-Path -LiteralPath $EnvFile) {
+    Write-Log '.env found'
+    # Read UTF-8 (no BOM) just in case
+    foreach ($line in Get-Content -LiteralPath $EnvFile -Encoding UTF8) {
+        if ($line -match '^\s*#') { continue }
+        if ($line -match '^\s*$') { continue }
+        if ($line -match '^\s*([^#=]+?)\s*=\s*(.*)$') {
+            $name = $matches[1].Trim()
+            $val  = $matches[2].Trim()
+
+            # strip surrounding quotes if present
+            if ($val.StartsWith('"') -and $val.EndsWith('"')) {
+                $val = $val.Trim('"')
+            } elseif ($val.StartsWith("'") -and $val.EndsWith("'")) {
+                $val = $val.Trim("'")
+            }
+
+            # Make sure child process sees it:
+            [System.Environment]::SetEnvironmentVariable($name, $val, 'Process')
+        }
+    }
 } else {
-  $ts = (Get-Date).ToUniversalTime().ToString("s") + "Z"
-  "[$ts] .env NOT found (Python script loads it internally if needed)" | Out-File -FilePath $WrapperLog -Append -Encoding UTF8
+    Write-Log '.env NOT found'
 }
 
-# Run the python smoke runner
-$ts = (Get-Date).ToUniversalTime().ToString("s") + "Z"
-"[$ts] launching python: `"$VenvPython`" `"$PyScript`"" | Out-File -FilePath $WrapperLog -Append -Encoding UTF8
+# quick telemetry for troubleshooting
+$tok  = $env:TELEGRAM_BOT_TOKEN; if (-not $tok) { $tok = $env:TELEGRAM_TOKEN }
+$chat = $env:TELEGRAM_CHAT_ID;   if (-not $chat) { $chat = $env:TELEGRAM_CHATID }
+if ($tok -and $chat) {
+    Write-Log "Telegram env looks set (token len=$($tok.Length), chat=$chat)"
+} else {
+    Write-Log "Telegram missing (token? $([bool]$tok), chat? $([bool]$chat))"
+}
 
+# --- choose python ------------------------------------------------------
+if (-not (Test-Path -LiteralPath $PyExe)) { $PyExe = 'python' }
+
+Write-Log "launching python: `"$PyExe`" `"$Runner`""
+
+# --- run python and capture output -------------------------------------
 $psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $VenvPython
-$psi.Arguments = "`"$PyScript`""
-$psi.WorkingDirectory = $ProjectRoot
-$psi.UseShellExecute = $false
+$psi.FileName               = $PyExe
+$psi.Arguments              = "`"$Runner`""
+$psi.WorkingDirectory       = $RepoRoot
 $psi.RedirectStandardOutput = $true
-$psi.RedirectStandardError = $true
+$psi.RedirectStandardError  = $true
+$psi.UseShellExecute        = $false
+$psi.CreateNoWindow         = $true
 
-$p = New-Object System.Diagnostics.Process
-$p.StartInfo = $psi
-$null = $p.Start()
-
-# Pipe output to log
+$p = [System.Diagnostics.Process]::Start($psi)
 $stdout = $p.StandardOutput.ReadToEnd()
 $stderr = $p.StandardError.ReadToEnd()
 $p.WaitForExit()
+$exitCode = $p.ExitCode
 
-$ts = (Get-Date).ToUniversalTime().ToString("s") + "Z"
-"[$ts] python exit=$($p.ExitCode)" | Out-File -FilePath $WrapperLog -Append -Encoding UTF8
-if ($stdout) { "STDOUT:`r`n$stdout" | Out-File -FilePath $WrapperLog -Append -Encoding UTF8 }
-if ($stderr) { "STDERR:`r`n$stderr" | Out-File -FilePath $WrapperLog -Append -Encoding UTF8 }
+Write-Log "python exit=$exitCode"
+if ($stdout) { Write-Log "STDOUT:`n$stdout" }
+if ($stderr) { Write-Log "STDERR:`n$stderr" }
 
-exit $p.ExitCode
+exit $exitCode
