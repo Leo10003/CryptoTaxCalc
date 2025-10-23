@@ -2264,10 +2264,11 @@ def history_download_run_csv(run_id: str = PathParam(...)):
     """
     Rehydrate a stored run and stream its events as CSV.
     """
+    header = "timestamp,asset,qty_sold,proceeds,cost_basis,gain,quote_asset,fee_applied\n"
     data = _load_calc_run(run_id)
     if not data:
         raise HTTPException(status_code=404, detail="Run not found")
-
+    
     # In-memory CSV
     buf = StringIO()
     writer = csv.writer(buf)
@@ -2282,11 +2283,7 @@ def history_download_run_csv(run_id: str = PathParam(...)):
         writer.writerow(["no_data"])
 
     buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="calc_run_{run_id}.csv"'},
-    )
+    return Response(buf.getvalue(), media_type="text/csv")
 
 @app.get("/audit/history")
 def audit_history(limit: int = 50):
