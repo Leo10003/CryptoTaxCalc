@@ -3,11 +3,42 @@
 # Also writes full stdout/stderr to automation/smoke_test_output.log and exits
 # with pytest's return code.
 
-import os
+import os, io
 import sys
 import subprocess
 from datetime import datetime, timezone
 import requests
+
+# --- Force UTF-8-friendly stdout/stderr, but never crash on Unicode ---
+try:
+    # Prefer UTF-8. Task Scheduler often ignores codepage; this still helps.
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+
+    # Python 3.7+ has .reconfigure()
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    else:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    else:
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+except Exception:
+    # Never let encoding setup kill the job
+    pass
+
+
+def safe_print(msg: str) -> None:
+    """Print without crashing on Unicode in constrained consoles."""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        # Fallback: strip un-encodable characters
+        try:
+            print(msg.encode("ascii", "ignore").decode("ascii"))
+        except Exception:
+            # Last-ditch: print a generic line
+            print("<<message omitted due to encoding>>")
 
 def utcnow_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -31,9 +62,9 @@ def send_telegram(msg: str) -> None:
         print(f"Telegram send failed: {e}")
 
 def main() -> None:
-    print("=== CryptoTaxCalc smoke runner ===")
+    safe_print("=== CryptoTaxCalc smoke runner ===")
     started = utcnow_iso()
-    print(f"Started at {started}")
+    safe_print(f"Started at {started}")
 
     # 1) Startup ping
     send_telegram("🚀 Smoke test monitor started successfully.")
@@ -54,16 +85,16 @@ def main() -> None:
 
     # 3) Save full output for debugging
     out_dir = os.path.dirname(__file__)
-    log_path = os.path.join(out_dir, "smoke_test_output.log")
+    log_path = os.path.join(out_dir, "logs", "smoke_test_output.log")
     try:
         with open(log_path, "w", encoding="utf-8") as f:
             f.write("=== STDOUT ===\n")
             f.write(stdout)
             f.write("\n\n=== STDERR ===\n")
             f.write(stderr)
-        print(f"Wrote log: {log_path}")
+        safe_print(f"Wrote log: {log_path}")
     except Exception as e:
-        print(f"Failed writing log: {e}")
+        safe_print(f"Failed writing log: {e}")
 
     # 4) Telegram finish summary
     if proc.returncode == 0:
@@ -88,7 +119,7 @@ def main() -> None:
         )
 
     send_telegram(msg)
-    print(msg)
+    safe_print(msg.replace("✅", "[OK]").replace("❌", "[FAIL]").replace("🚀", "[START]"))
     sys.exit(proc.returncode)
 
 if __name__ == "__main__":
