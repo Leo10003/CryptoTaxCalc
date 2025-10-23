@@ -1,122 +1,255 @@
-# 🧮 CryptoTaxCalc
+# CryptoTaxCalc
 
-[![COLLAB Rules](https://img.shields.io/badge/Collab_Rules-Active-brightgreen)](./COLLAB_RULES.md)
-
-A precision-built, fully auditable cryptocurrency tax calculator following the **COLLAB_RULES.md** collaboration framework.  
-All files, modules, and endpoints are organized for clarity, reproducibility, and long-term maintainability.
+FastAPI-based crypto tax calculator with FIFO realization, run history persistence, downloadable artifacts, automated smoke tests (local + CI), Telegram alerts, and optional auto-push to GitHub.
 
 ---
 
-## 🚀 Overview
+## ✨ Features
 
-CryptoTaxCalc automates the process of fuck:
-- Parsing and normalizing CSV transaction data  
-- Converting between currencies using **ECB FX rates**  
-- Calculating **FIFO-based** capital gains  
-- Generating per-year and per-asset **summary reports**  
-- Producing **audit digests** for validation  
-- Running **nightly tests** and FX updates automatically  
-
-Every workflow is verified by smoke tests and versioned database migrations.
+- **FIFO engine**: Calculates cost basis, proceeds, gains.
+- **Persistence**: Every `/calculate` run is stored (SQLite) with a `run_id` (UUID).
+- **History API**:
+  - `GET /history` – list recent calculation runs.
+  - `GET /history/{run_id}` – details for a specific run.
+  - `GET /history/{run_id}/download` – zipped bundle of the run (JSON + artifacts).
+- **Audit trail**: Audit events tied to each `run_id`.
+- **Smoke tests**:
+  - Local: `pytest -q -m smoke`
+  - CI: GitHub Actions runs on each push, optional Telegram alerts on start/success/failure.
+- **Automation**:
+  - Windows Task Scheduler runner for nightly smoke + alerts.
+  - `git_auto_push.ps1` for auto-commit/push (manual or scheduled).
+- **Telegram notifications**: Start, success, failure pings.
 
 ---
 
-## 🧩 Repository Structure
+## 🗂️ Project Layout (key files)
 
 CryptoTaxCalc/
-├─ src/
-│ └─ cryptotaxcalc/
-│ ├─ api/ # REST endpoints (FastAPI)
-│ ├─ core/ # Core engines: FIFO, FX, Audit
-│ ├─ models/ # ORM models
-│ ├─ utils/ # Helper utilities
-│ ├─ init.py
-│ └─ app.py # Main FastAPI app
-│
-├─ automation/ # PowerShell scripts & schedulers
-│ ├─ nightly_fx_task.xml
-│ ├─ nightly_smoke_task.xml
-│ ├─ update_fx.ps1
-│ ├─ run_smoke_and_email.py
-│ └─ collect_support_bundle.ps1
-│
-├─ support_bundles/ # Automatically generated bundles (.zip)
-│
-├─ fx_ecb.csv # Historical ECB FX data
-├─ .env # Environment configuration
-├─ smoke_test.py # Lightweight integrity test
-├─ COLLAB_RULES.md # Collaboration standards & structure rules
-└─ README.md # This file
+├─ src/cryptotaxcalc/
+│ ├─ app.py # FastAPI app, /calculate + /history endpoints
+│ ├─ db.py # SQLite models & init
+│ ├─ fifo_engine.py # FIFO calculation core
+│ ├─ audit_utils.py # audit helpers
+│ ├─ audit_digest.py # run manifest
+│ ├─ schemas.py, models.py # Pydantic & SQLAlchemy
+│ └─ about.py
+├─ tests/
+│ └─ smoke_test.py # smoke tests (API + persistence + download)
+├─ automation/
+│ ├─ run_smoke_and_email.py # runs smoke and sends Telegram alerts
+│ ├─ run_smoke_wrapper.ps1 # wrapper (loads .env, runs python, logs)
+│ ├─ git_auto_push.ps1 # auto add/commit/push + (optional) Telegram
+│ ├─ generate_task_xml.py # helper to generate Task Scheduler XML
+│ └─ nightly_smoke_task.xml # ready-to-import Task Scheduler definition
+├─ .github/workflows/
+│ └─ smoke.yml # CI smoke on push
+├─ .env # local secrets/config (NOT committed)
+├─ data.db # SQLite database (local dev)
+└─ README.md
+
+yaml
+Kopiraj kod
 
 ---
 
-## ⚙️ Setup & Run
+## ✅ Requirements
 
-### 1️⃣ Create & Activate a Virtual Environment
-```bash
+- Python 3.12 (recommended) + venv
+- Git
+- Windows PowerShell (for automation scripts)
+- (Optional) Telegram Bot & Chat for alerts
+
+---
+
+## 🚀 Setup & Run
+
+### 1) Create & activate venv, install deps
+
+```powershell
 python -m venv .venv
-.\.venv\Scripts\activate
-2️⃣ Install Dependencies
-bash
-Kopiraj kod
+.\.venv\Scripts\Activate.ps1
+pip install -U pip
 pip install -r requirements.txt
-3️⃣ Start the API
-bash
+If you don’t have requirements.txt, install the known essentials:
+
+powershell
 Kopiraj kod
-uvicorn cryptotaxcalc.app:app --reload --app-dir .\src
-Then open http://127.0.0.1:8000/docs
+pip install fastapi uvicorn[standard] sqlalchemy pydantic httpx reportlab pytest python-dotenv
+2) Environment variables (.env)
+Create .env in the project root:
 
-🧪 Run the Smoke Test
-To verify everything works correctly:
-
-bash
+ini
 Kopiraj kod
-.\.venv\Scripts\python.exe .\smoke_test.py
-This will:
+# Telegram alerts (optional but recommended)
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_CHAT_ID=123456789
 
-Check /health
+# (Optional) Additional config consumed by scripts/app can go here
+# e.g. LOG_DIR, DB_PATH, etc. Defaults are sensible.
+Keep .env out of source control.
 
-Fetch transactions
+3) Initialize DB (auto)
+On first run the app will create tables/indexes automatically.
 
-Generate a yearly summary
-
-If all responses are 200 OK, your environment is good to go ✅
-
-🕗 Scheduled Automation
-Nightly Tasks
-Task	Description
-update_fx.ps1	Auto-fetch ECB FX rates daily
-nightly_smoke_task.xml	Run smoke tests nightly
-collect_support_bundle.ps1	Create zip bundle for diagnostics
-
-All tasks are safe to re-run (idempotent) and designed for unattended operation.
-
-🧰 Support Bundle Endpoint
-To manually generate a diagnostic zip:
-
-nginx
+4) Run the API locally
+powershell
 Kopiraj kod
-POST http://127.0.0.1:8000/admin/bundle?token=12345
-Output:
+uvicorn cryptotaxcalc.app:app --reload --host 127.0.0.1 --port 8000
+Open Swagger: http://127.0.0.1:8000/docs
 
-bash
+🔌 API Endpoints (quick guide)
+GET /calculate
+Runs FIFO over current transactions, persists a new run, returns summary and run_id (UUID).
+
+GET /history
+Returns an array of persisted runs (metadata).
+
+GET /history/{run_id}
+Returns details for run_id.
+
+GET /history/{run_id}/download
+Returns a ZIP with run artifacts (JSON etc.).
+
+🧪 Smoke Tests
+Local
+powershell
 Kopiraj kod
-support_bundles/support_bundle_YYYY-MM-DD_HH-MM-SS.zip
-🪄 Development Principles
-This project strictly follows the COLLAB_RULES.md specification:
+pytest -q -m smoke --maxfail=1 --disable-warnings -rA
+Requires httpx, reportlab, etc. (see requirements above).
 
-No guesswork in code or imports
+CI (GitHub Actions)
+Workflow file: .github/workflows/smoke.yml
 
-Clear file structure & naming consistency
+Triggers on push.
 
-Deterministic results, UTC timestamps
+Uses repository Secrets for Telegram:
 
-Safe migrations, auditable calculations
+TELEGRAM_BOT_TOKEN
 
-Automated tests and reproducibility
+TELEGRAM_CHAT_ID
 
-🪪 License
-Private internal use only.
-Redistribution, publication, or resale without written authorization is prohibited.
+Configure in GitHub: Settings → Secrets and variables → Actions → New repository secret
 
-Built with ❤️ and precision — following COLLAB_RULES.md
+CI logs will show whether Telegram steps were skipped (if secrets missing) or sent.
+
+🔔 Telegram Alerts
+Both local run_smoke_and_email.py and CI can send:
+
+Start ping (“Smoke test started”)
+
+Success ping
+
+Failure ping (with exit code; includes stdio snippets if available)
+
+Make sure .env (local) or Actions secrets (CI) have:
+
+ini
+Kopiraj kod
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+🕗 Nightly Smoke via Windows Task Scheduler (local)
+You can import the prebuilt XML:
+
+automation\nightly_smoke_task.xml
+
+Or run the helper:
+
+powershell
+Kopiraj kod
+python automation\generate_task_xml.py
+Then in Task Scheduler:
+
+Import Task… → pick nightly_smoke_task.xml.
+
+Confirm “Run whether user is logged on or not”.
+
+Set time (e.g., 00:00), save with your credentials.
+
+What runs:
+automation\run_smoke_wrapper.ps1 → loads .env, runs automation\run_smoke_and_email.py, logs, and posts Telegram pings.
+
+Logs:
+
+automation\task_wrapper.log (wrapper)
+
+automation\smoke_YYYY-MM-DD_HH-MM-SS.log (per-run)
+
+automation\last_alert.txt (debug last Telegram payload)
+
+🔁 Auto Git Push (manual or scheduled)
+Script: automation\git_auto_push.ps1
+
+Adds/commits all changes with an auto message.
+
+Pushes to the configured remote.
+
+Optionally sends a Telegram ping on success/failure (if .env has Telegram vars).
+
+Manual run:
+
+powershell
+Kopiraj kod
+powershell -ExecutionPolicy Bypass -File automation\git_auto_push.ps1
+Schedule it (optional):
+Create a Task Scheduler task pointing to git_auto_push.ps1.
+Ensure your remote is set (and credentials stored if you use HTTPS):
+
+powershell
+Kopiraj kod
+git remote -v
+# If needed:
+git remote set-url origin https://<TOKEN>@github.com/<USER>/<REPO>.git
+git config --global credential.helper store
+If you see non-fast-forward or fetch first errors:
+
+powershell
+Kopiraj kod
+git pull --rebase origin main
+# resolve if needed, then:
+git push origin main
+🧰 Troubleshooting
+No Telegram alerts
+
+Check .env exists and has valid TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID.
+
+Look at automation\task_wrapper.log and automation\last_alert.txt.
+
+For CI, verify repo Actions secrets are set.
+
+Task shows Last Result: 1/2
+
+Open automation\task_wrapper.log for exact error.
+
+Ensure Execution Policy allows the script (wrapper sets Bypass).
+
+Verify Python venv path in run_smoke_wrapper.ps1 points to .venv\Scripts\python.exe.
+
+Git push rejected
+
+git pull --rebase origin main, resolve conflicts, re-run push.
+
+Ensure DB lock files (data.db-shm, data.db-wal) are not held by a running server when committing.
+
+Module import errors in CI
+
+Add missing packages to requirements.txt (e.g., reportlab, httpx).
+
+🔒 Security Notes
+Never commit your .env.
+
+Prefer a scoped GitHub Personal Access Token when embedding credentials in remotes.
+
+Telegram bot token and chat ID should be secrets (local .env, CI secrets).
+
+📜 License
+MIT (or your chosen license).
+
+🙌 Acknowledgements
+Thanks to everyone who contributed to wiring endpoints, persistence, smoke tests, Windows automation, and CI!
+
+pgsql
+Kopiraj kod
+
+If you want, I can also generate a trimmed `requirements.txt` based on what we used so far.
+::contentReference[oaicite:0]{index=0}
