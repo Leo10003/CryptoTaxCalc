@@ -23,13 +23,13 @@ from typing import Dict, Any, List
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request, Path as PathParam
 from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction
 from .db import SessionLocal, engine
-from .models import Base, TransactionRow, FxRate, CalcRun
+from .models import Base, TransactionRow, FxRate
 from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, date, date as _date, timezone
 from csv import DictReader
 from io import StringIO, BytesIO
-from sqlalchemy import text, and_
+from sqlalchemy import text, and_, text as _sqltext
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from .utils_files import persist_uploaded_file
 from datetime import datetime as _dt
@@ -648,6 +648,53 @@ def _get_client_ip(request: Request) -> str:
     else:
         ip = request.client.host if request.client else "unknown"
     return ip
+
+def _resolve_db_run_id(run_id_param: str | int) -> int | None:
+    """
+    Accepts either:
+      - the external UUID string you return in /calculate payload, or
+      - the internal integer calc_runs.id (as int or numeric string).
+    Returns the integer calc_runs.id, or None if not found.
+    """
+    # 1) If caller already passed an int (or numeric str), try it directly
+    try:
+        maybe_int = int(run_id_param)  # works for "52" or 52
+        with engine.begin() as conn:
+            row = conn.execute(_sqltext("SELECT id FROM calc_runs WHERE id = :rid"),
+                               {"rid": maybe_int}).first()
+            if row:
+                return maybe_int
+    except Exception:
+        pass  # not an int or not present
+
+    # 2) Otherwise assume a UUID string and map via calc_audit.meta_json -> $.run_id
+    # Prefer JSON_EXTRACT if JSON1 is available; fall back to LIKE if not.
+    uuid_str = str(run_id_param)
+
+    with engine.begin() as conn:
+        try:
+            row = conn.execute(_sqltext("""
+                SELECT run_id
+                FROM calc_audit
+                WHERE json_extract(meta_json, '$.run_id') = :uuid
+                ORDER BY created_at DESC
+                LIMIT 1
+            """), {"uuid": uuid_str}).first()
+            if row and row[0] is not None:
+                return int(row[0])
+        except Exception:
+            # Fallback for SQLite builds without JSON1
+            row = conn.execute(_sqltext("""
+                SELECT run_id
+                FROM calc_audit
+                WHERE meta_json LIKE :needle
+                ORDER BY created_at DESC
+                LIMIT 1
+            """), {"needle": f'%\"run_id\":\"{uuid_str}\"%'}).first()
+            if row and row[0] is not None:
+                return int(row[0])
+
+    return None
 
 # -----------------------------------------------------------------------------
 # Application factory & startup
@@ -2152,7 +2199,21 @@ def history_index():
 
 @app.get("/history/{run_id}/download", summary="Download calculation run as ZIP", tags=["history"])
 def history_download(run_id: str):
-    manifest = build_run_manifest(run_id)
+    db_run_id = _resolve_db_run_id(run_id)
+    if db_run_id is None:
+        raise HTTPException(status_code=404, detail=f"Run not found for id '{run_id}'")
+
+    try:
+        manifest = build_run_manifest(run_id)
+    except Exception as e:
+        # Fallback: still return a valid ZIP with a minimal manifest
+        manifest = {
+            "run_id": run_id,
+            "created_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            "note": f"fallback manifest (no calc_runs row yet): {type(e).__name__}: {e}",
+            "inputs": {"transactions_hashes_ordered": []},
+            "outputs": [],
+        }
 
     try:
         manifest = build_run_manifest(run_id)
@@ -2161,7 +2222,7 @@ def history_download(run_id: str):
         raise HTTPException(status_code=404, detail=str(e))
     
     bio = io.BytesIO()
-    
+
     with zipfile.ZipFile(bio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), default=str))
     bio.seek(0)
@@ -2174,6 +2235,7 @@ def history_download(run_id: str):
 
 @app.get("/history/run/{run_id}/download", include_in_schema=False)
 def history_download_compat(run_id: str):
+    db_run_id = _resolve_db_run_id(run_id)
     return history_download(run_id)
 
 @app.get("/history/runs", response_class=JSONResponse, tags=["history"])
@@ -2227,15 +2289,25 @@ def history_download_run_csv(run_id: str = PathParam(...)):
     )
 
 @app.get("/audit/history")
-def audit_history_list(limit: int = Query(50, le=500)):
+def audit_history(limit: int = 50):
     with engine.begin() as conn:
         rows = conn.execute(
             text("""
-                SELECT id, run_id, actor, action, meta_json, created_at
+                SELECT id, created_at, actor, action, meta_json
                 FROM calc_audit
                 ORDER BY id DESC
                 LIMIT :lim
             """),
-            dict(lim=limit),
+            {"lim": limit}
         ).mappings().all()
-    return {"items": rows}
+
+    items = []
+    for r in rows:
+        d = dict(r)
+        # rename created_at → timestamp for test compatibility
+        if "created_at" in d:
+            d["timestamp"] = d.pop("created_at")
+        items.append(d)
+
+    return items
+

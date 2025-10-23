@@ -40,11 +40,7 @@ def build_run_manifest(run_id: str) -> Dict[str, Any]:
       - fx batch meta (imported_at, source, rates_hash)
       - INPUT SET: ordered list of transaction hashes that existed at run finished_at
       - OUTPUT SET: realized_events for this run with numeric strings for amounts and per-lot matches
-
-    Returns a dict; call compute_digests(manifest) to get hashes.
     """
-    
-
     with engine.begin() as conn:
         # NOTE: id is stored as TEXT/UUID in current schema
         run = conn.execute(
@@ -57,26 +53,33 @@ def build_run_manifest(run_id: str) -> Dict[str, Any]:
 
         fx = None
         if run["fx_set_id"] is not None:
-            fx = conn.execute(text("SELECT * FROM fx_batches WHERE id = :bid"),
-                              dict(bid=run["fx_set_id"])).mappings().first()
+            fx = conn.execute(
+                text("SELECT * FROM fx_batches WHERE id = :bid"),
+                {"bid": run["fx_set_id"]},
+            ).mappings().first()
 
-        # Establish a cutoff for input set = rows that existed by finished_at
         finished_at = run["finished_at"]
-        # Collect transaction hashes (deterministic order)
-        tx_rows = conn.execute(text("""
-            SELECT hash FROM transactions
-            WHERE timestamp <= :cutoff
-            ORDER BY hash
-        """), dict(cutoff=finished_at)).fetchall()
+
+        tx_rows = conn.execute(
+            text("""
+                SELECT hash FROM transactions
+                WHERE timestamp <= :cutoff
+                ORDER BY hash
+            """),
+            {"cutoff": finished_at},
+        ).fetchall()
         input_hashes = [r[0] for r in tx_rows]
 
-        # Collect realized output for this run (deterministic order)
-        out_rows = conn.execute(text("""
-            SELECT timestamp, asset, qty_sold, proceeds, cost_basis, gain, quote_asset, fee_applied, matches_json
-            FROM realized_events
-            WHERE run_id = :rid
-            ORDER BY id
-        """), dict(rid=run_id)).mappings().all()
+        out_rows = conn.execute(
+            text("""
+                SELECT timestamp, asset, qty_sold, proceeds, cost_basis, gain,
+                       quote_asset, fee_applied, matches_json
+                FROM realized_events
+                WHERE run_id = :rid
+                ORDER BY id
+            """),
+            {"rid": run_id},
+        ).mappings().all()
 
         outputs: List[Dict[str, Any]] = []
         for r in out_rows:
