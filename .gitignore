@@ -24,3 +24,7 @@ Thumbs.db
 
 # SQLite (usually exclude; include only if you want DB in git)
 data.db
+
+# SQLite temp files
+*.db-shm
+*.db-wal
