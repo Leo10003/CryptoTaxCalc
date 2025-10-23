@@ -5,60 +5,72 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
-# Make secrets available to steps as env vars (simplifies the if: checks)
-env:
-  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-  TELEGRAM_CHAT_ID:  ${{ secrets.TELEGRAM_CHAT_ID }}
-
 jobs:
   smoke:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Telegram: start ping (only if both secrets present)
       - name: Telegram start ping
         if: ${{ env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          MSG="🚦 CryptoTaxCalc smoke started on ${GITHUB_REF_NAME} by ${GITHUB_ACTOR} @ ${GITHUB_SHA::7}"
+          MSG="🚀 CryptoTaxCalc smoke started on ${GITHUB_REF_NAME} (${GITHUB_SHA::7}) by ${GITHUB_ACTOR}"
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-               -d chat_id="${TELEGRAM_CHAT_ID}" \
-               --data-urlencode text="${MSG}"
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="$MSG"
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # 2) Checkout
-      - uses: actions/checkout@v4
-
-      # 3) Set up Python
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      # 4) Install deps (adjust if your req file has a different name)
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          # minimal extras needed for tests in CI
-          pip install pytest httpx reportlab
-
-      # 5) Run smoke tests
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest httpx
+          # ensure PDF deps are present for app import
+          pip install reportlab pillow
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest httpx
       - name: Run smoke tests
+        env:
+          APP_ENV: ci
         run: |
           pytest -q -m smoke --maxfail=1 --disable-warnings -rA
+      - name: Upload smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ github.run_id }}
+          path: |
+            **/smoke*.log
+            **/pytest*.xml
+            **/.pytest_cache
+          if-no-files-found: ignore
 
-      # 6) Telegram: success
       - name: Telegram success
         if: ${{ success() && env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          MSG="✅ CI smoke passed on ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}"
+          MSG="✅ Smoke PASSED on ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-               -d chat_id="${TELEGRAM_CHAT_ID}" \
-               --data-urlencode text="${MSG}"
-
-      # 7) Telegram: failure (fires if any previous step in this job failed)
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="$MSG"
       - name: Telegram failure
         if: ${{ failure() && env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          MSG="❌ CI smoke FAILED on ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}\nSee: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          MSG="❌ Smoke FAILED on ${GITHUB_REF_NAME} (${GITHUB_SHA::7}) — see run $GITHUB_SERVER_URL/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-               -d chat_id="${TELEGRAM_CHAT_ID}" \
-               --data-urlencode text="${MSG}"
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="$MSG"
