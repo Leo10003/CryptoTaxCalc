@@ -18,7 +18,7 @@ Endpoints kept for continuity:
   Command to start the server: uvicorn app:app --reload
 """
 
-import os, shutil, tempfile, csv, io, json, csv as _csv, sys, time, subprocess
+import os, shutil, tempfile, csv, io, json, csv as _csv, sys, time, subprocess, zipfile
 from typing import Dict, Any, List
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request, Path as PathParam
 from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction
@@ -43,6 +43,7 @@ from .__about__ import __title__, __version__
 import uuid
 from dataclasses import is_dataclass, asdict
 from uuid import UUID
+from cryptotaxcalc.audit_digest import build_run_manifest
 
 # ReportLab (pure-Python PDF generation)
 from reportlab.lib.pagesizes import A4
@@ -2148,6 +2149,32 @@ def history_index():
     Alias of /history/runs that returns a plain list (tests expect an array).
     """
     return JSONResponse(_list_calc_runs_meta())
+
+@app.get("/history/{run_id}/download", summary="Download calculation run as ZIP", tags=["history"])
+def history_download(run_id: str):
+    manifest = build_run_manifest(run_id)
+
+    try:
+        manifest = build_run_manifest(run_id)
+    except ValueError as e:
+        # e.g. "calc_runs id=<uuid> not found" => return a clean 404
+        raise HTTPException(status_code=404, detail=str(e))
+    
+    bio = io.BytesIO()
+    
+    with zipfile.ZipFile(bio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), default=str))
+    bio.seek(0)
+
+    return StreamingResponse(
+        bio,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="run_{run_id}.zip"'},
+    )
+
+@app.get("/history/run/{run_id}/download", include_in_schema=False)
+def history_download_compat(run_id: str):
+    return history_download(run_id)
 
 @app.get("/history/runs", response_class=JSONResponse, tags=["history"])
 def history_list_runs():

@@ -33,7 +33,7 @@ def _json_c14n(obj: Any) -> str:
 def _sha256_hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
-def build_run_manifest(run_id: int) -> Dict[str, Any]:
+def build_run_manifest(run_id: str) -> Dict[str, Any]:
     """
     Build a canonical manifest that captures:
       - calc_runs row (jurisdiction, rule_version, lot_method, params_json, timestamps, fx_set_id)
@@ -43,8 +43,15 @@ def build_run_manifest(run_id: int) -> Dict[str, Any]:
 
     Returns a dict; call compute_digests(manifest) to get hashes.
     """
+    
+
     with engine.begin() as conn:
-        run = conn.execute(text("SELECT * FROM calc_runs WHERE id = :rid"), dict(rid=run_id)).mappings().first()
+        # NOTE: id is stored as TEXT/UUID in current schema
+        run = conn.execute(
+            text("SELECT * FROM calc_runs WHERE id = :rid"),
+            {"rid": run_id},
+        ).mappings().first()
+
         if not run:
             raise ValueError(f"calc_runs id={run_id} not found")
 
