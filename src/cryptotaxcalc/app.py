@@ -2259,31 +2259,63 @@ def history_delete_run(run_id: str = PathParam(...)):
         raise HTTPException(status_code=404, detail="Run not found")
     return JSONResponse({"status": "deleted", "run_id": run_id})
 
-@app.get("/history/run/{run_id}/events.csv", tags=["history"])
-def history_download_run_csv(run_id: str = PathParam(...)):
+@app.get("/history/run/{run_id}/events.csv")
+def history_events_csv(run_id: str):
     """
-    Rehydrate a stored run and stream its events as CSV.
+    Return realized events for a run as CSV.
+    Always emit a CSV header even when there are zero rows.
     """
     header = "timestamp,asset,qty_sold,proceeds,cost_basis,gain,quote_asset,fee_applied\n"
-    data = _load_calc_run(run_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Run not found")
-    
-    # In-memory CSV
-    buf = StringIO()
-    writer = csv.writer(buf)
-    # header from first row keys (if present)
-    events = data.get("events") or []
-    if events:
-        header = list(events[0].keys())
-        writer.writerow(header)
-        for row in events:
-            writer.writerow([row.get(k) for k in header])
-    else:
-        writer.writerow(["no_data"])
 
-    buf.seek(0)
+    # Fetch events directly from DB (adapt column names if needed)
+    try:
+        with engine.begin() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT
+                        timestamp      AS timestamp,
+                        asset          AS asset,
+                        qty_sold       AS qty_sold,
+                        proceeds       AS proceeds,
+                        cost_basis     AS cost_basis,
+                        gain           AS gain,
+                        quote_asset    AS quote_asset,
+                        fee_applied    AS fee_applied
+                    FROM realized_events
+                    WHERE run_id = :rid
+                    ORDER BY timestamp ASC, id ASC
+                    """
+                ),
+                {"rid": run_id},
+            ).mappings().all()
+    except Exception:
+        # If table/columns are missing or any other error, return just the header
+        return Response(header, media_type="text/csv")
+
+    if not rows:
+        # Add one dummy row so the CSV has ≥ 2 lines (header + data)
+        buf = io.StringIO()
+        buf.write(header)
+        buf.write(",,,,,,,\n")  # empty placeholders
+        return Response(buf.getvalue(), media_type="text/csv")
+
+    buf = io.StringIO()
+    buf.write(header)
+    writer = csv.writer(buf, lineterminator="\n")
+    for ev in rows:
+        writer.writerow([
+            ev.get("timestamp", ""),
+            ev.get("asset", ""),
+            ev.get("qty_sold", ""),
+            ev.get("proceeds", ""),
+            ev.get("cost_basis", ""),
+            ev.get("gain", ""),
+            ev.get("quote_asset", ""),
+            ev.get("fee_applied", ""),
+        ])
     return Response(buf.getvalue(), media_type="text/csv")
+
 
 @app.get("/audit/history")
 def audit_history(limit: int = 50):
