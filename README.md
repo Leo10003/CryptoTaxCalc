@@ -9,7 +9,7 @@ All files, modules, and endpoints are organized for clarity, reproducibility, an
 
 ## 🚀 Overview
 
-CryptoTaxCalc automates the process of fuck:
+CryptoTaxCalc automates the process of:
 - Parsing and normalizing CSV transaction data  
 - Converting between currencies using **ECB FX rates**  
 - Calculating **FIFO-based** capital gains  
