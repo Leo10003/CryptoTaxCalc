@@ -44,6 +44,7 @@ import uuid
 from dataclasses import is_dataclass, asdict
 from uuid import UUID
 from cryptotaxcalc.audit_digest import build_run_manifest
+from cryptotaxcalc.report_pdf import build_summary_pdf
 
 # ReportLab (pure-Python PDF generation)
 from reportlab.lib.pagesizes import A4
@@ -63,14 +64,6 @@ PROJECT_ROOT = FSPath(__file__).resolve().parents[2]  # .../CryptoTaxCalc
 AUTOMATION = PROJECT_ROOT / "automation"
 GIT_SCRIPT = AUTOMATION / "git_auto_push.ps1"
 LOG_DIR = AUTOMATION / "logs"
-
-# Load .env from the project root (optional but recommended)
-try:
-    from dotenv import load_dotenv  # pip install python-dotenv (already common in your setup)
-    load_dotenv(PROJECT_ROOT / ".env")
-except Exception:
-    # Safe to ignore if python-dotenv isn't installed; ENV variables still work.
-    pass
 
 # Admin token used by /admin/git-sync endpoint
 # Prefer to set this in .env (see below). The default is only for dev!
@@ -150,154 +143,6 @@ def _integrity_ok(db_path: str) -> bool:
         return res == "ok"
     except Exception:
         return False
-
-def _build_summary_pdf(
-    title: str,
-    year: int | None,
-    by_quote: dict[str, dict[str, Decimal]],
-    totals: dict[str, Decimal],
-    eur_totals: dict[str, Decimal],
-    top_events: list,  # list of realized event objects
-) -> bytes:
-    """
-    Builds a compact PDF report with:
-      - Title + optional year
-      - By-quote summary table
-      - Totals (native quote) and totals in EUR
-      - Optional 'Top events' preview to sanity-check numbers
-
-    Returns raw PDF bytes.
-    """
-    buf = BytesIO()
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=A4,
-        leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36
-    )
-    styles = getSampleStyleSheet()
-    elements = []
-
-    # ADD THIS helper (wraps cell text so it won’t overlap)
-    def P(txt: str):
-        # basic HTML escaping so Paragraph does not choke
-        txt = (txt or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-        return Paragraph(txt, styles["Normal"])
-    
-    # ---- Title ----
-    cap = f"{title}"
-    if year is not None:
-        cap += f" – {year}"
-    elements.append(Paragraph(cap, styles["Title"]))
-    elements.append(Spacer(1, 10))
-
-    # ---- By-Quote Summary Table ----
-    data_bq = [["Quote", "Proceeds", "Cost Basis", "Gain"]]
-    for q, agg in by_quote.items():
-        data_bq.append([
-            (q or "(none)"),
-            dec_to_str(agg["proceeds"]),
-            dec_to_str(agg["cost_basis"]),
-            dec_to_str(agg["gain"]),
-        ])
-
-    if len(data_bq) == 1:
-        data_bq.append(["(no data)", "0", "0", "0"])
-
-    tbl_bq = Table(data_bq, hAlign="LEFT")
-    tbl_bq.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#F0F0F0")),
-        ("TEXTCOLOR", (0,0), (-1,0), colors.black),
-        ("GRID", (0,0), (-1,-1), 0.25, colors.lightgrey),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        ("ALIGN", (1,1), (-1,-1), "RIGHT"),
-        ("ALIGN", (0,0), (0,-1), "LEFT"),
-        ("BOTTOMPADDING", (0,0), (-1,0), 6),
-        ("TOPPADDING", (0,0), (-1,0), 6),
-    ]))
-    elements.append(Paragraph("Riepilogo per Valuta di Controvalore / By Quote Asset", styles["Heading2"]))
-    elements.append(tbl_bq)
-    elements.append(Spacer(1, 12))
-
-    # ---- Totals (native quote) ----
-    data_tot = [["Section", "Proceeds", "Cost Basis", "Gain"]]
-    data_tot.append([
-        "Totals (native quotes)",
-        dec_to_str(totals["proceeds"]),
-        dec_to_str(totals["cost_basis"]),
-        dec_to_str(totals["gain"])
-    ])
-    tbl_tot = Table(data_tot, hAlign="LEFT")
-    tbl_tot.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#F0F0F0")),
-        ("GRID", (0,0), (-1,-1), 0.25, colors.lightgrey),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        ("ALIGN", (1,1), (-1,-1), "RIGHT"),
-    ]))
-    elements.append(tbl_tot)
-    elements.append(Spacer(1, 8))
-
-    # ---- EUR Totals ----
-    data_eur = [["Section", "Proceeds (EUR)", "Cost Basis (EUR)", "Gain (EUR)"]]
-    data_eur.append([
-        "Totals (converted to EUR)",
-        dec_to_str(eur_totals["proceeds"]),
-        dec_to_str(eur_totals["cost_basis"]),
-        dec_to_str(eur_totals["gain"])
-    ])
-    tbl_eur = Table(data_eur, hAlign="LEFT")
-    tbl_eur.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#F0F0F0")),
-        ("GRID", (0,0), (-1,-1), 0.25, colors.lightgrey),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-        ("ALIGN", (1,1), (-1,-1), "RIGHT"),
-    ]))
-    elements.append(tbl_eur)
-    elements.append(Spacer(1, 14))
-
-    # ---- Top Events (preview) ----
-    if top_events:
-        elements.append(Paragraph("Anteprima Eventi Realizzati / Realized Events Preview", styles["Heading2"]))
-        ev_head = ["Timestamp", "Asset", "Qty Sold", "Proceeds", "Cost Basis", "Gain", "Quote", "Fee"]
-        data_ev = [ [P(h) for h in ev_head] ]
-
-        for ev in top_events[:20]:  # keep list short for readability
-            # compact, safe timestamp
-            ts_compact = fmt_ts_display(ev.timestamp)
-
-            data_ev.append([
-                P(ts_compact),
-                P(ev.asset or ""),
-                P(dec_to_str(ev.qty_sold)),
-                P(dec_to_str(ev.proceeds)),
-                P(dec_to_str(ev.cost_basis)),
-                P(dec_to_str(ev.gain)),
-                P(ev.quote_asset or ""),
-                P(dec_to_str(ev.fee_applied)),
-            ])
-
-        # Wider, safer column sizes to prevent collisions
-        tbl_ev = Table(
-            data_ev,
-            hAlign="LEFT",
-            colWidths=[90, 55, 55, 65, 65, 65, 45, 45]
-        )
-        tbl_ev.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#F0F0F0")),
-            ("GRID", (0,0), (-1,-1), 0.25, colors.lightgrey),
-            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE", (0,1), (-1,-1), 9),
-            ("VALIGN", (0,0), (-1,-1), "TOP"),
-            ("ALIGN", (2,1), (5,-1), "RIGHT"),  # numeric columns aligned right
-            ("LEFTPADDING", (0,0), (-1,-1), 4),
-            ("RIGHTPADDING", (0,0), (-1,-1), 4),
-            ("TOPPADDING", (0,0), (-1,-1), 2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-        ]))
-        elements.append(tbl_ev)
-
-
-    doc.build(elements)
-    return buf.getvalue()
 
 def fmt_ts_display(ts_iso: str) -> str:
     """
@@ -1886,14 +1731,14 @@ def export_summary_pdf(year: int | None = None) -> StreamingResponse:
                 eur_totals["gain"] += usd_to_eur(ev.gain, usd_per_eur)
 
     # 6) Build the PDF bytes
-    pdf_bytes = _build_summary_pdf(
-        title="Crypto Tax – FIFO Summary",
-        year=year,
-        by_quote=by_quote,
-        totals=totals,
-        eur_totals=eur_totals,
-        top_events=events
-    )
+    pdf_bytes = build_summary_pdf({
+        "title": "Crypto Tax – FIFO Summary",
+        "year": year,
+        "by_quote": by_quote,
+        "totals": totals,
+        "eur_totals": eur_totals,
+        "top_events": events,
+    })
 
     # 7) Stream it to the client
     filename = f"summary{('_' + str(year)) if year else ''}.pdf"
@@ -1931,7 +1776,7 @@ def export_calculate_pdf() -> StreamingResponse:
     by_quote_dummy = {}
     totals_dummy = {"proceeds": Decimal("0"), "cost_basis": Decimal("0"), "gain": Decimal("0")}
     eur_dummy = {"proceeds": Decimal("0"), "cost_basis": Decimal("0"), "gain": Decimal("0")}
-    pdf_bytes = _build_summary_pdf(
+    pdf_bytes = build_summary_pdf(
         title="Crypto Tax – Realized Events (FIFO)",
         year=None,
         by_quote=by_quote_dummy,
