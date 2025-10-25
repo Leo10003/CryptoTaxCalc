@@ -54,7 +54,6 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 import hashlib  # built-in Python library for secure hashes
 from .db import init_db
-init_db()
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -583,6 +582,7 @@ def on_startup() -> None:
     Runs when the server starts.
     - Ensures database tables exist (idempotent).
     """
+    init_db()
     Base.metadata.create_all(bind=engine)
     _ensure_transactions_has_fair_value_column()
     _ensure_fx_rates_has_batch_id()

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Pydantic schemas (data models) used by the API.
 - These define the structure, types, and validation rules for the data we accept/return.
@@ -8,10 +9,56 @@ Core ideas:
 - Use Optional[...] for fields that can be missing/empty.
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, List, Any
+
+from pydantic import BaseModel, Field, field_validator, field_serializer
+from typing import Optional, List, Any, Literal
 from datetime import datetime
-from decimal import Decimal
+from .models import TxType
+from decimal import Decimal, InvalidOperation
+
+_Q6 = Decimal("0.000001")
+
+class TransactionBase(BaseModel):
+    timestamp: datetime = Field(..., description="UTC timestamp of the transaction")
+    type: TxType = Field(..., description="Transaction type")
+    base_asset: Optional[str] = Field(None, max_length=32)
+    base_amount: Optional[Decimal] = None
+    quote_asset: Optional[str] = Field(None, max_length=32)
+    quote_amount: Optional[Decimal] = None
+    fee_asset: Optional[str] = Field(None, max_length=32)
+    fee_amount: Optional[Decimal] = None
+    exchange: Optional[str] = Field(None, max_length=64)
+    memo: Optional[str] = None
+    fair_value: Optional[Decimal] = None
+    raw_event_id: Optional[int] = None
+    hash: Optional[str] = Field(None, max_length=128)
+
+    @field_validator("base_asset", "quote_asset", "fee_asset")
+    @classmethod
+    def _strip_upper(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip().upper() if isinstance(v, str) else v
+
+    @field_validator("base_amount", "quote_amount", "fee_amount", mode="before")
+    @classmethod
+    def _coerce_decimal(cls, v):
+        if v is None:
+            return None
+        try:
+            return Decimal(str(v))
+        except (InvalidOperation, ValueError, TypeError):
+            raise ValueError("Invalid decimal")
+
+    @field_validator("base_amount", "quote_amount", "fee_amount", mode="after")
+    @classmethod
+    def _quantize_6dp(cls, v: Optional[Decimal]):
+        return None if v is None else v.quantize(_Q6)
+
+    # ensure dumps are '0.010000'
+    @field_serializer("base_amount", "quote_amount", "fee_amount", when_used="json", mode="plain")
+    def _serialize_6dp(self, v: Optional[Decimal]) -> Optional[str]:
+        if v is None:
+            return None
+        return f"{v:.6f}"
 
 class Transaction(BaseModel):
     """
@@ -87,3 +134,67 @@ class CalcAuditEntry(BaseModel):
     meta_json: dict[str, Any] | None
     created_at: datetime
 
+class TransactionBase(BaseModel):
+    timestamp: datetime = Field(..., description="UTC timestamp of the transaction")
+    type: TxType = Field(..., description="Transaction type")
+    base_asset: Optional[str] = Field(None, max_length=32)
+    base_amount: Optional[Decimal] = None
+    quote_asset: Optional[str] = Field(None, max_length=32)
+    quote_amount: Optional[Decimal] = None
+    fee_asset: Optional[str] = Field(None, max_length=32)
+    fee_amount: Optional[Decimal] = None
+    exchange: Optional[str] = Field(None, max_length=64)
+    memo: Optional[str] = None
+    fair_value: Optional[Decimal] = None
+    raw_event_id: Optional[int] = None
+    hash: Optional[str] = Field(None, max_length=128)
+
+    @field_validator("base_asset", "quote_asset", "fee_asset")
+    @classmethod
+    def _strip_upper(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip().upper() if isinstance(v, str) else v
+
+class TransactionCreate(TransactionBase):
+    """
+    Payload for creating a transaction.
+    You can tighten requirements if needed (e.g., require base/quote pairs for BUY/SELL).
+    """
+    pass
+
+class TransactionUpdate(BaseModel):
+    """
+    Partial update – all fields optional.
+    """
+    timestamp: Optional[datetime] = None
+    type: Optional[TxType] = None
+    base_asset: Optional[str] = Field(None, max_length=32)
+    base_amount: Optional[Decimal] = None
+    quote_asset: Optional[str] = Field(None, max_length=32)
+    quote_amount: Optional[Decimal] = None
+    fee_asset: Optional[str] = Field(None, max_length=32)
+    fee_amount: Optional[Decimal] = None
+    exchange: Optional[str] = Field(None, max_length=64)
+    memo: Optional[str] = None
+    fair_value: Optional[Decimal] = None
+    raw_event_id: Optional[int] = None
+    hash: Optional[str] = Field(None, max_length=128)
+
+    @field_validator("base_asset", "quote_asset", "fee_asset")
+    @classmethod
+    def _strip_upper(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip().upper() if isinstance(v, str) else v
+
+class TransactionRead(TransactionBase):
+    id: int
+    created_at: datetime
+
+    model_config = {
+        "from_attributes": True,  # allows .model_validate(sqlalchemy_obj)
+        "json_encoders": {
+            Decimal: str,  # ✅ this is how you safely serialize Decimal to string
+        },
+    }
+
+# Example conversion (not required, just handy)
+def to_transaction_read(tx: "Transaction") -> "TransactionRead":
+    return TransactionRead.model_validate(tx)

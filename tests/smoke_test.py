@@ -3,17 +3,21 @@
 #   pytest -q -m smoke --maxfail=1 --disable-warnings -rA
 
 from __future__ import annotations
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import io
 import json
-import os
 import re
-import sys
 import uuid
 import zipfile
 from typing import List, Tuple
-
 import pytest
+from cryptotaxcalc.db import SessionLocal
+from cryptotaxcalc.models import Transaction, TxType
+from cryptotaxcalc.schemas import TransactionRead
+from decimal import Decimal
+from datetime import datetime, timezone
 
 # --------------------------------------------------------------------------------------
 # Import the FastAPI app (supports running from repo root without pip install)
@@ -147,3 +151,26 @@ def test_audit_history_list_if_present():
         if isinstance(item, dict):
             assert "ts" in item or "timestamp" in item, "audit item should include a timestamp"
             assert "action" in item or "event" in item, "audit item should include an action/event"
+
+
+def test_transaction_model_and_schema_roundtrip():
+
+    db = SessionLocal()
+    try:
+        t = Transaction(
+            timestamp=datetime.now(timezone.utc),
+            type=TxType.BUY,
+            base_asset="BTC", base_amount=Decimal("0.01"),
+            quote_asset="EUR", quote_amount=Decimal("600"),
+            fee_asset="EUR", fee_amount=Decimal("1.50"),
+            exchange="TestEx", memo="schema check"
+        )
+        db.add(t); db.commit(); db.refresh(t)
+
+        dto = TransactionRead.model_validate(t)
+        data = dto.model_dump()
+        assert data["base_asset"] == "BTC"
+        assert data["quote_asset"] == "EUR"
+        assert str(data["base_amount"]) in ("0.01", "0.010000")  # tolerate DB precision
+    finally:
+        db.close()
