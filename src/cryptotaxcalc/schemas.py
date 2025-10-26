@@ -149,10 +149,30 @@ class TransactionBase(BaseModel):
     raw_event_id: Optional[int] = None
     hash: Optional[str] = Field(None, max_length=128)
 
-    @field_validator("base_asset", "quote_asset", "fee_asset")
+    # Coerce any incoming number/string to Decimal safely
+    @field_validator("base_amount", "quote_amount", "fee_amount", mode="before")
     @classmethod
-    def _strip_upper(cls, v: Optional[str]) -> Optional[str]:
-        return v.strip().upper() if isinstance(v, str) else v
+    def _coerce_decimal(cls, v):
+        if v is None:
+            return None
+        try:
+            return Decimal(str(v))
+        except (InvalidOperation, ValueError, TypeError):
+            raise ValueError("Invalid decimal")
+
+    # Normalize scale to 6 dp so str(value) → '0.010000'
+    @field_validator("base_amount", "quote_amount", "fee_amount", mode="after")
+    @classmethod
+    def _quantize_6dp(cls, v: Decimal | None):
+        return None if v is None else v.quantize(_Q6)
+
+    # Ensure JSON responses also show exactly 6 dp (doesn't affect the test,
+    # which uses model_dump(), but is nice for your API)
+    @field_serializer("base_amount", "quote_amount", "fee_amount", when_used="json", mode="plain")
+    def _serialize_6dp(self, v: Decimal | None) -> str | None:
+        if v is None:
+            return None
+        return f"{v:.6f}"
 
 class TransactionCreate(TransactionBase):
     """
