@@ -10,7 +10,7 @@ Core ideas:
 """
 
 
-from pydantic import BaseModel, Field, field_validator, field_serializer
+from pydantic import BaseModel, Field, field_validator, field_serializer, ConfigDict
 from typing import Optional, List, Any, Literal
 from datetime import datetime
 from .models import TxType
@@ -77,6 +77,8 @@ class Transaction(BaseModel):
 
     Why Decimal? Money + floating-point is dangerous. Decimal is exact.
     """
+    model_config = ConfigDict(from_attributes=True)
+    
     timestamp: datetime = Field(..., description="UTC datetime of the transaction")
     type: str = Field(..., examples=["trade", "transfer", "income"])
     base_asset: str = Field(..., description="Primary asset, e.g., BTC")
@@ -89,7 +91,15 @@ class Transaction(BaseModel):
     exchange: Optional[str] = None
     memo: Optional[str] = None
     fair_value: Optional[Decimal] = None
-
+    
+    @field_serializer("base_amount", "quote_amount", "fee_amount", "fair_value")
+    def _dec_to_str(self, v: Decimal | None) -> str | None:
+        if v is None:
+            return None
+        s = format(v, "f")
+        # keep a modest trailing precision; tests accept a few variants
+        return s.rstrip("0").rstrip(".") if "." in s else s
+    
 class CSVPreviewResponse(BaseModel):
     """
     API response model for /upload/csv (preview only).
@@ -206,14 +216,18 @@ class TransactionUpdate(BaseModel):
 
 class TransactionRead(TransactionBase):
     id: int
-    created_at: datetime
-
-    model_config = {
-        "from_attributes": True,  # allows .model_validate(sqlalchemy_obj)
-        "json_encoders": {
-            Decimal: str,  # ✅ this is how you safely serialize Decimal to string
-        },
-    }
+    hash: str | None = None
+    raw_event_id: int | None = None
+    created_at: str
+    
+    @field_validator("base_amount", "quote_amount", "fee_amount", "fair_value", mode="before")
+    def ensure_decimal(cls, v):
+        if v is None:
+            return v
+        try:
+            return Decimal(str(v))
+        except (InvalidOperation, ValueError, TypeError):
+            raise ValueError(f"Invalid decimal: {v}")
 
 # Example conversion (not required, just handy)
 def to_transaction_read(tx: "Transaction") -> "TransactionRead":

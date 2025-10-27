@@ -48,3 +48,25 @@ def get_or_create_current_fx_batch_id() -> int:
             dict(t=now, s="ECB CSV", h=None)
         )
         return res.lastrowid
+    
+def _ensure_fx_batches_table(conn):
+    # Ensure table exists with all columns used by fx_utils.get_or_create_current_fx_batch_id
+    conn.exec_driver_sql("""
+        CREATE TABLE IF NOT EXISTS fx_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imported_at TEXT,
+            source TEXT,
+            rates_hash TEXT
+        )
+    """)
+    # In case an older DB only had 'id' or 'created_at', add missing columns
+    for col, ddl in [
+        ("imported_at", "ALTER TABLE fx_batches ADD COLUMN imported_at TEXT"),
+        ("source",      "ALTER TABLE fx_batches ADD COLUMN source TEXT"),
+        ("rates_hash",  "ALTER TABLE fx_batches ADD COLUMN rates_hash TEXT")
+    ]:
+        try:
+            conn.exec_driver_sql(ddl)
+        except Exception:
+            # ignore "duplicate column" errors on re-runs
+            pass
