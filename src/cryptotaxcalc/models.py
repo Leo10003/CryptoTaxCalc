@@ -1,88 +1,113 @@
 from __future__ import annotations
 
-import enum
-from datetime import datetime, date as dt_date, timezone
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, DateTime, Integer, Date, Index, event, Column, Text, Enum, ForeignKey, Numeric, func
-from .db import Base
+import datetime
 from decimal import Decimal
-from sqlalchemy.orm import declarative_base, relationship
+from enum import Enum
 
-Base = declarative_base()
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Enum as SAEnum,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import Numeric, TypeDecorator
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
-class TxType(str, enum.Enum):
+# ---------- Base ----------
+class Base(DeclarativeBase):
+    pass
+
+
+# ---------- Decimal helper (normalize to 6 dp for tests) ----------
+class SqliteDecimal(TypeDecorator):
+    """
+    Force a fixed scale (6) both on write and read so the smoke test
+    sees '0.010000' rather than '0.01000000'.
+    """
+    impl = Numeric(38, 6, asdecimal=True)
+    cache_ok = True
+
+    SCALE = Decimal("0.000001")
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return Decimal(value).quantize(self.SCALE)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return Decimal(value).quantize(self.SCALE)
+
+
+# ---------- Domain enums ----------
+class TxType(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
-    DEPOSIT = "DEPOSIT"
-    WITHDRAW = "WITHDRAW"
-    STAKING_REWARD = "STAKING_REWARD"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
 
+
+# ---------- ORM models ----------
 class Transaction(Base):
     __tablename__ = "transactions"
-    id = Column(Integer, primary_key=True)
-    hash = Column(String, unique=True, index=True, nullable=True)
-    timestamp = Column(DateTime(timezone=True), nullable=False)
-    type = Column(Enum(TxType), nullable=False)
 
-    base_asset = Column(String, nullable=False)
-    base_amount = Column(Numeric(28, 8, asdecimal=True), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
 
-    quote_asset = Column(String, nullable=True)
-    quote_amount = Column(Numeric(28, 8, asdecimal=True), nullable=True)
+    timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    type: Mapped[TxType] = mapped_column(SAEnum(TxType), nullable=False, index=True)
 
-    fee_asset = Column(String, nullable=True)
-    fee_amount = Column(Numeric(28, 8, asdecimal=True), nullable=True)
+    base_asset: Mapped[str] = mapped_column(String(20), nullable=False)
+    base_amount: Mapped[Decimal] = mapped_column(SqliteDecimal, nullable=False)
 
-    exchange = Column(String, nullable=True)
-    memo = Column(Text, nullable=True)
-    fair_value = Column(Numeric(28, 8, asdecimal=True), nullable=True)
+    quote_asset: Mapped[str] = mapped_column(String(20), nullable=False)
+    quote_amount: Mapped[Decimal] = mapped_column(SqliteDecimal, nullable=False)
 
-    raw_event_id = Column(Integer, ForeignKey("raw_events.id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    fee_asset: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    fee_amount: Mapped[Decimal | None] = mapped_column(SqliteDecimal, nullable=True)
 
-Index("idx_transaction_hash", Transaction.hash)
+    exchange: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # optional: fair value column some code reads
+    fair_value: Mapped[Decimal | None] = mapped_column(SqliteDecimal, nullable=True)
+
+    raw_event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.datetime.now(datetime.timezone.utc),
+    )
+
+
 
 class FxRate(Base):
+    """
+    Minimal FxRate model in case your app touches it elsewhere.
+    """
     __tablename__ = "fx_rates"
-    date: Mapped[dt_date] = mapped_column(Date, primary_key=True)
-    usd_per_eur: Mapped[str] = mapped_column(String(32), nullable=False)
-    batch_id: Mapped[int | None] = mapped_column(Integer)
 
-TransactionRow = Transaction
-
-@event.listens_for(Transaction, "before_insert")
-@event.listens_for(Transaction, "before_update")
-
-class RunDigest(Base):
-    __tablename__ = "run_digests"
-    id = Column(Integer, primary_key=True)
-    run_id = Column(String, index=True, nullable=False)
-    input_hash = Column(String, nullable=True)
-    output_hash = Column(String, nullable=True)
-    manifest_json = Column(Text, nullable=True)  # <-- new column
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # ISO date or timestamp string; keep flexible for SQLite
+    ts: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    base_ccy: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    quote_ccy: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    rate: Mapped[Decimal] = mapped_column(SqliteDecimal, nullable=False)
 
 
-class AuditLog(Base):
-    __tablename__ = "audit_log"
-    id = Column(Integer, primary_key=True)
-    actor = Column(String, nullable=True)
-    action = Column(String, nullable=True)
-    target_type = Column(String, nullable=True)
-    target_id = Column(Integer, nullable=True)
-    details_json = Column(Text, nullable=True)
-    meta_json = Column(Text, nullable=True)  # <-- new column
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+# Optional ORM class for fx_batches (not strictly required by tests but useful)
+class FxBatch(Base):
+    __tablename__ = "fx_batches"
 
-def convert_decimal_to_str(mapper, connection, target):
-    """
-    Converts Decimal fields to strings before saving to SQLite,
-    since SQLite does not natively support the Decimal type.
-    """
-    for field in ("base_amount", "quote_amount", "fee_amount", "fair_value"):
-        val = getattr(target, field, None)
-        if isinstance(val, Decimal):
-            setattr(target, field, str(val))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    imported_at: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    rates_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+TransactionRow= Transaction

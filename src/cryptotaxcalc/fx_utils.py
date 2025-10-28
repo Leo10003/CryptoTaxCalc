@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal
 from datetime import date
 from sqlalchemy.orm import Session
-from .models import FxRate
+from .models import FxRate, FxBatch
 from sqlalchemy import text
 from .db import engine
 import datetime

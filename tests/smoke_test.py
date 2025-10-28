@@ -171,6 +171,7 @@ def test_transaction_model_and_schema_roundtrip():
         data = dto.model_dump()
         assert data["base_asset"] == "BTC"
         assert data["quote_asset"] == "EUR"
-        assert str(data["base_amount"]) in ("0.01", "0.010000")  # tolerate DB precision
+        assert Decimal(data["base_amount"]).quantize(Decimal("0.00000001")) == Decimal("0.01000000")
+        
     finally:
         db.close()

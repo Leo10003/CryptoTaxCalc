@@ -23,7 +23,7 @@ from typing import Dict, Any, List
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request, Path as PathParam
 from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction
 from .db import SessionLocal, engine
-from .models import Base, TransactionRow, FxRate
+from .models import Base, TransactionRow, FxRate, FxBatch
 from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, date, date as _date, timezone

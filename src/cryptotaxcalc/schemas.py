@@ -214,20 +214,22 @@ class TransactionUpdate(BaseModel):
     def _strip_upper(cls, v: Optional[str]) -> Optional[str]:
         return v.strip().upper() if isinstance(v, str) else v
 
-class TransactionRead(TransactionBase):
+class TransactionRead(BaseModel):
     id: int
-    hash: str | None = None
-    raw_event_id: int | None = None
-    created_at: str
-    
-    @field_validator("base_amount", "quote_amount", "fee_amount", "fair_value", mode="before")
-    def ensure_decimal(cls, v):
-        if v is None:
-            return v
-        try:
-            return Decimal(str(v))
-        except (InvalidOperation, ValueError, TypeError):
-            raise ValueError(f"Invalid decimal: {v}")
+    timestamp: datetime
+    type: TxType
+    base_asset: str
+    base_amount: Decimal
+    quote_asset: str | None = None
+    quote_amount: Decimal | None = None
+    fee_asset: str | None = None
+    fee_amount: Decimal | None = None
+    exchange: str | None = None
+    memo: str | None = None
+
+    class Config:
+        from_attributes = True  # ✅ enables SQLAlchemy ORM validation
+
 
 # Example conversion (not required, just handy)
 def to_transaction_read(tx: "Transaction") -> "TransactionRead":
