@@ -14,6 +14,18 @@ from pydantic import BaseModel, Field, field_validator, field_serializer, Config
 from typing import Optional, List, Any, Literal
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+# Enum used in schemas (aligned with tests)
+from enum import Enum
+
+class TxType(str, Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
+    STAKE = "STAKE"
+    REWARD = "REWARD"
+    AIRDROP = "AIRDROP"
+    FEE = "FEE"
 
 _Q6 = Decimal("0.000001")
 
@@ -187,7 +199,13 @@ class TransactionRead(BaseModel):
     class Config:
         from_attributes = True  # ✅ enables SQLAlchemy ORM validation
 
-
 # Example conversion (not required, just handy)
 def to_transaction_read(tx: "Transaction") -> "TransactionRead":
     return TransactionRead.model_validate(tx)
+
+for model in list(globals().values()):
+    if isinstance(model, type) and issubclass(model, BaseModel):
+        try:
+            model.model_rebuild()
+        except Exception:
+            pass

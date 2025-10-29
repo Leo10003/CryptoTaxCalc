@@ -4,6 +4,17 @@ from decimal import Decimal
 from sqlalchemy import Column, Date, DateTime, Integer, String, Text, ForeignKey, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import Numeric, TypeDecorator
+from enum import Enum
+
+class TxType(str, Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
+    STAKE = "STAKE"
+    REWARD = "REWARD"
+    AIRDROP = "AIRDROP"
+    FEE = "FEE"
 
 # ---------- Base ----------
 class Base(DeclarativeBase):
@@ -128,6 +139,19 @@ class RunDigest(Base):
     manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     manifest_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)          # e.g., "local-user"
+    action: Mapped[str] = mapped_column(String(64), nullable=False)         # e.g., "calc:run"
+    target_type: Mapped[str] = mapped_column(String(64), nullable=False)    # e.g., "calc_runs"
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # run id or other target
+    details_json: Mapped[str | None] = mapped_column(Text, nullable=True)   # JSON payload
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)       # "testclient" in tests
+    ts: Mapped[str] = mapped_column(String(32), nullable=False)             # ISO string, e.g. "2025-10-29T08:50:39Z"
+
 
 # Alias used by app.py
 TransactionRow = Transaction
