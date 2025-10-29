@@ -117,6 +117,22 @@ def _ensure_compatibility_objects(engine: Engine) -> None:
         )
 
 def init_db() -> None:
+    
+    def ensure_calc_runs_table(engine):
+        ddl = text("""
+        CREATE TABLE IF NOT EXISTS calc_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TEXT NOT NULL,
+            jurisdiction TEXT NOT NULL,
+            rule_version TEXT NOT NULL,
+            lot_method TEXT NOT NULL,
+            fx_set_id INTEGER NOT NULL,
+            params_json TEXT NOT NULL
+        )
+        """)
+        with engine.begin() as conn:
+            conn.execute(ddl)
+    
     """
     Create ORM tables and ensure compatibility tables/columns exist.
     """

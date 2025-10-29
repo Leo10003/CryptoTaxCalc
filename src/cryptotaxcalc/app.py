@@ -205,21 +205,6 @@ def _try_import():
             "persist_uploaded_file": persist_uploaded_file,
         }
 
-def _d0() -> Decimal:
-    """Return Decimal zero."""
-    return Decimal("0")
-
-def _as_str(d: Decimal | int | float | None) -> str:
-    """Serialize numeric values safely as strings (for JSON)."""
-    if d is None:
-        return "0"
-    if isinstance(d, Decimal):
-        return format(d, 'f')
-    try:
-        return str(Decimal(str(d)))
-    except Exception:
-        return "0"
-
 # --- helpers for summary endpoint ---
 
 def _d0() -> Decimal:
@@ -584,10 +569,22 @@ def on_startup() -> None:
     """
     init_db()
     Base.metadata.create_all(bind=engine)
+    
+    # Ensure columns that may have been added later
     _ensure_transactions_has_fair_value_column()
     _ensure_fx_rates_has_batch_id()
     _ensure_indexes()
     _set_sqlite_pragmas()
+
+    # Call the schema assert you defined
+    def _assert_schema():
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='calc_runs'")
+            ).fetchone()
+            if not exists:
+                raise RuntimeError("Missing table 'calc_runs' — run DB init/migrations.")
+    _assert_schema()
 
 # -----------------------------------------------------------------------------
 # Health + version endpoints (simple sanity checks)
@@ -648,85 +645,6 @@ async def import_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
 
     # Add a gentle deprecation warning header.
     return JSONResponse(result, headers={"Warning": '299 - "Deprecated; use /import/multiple"'})
-
-    """
-    Accept a CSV upload, parse & validate it, and SAVE valid rows to the DB.
-    Also:
-      - store original file SHA-256 + path in raw_events
-      - link each derived transaction to raw_event_id
-      - deduplicate by transaction hash
-    """
-    filename = file.filename or ""
-    if not filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Please upload a .csv file")
-
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="Empty file")
-
-    # Persist the original file once (provenance)
-    blob_path, digest = persist_uploaded_file(file, data)
-    received_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-    mime = file.content_type or "application/octet-stream"
-
-    # Insert a raw_events row
-    with engine.begin() as conn:
-        res = conn.execute(
-            text("""
-                INSERT INTO raw_events (source_filename, file_sha256, mime_type, importer, received_at, notes, blob_path)
-                VALUES (:f, :h, :m, :imp, :ts, :n, :p)
-            """),
-            dict(f=filename, h=digest, m=mime, imp="api/upload", ts=received_at, n=None, p=blob_path)
-        )
-        raw_event_id = res.lastrowid
-
-    audit("local-user", "import:file", "raw_events", raw_event_id, {"filename": filename, "sha256": digest})
-
-    # Parse the CSV
-    try:
-        valid_rows, errors = parse_csv(data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Parser error: {e!s}")
-
-    inserted = 0
-    skipped_duplicates = 0
-    with SessionLocal() as session:
-        for tx in valid_rows:
-            tx_hash = compute_tx_hash(tx)
-
-            # Duplicate detection by hash
-            existing = session.query(TransactionRow).filter_by(hash=tx_hash).first()
-            if existing:
-                skipped_duplicates += 1
-                continue
-
-            row = TransactionRow(
-                hash=tx_hash,
-                timestamp=tx.timestamp,
-                type=tx.type,
-                base_asset=tx.base_asset,
-                base_amount=str(tx.base_amount),
-                quote_asset=tx.quote_asset,
-                quote_amount=(str(tx.quote_amount) if tx.quote_amount is not None else None),
-                fee_asset=tx.fee_asset,
-                fee_amount=(str(tx.fee_amount) if tx.fee_amount is not None else None),
-                exchange=tx.exchange,
-                memo=tx.memo,
-                fair_value=(str(tx.fair_value) if getattr(tx, "fair_value", None) is not None else None),
-                raw_event_id=raw_event_id,  # <-- link provenance
-            )
-            session.add(row)
-            inserted += 1
-
-        session.commit()
-
-    return {
-        "filename": filename,
-        "inserted": inserted,
-        "skipped_duplicates": skipped_duplicates,
-        "skipped_errors": len(errors),
-        "note": "Use GET /transactions to view saved rows."
-    }
 
 @app.post("/import/multiple")
 async def import_multiple(files: List[UploadFile] = File(...)):
@@ -2047,18 +1965,6 @@ def history_download(run_id: str):
     db_run_id = _resolve_db_run_id(run_id)
     if db_run_id is None:
         raise HTTPException(status_code=404, detail=f"Run not found for id '{run_id}'")
-
-    try:
-        manifest = build_run_manifest(run_id)
-    except Exception as e:
-        # Fallback: still return a valid ZIP with a minimal manifest
-        manifest = {
-            "run_id": run_id,
-            "created_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-            "note": f"fallback manifest (no calc_runs row yet): {type(e).__name__}: {e}",
-            "inputs": {"transactions_hashes_ordered": []},
-            "outputs": [],
-        }
 
     try:
         manifest = build_run_manifest(run_id)
