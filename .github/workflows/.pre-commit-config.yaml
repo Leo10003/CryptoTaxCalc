@@ -1,0 +1,16 @@
+- repo: local
+  hooks:
+    - id: protect-src-deletes
+      name: protect src deletes
+      language: python
+      entry: python - <<'PY'
+import subprocess, sys, re
+out = subprocess.check_output(["git","diff","--cached","--name-status"]).decode()
+bad = [ln for ln in out.splitlines() if ln.startswith("D") and re.search(r"^src/cryptotaxcalc/.*\.py$", ln.split("\t",1)[1])]
+if bad:
+    print("ERROR: attempted deletes in src/cryptotaxcalc/ are blocked:\n" + "\n".join(bad))
+    print("If intentional, set ALLOW_SRC_DELETE=1 and re-run.")
+    if "ALLOW_SRC_DELETE" not in __import__("os").environ:
+        sys.exit(1)
+PY
+      stages: [commit]
