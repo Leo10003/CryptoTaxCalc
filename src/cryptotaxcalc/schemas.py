@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 """
 Pydantic schemas (data models) used by the API.
 - These define the structure, types, and validation rules for the data we accept/return.
@@ -15,10 +14,8 @@ from pydantic import BaseModel, Field, field_validator, field_serializer, Config
 from typing import Optional, List, Any, Literal
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-
 # Enum used in schemas (aligned with tests)
 from enum import Enum
-
 
 class TxType(str, Enum):
     BUY = "BUY"
@@ -30,9 +27,7 @@ class TxType(str, Enum):
     AIRDROP = "AIRDROP"
     FEE = "FEE"
 
-
 _Q6 = Decimal("0.000001")
-
 
 class TransactionBase(BaseModel):
     hash: Optional[str] = None
@@ -56,7 +51,6 @@ class TransactionBase(BaseModel):
         s = str(v).strip().upper().replace("-", "_").replace(" ", "_")
         # allow letters, digits and underscore only
         import re
-
         if not re.fullmatch(r"[A-Z0-9_]+", s):
             raise ValueError(f"invalid transaction type: {v!r}")
         return s
@@ -72,10 +66,8 @@ class TransactionBase(BaseModel):
         if v is None or v == "":
             return None
         from decimal import Decimal, ROUND_HALF_UP
-
         d = Decimal(str(v))
         return str(d.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP))
-
 
 class Transaction(BaseModel):
     """
@@ -94,9 +86,8 @@ class Transaction(BaseModel):
 
     Why Decimal? Money + floating-point is dangerous. Decimal is exact.
     """
-
     model_config = ConfigDict(from_attributes=True)
-
+    
     timestamp: datetime = Field(..., description="UTC datetime of the transaction")
     type: str = Field(..., examples=["trade", "transfer", "income"])
     base_asset: str = Field(..., description="Primary asset, e.g., BTC")
@@ -109,7 +100,7 @@ class Transaction(BaseModel):
     exchange: Optional[str] = None
     memo: Optional[str] = None
     fair_value: Optional[Decimal] = None
-
+    
     @field_serializer("base_amount", "quote_amount", "fee_amount", "fair_value")
     def _dec_to_str(self, v: Decimal | None) -> str | None:
         if v is None:
@@ -117,31 +108,26 @@ class Transaction(BaseModel):
         s = format(v, "f")
         # keep a modest trailing precision; tests accept a few variants
         return s.rstrip("0").rstrip(".") if "." in s else s
-
-
+    
 class CSVPreviewResponse(BaseModel):
     """
     API response model for /upload/csv (preview only).
     """
-
     filename: str
     total_valid: int
     total_errors: int
     preview_first_5: List[Transaction]
     errors: List[Any]
 
-
 class ImportCSVResponse(BaseModel):
     """
     API response model for /import/csv (persists to DB).
     """
-
     filename: str
     inserted: int
     skipped_duplicates: int
     skipped_errors: int
     note: str
-
 
 class CalcRunOut(BaseModel):
     id: int
@@ -156,10 +142,8 @@ class CalcRunOut(BaseModel):
     manifest_hash: str | None
     summary: dict[str, Any] | None
 
-
 class CalcRunList(BaseModel):
     items: list[CalcRunOut]
-
 
 class CalcAuditEntry(BaseModel):
     id: int
@@ -169,21 +153,17 @@ class CalcAuditEntry(BaseModel):
     meta_json: dict[str, Any] | None
     created_at: datetime
 
-
 class TransactionCreate(TransactionBase):
     """
     Payload for creating a transaction.
     You can tighten requirements if needed (e.g., require base/quote pairs for BUY/SELL).
     """
-
     pass
-
 
 class TransactionUpdate(BaseModel):
     """
     Partial update – all fields optional.
     """
-
     timestamp: Optional[datetime] = None
     type: Optional[TxType] = None
     base_asset: Optional[str] = Field(None, max_length=32)
@@ -203,7 +183,6 @@ class TransactionUpdate(BaseModel):
     def _strip_upper(cls, v: Optional[str]) -> Optional[str]:
         return v.strip().upper() if isinstance(v, str) else v
 
-
 class TransactionRead(BaseModel):
     id: int
     timestamp: datetime
@@ -220,38 +199,9 @@ class TransactionRead(BaseModel):
     class Config:
         from_attributes = True  # ✅ enables SQLAlchemy ORM validation
 
-
 # Example conversion (not required, just handy)
 def to_transaction_read(tx: "Transaction") -> "TransactionRead":
     return TransactionRead.model_validate(tx)
-
-
-class CalcConfig(BaseModel):
-    jurisdiction: Literal["HR", "IT"] = "HR"
-    rule_version: str = "2025.1"
-    lot_method: Literal["FIFO"] = "FIFO"
-    fx_source: Literal["HNB", "ECB"] = "HNB"  # HR=HNB, IT=ECB (defaults)
-    holding_exemption_days: int | None = None  # e.g. HR: 730 for >2y exemption
-    it_threshold_eur: Decimal | None = Decimal("51645.69")
-    round_dp: int = 2
-
-
-class RunTotals(BaseModel):
-    proceeds_eur: Decimal = Decimal("0")
-    cost_eur: Decimal = Decimal("0")
-    gain_eur: Decimal = Decimal("0")
-    taxable_gain_eur: Decimal = Decimal("0")
-
-
-class RunSummary(BaseModel):
-    run_id: int
-    jurisdiction: str
-    rule_version: str
-    tax_year: int
-    fx_batch_id: int | None = None
-    lots_processed: int = 0
-    totals: RunTotals
-
 
 for model in list(globals().values()):
     if isinstance(model, type) and issubclass(model, BaseModel):

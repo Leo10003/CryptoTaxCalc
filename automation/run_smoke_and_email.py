@@ -40,10 +40,8 @@ def safe_print(msg: str) -> None:
             # Last-ditch: print a generic line
             print("<<message omitted due to encoding>>")
 
-
 def utcnow_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
 
 def send_telegram(msg: str) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
@@ -63,7 +61,6 @@ def send_telegram(msg: str) -> None:
     except Exception as e:
         print(f"Telegram send failed: {e}")
 
-
 def main() -> None:
     safe_print("=== CryptoTaxCalc smoke runner ===")
     started = utcnow_iso()
@@ -73,7 +70,10 @@ def main() -> None:
     send_telegram("🚀 Smoke test monitor started successfully.")
 
     # 2) Run pytest (smoke)
-    pytest_exe = os.path.join(os.path.dirname(sys.executable), "pytest.exe")
+    pytest_exe = os.path.join(
+        os.path.dirname(sys.executable),
+        "pytest.exe"
+    )
     cmd = [pytest_exe, "-q", "-m", "smoke", "--maxfail=1", "--disable-warnings", "-rA"]
     t0 = datetime.now(timezone.utc)
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -121,7 +121,6 @@ def main() -> None:
     send_telegram(msg)
     safe_print(msg.replace("✅", "[OK]").replace("❌", "[FAIL]").replace("🚀", "[START]"))
     sys.exit(proc.returncode)
-
 
 if __name__ == "__main__":
     main()

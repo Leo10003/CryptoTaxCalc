@@ -19,49 +19,32 @@ Endpoints kept for continuity:
 """
 
 import os, shutil, tempfile, csv, io, json, csv as _csv, sys, time, subprocess, zipfile
-from typing import Dict, Any, List, Optional, Literal
-from fastapi import (
-    FastAPI,
-    UploadFile,
-    File,
-    HTTPException,
-    Query,
-    Response,
-    Header,
-    Request,
-    Path as PathParam,
-    Body,
-    Depends,
-)
+from typing import Dict, Any, List
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request, Path as PathParam
+from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction
+from .db import SessionLocal, engine
+from .models import Base, TransactionRow, FxRate, FxBatch
 from decimal import Decimal
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime, date, date as _date, timezone, timedelta
+from datetime import datetime, date, date as _date, timezone
 from csv import DictReader
 from io import StringIO, BytesIO
 from sqlalchemy import text, and_, text as _sqltext
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from datetime import datetime as _dt
-
-from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction, CalcConfig
-from .db import SessionLocal, engine, init_db
-from .models import Base, TransactionRow, FxRate, FxBatch, CalcRun, RunDigest, AuditLog
 from .utils_files import persist_uploaded_file
+from datetime import datetime as _dt
 from .csv_normalizer import parse_csv
 from .fifo_engine import compute_fifo
-from .fx_utils import usd_to_eur, get_rate_for_date, get_or_create_current_fx_batch_id
+from .fx_utils import usd_to_eur, get_rate_for_date
 from .audit_utils import audit
-from .__about__ import __title__, __version__
-from .calc_runner import run_calculation
-
+from .utils_files import persist_uploaded_file
 from pathlib import Path as FSPath
+from .__about__ import __title__, __version__
 import uuid
 from dataclasses import is_dataclass, asdict
 from uuid import UUID
 from cryptotaxcalc.audit_digest import build_run_manifest
 from cryptotaxcalc.report_pdf import build_summary_pdf
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-
 
 # ReportLab (pure-Python PDF generation)
 from reportlab.lib.pagesizes import A4
@@ -70,7 +53,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 
 import hashlib  # built-in Python library for secure hashes
-
+from .db import init_db
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -88,7 +71,6 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "dev-token-change-me")
 # Load .env early so BUNDLE_TOKEN is available
 try:
     from dotenv import load_dotenv
-
     # project_root/.env  (src/cryptotaxcalc/app.py -> parents[2] == project root)
     load_dotenv(dotenv_path=FSPath(__file__).resolve().parents[2] / ".env")
 except Exception:
@@ -96,29 +78,9 @@ except Exception:
     # endpoint will detect missing token and return 500 with a safe message.
     pass
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _sha256_str(s: str) -> str:
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
-
-
-def _safe_json_dumps(obj) -> str:
-    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), default=str)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 
 def compute_tx_hash(tx: Transaction) -> str:
     """
@@ -149,7 +111,6 @@ def compute_tx_hash(tx: Transaction) -> str:
     # Compute the hash value and return it as a 64-character hexadecimal string
     return hashlib.sha256(base_string.encode("utf-8")).hexdigest()
 
-
 def dec_to_str(x: Decimal) -> str:
     try:
         q = x.quantize(Decimal("0.00000001"))  # 8 decimal places
@@ -160,7 +121,6 @@ def dec_to_str(x: Decimal) -> str:
         s = s.rstrip("0").rstrip(".")
     return s or "0"
 
-
 def _is_sqlite_file(path: str) -> bool:
     """Check by magic header."""
     try:
@@ -170,13 +130,11 @@ def _is_sqlite_file(path: str) -> bool:
     except Exception:
         return False
 
-
 def _integrity_ok(db_path: str) -> bool:
     """Run SQLite PRAGMA integrity_check on the given file path."""
     try:
         # Use a temporary engine bound to the file we want to check
         from sqlalchemy import create_engine
-
         tmp_engine = create_engine(f"sqlite:///{db_path}")
         with tmp_engine.connect() as conn:
             res = conn.execute(text("PRAGMA integrity_check;")).scalar()
@@ -184,7 +142,6 @@ def _integrity_ok(db_path: str) -> bool:
         return res == "ok"
     except Exception:
         return False
-
 
 def fmt_ts_display(ts_iso: str) -> str:
     """
@@ -198,7 +155,6 @@ def fmt_ts_display(ts_iso: str) -> str:
         return ts_iso  # fallback if unexpected format
     return dt.strftime("%Y-%m-%d %H:%M")
 
-
 def _set_sqlite_pragmas():
     # Safer concurrency defaults for SQLite
     with engine.connect() as conn:
@@ -209,21 +165,15 @@ def _set_sqlite_pragmas():
         # How long SQLite should wait if the DB is busy (ms)
         conn.execute(text("PRAGMA busy_timeout=5000;"))
 
-
 def _try_import():
     # try flat layout first
     try:
         from .csv_normalizer import parse_csv  # noqa:F401
         from .fifo_engine import compute_fifo  # noqa:F401
-        from .fx_utils import (
-            usd_to_eur,
-            get_rate_for_date,
-            get_or_create_current_fx_batch_id,
-        )  # noqa:F401
+        from .fx_utils import usd_to_eur, get_rate_for_date, get_or_create_current_fx_batch_id  # noqa:F401
         from .audit_digest import build_run_manifest, compute_digests  # noqa:F401
         from .audit_utils import audit  # noqa:F401
         from .utils_files import persist_uploaded_file  # noqa:F401
-
         return {
             "parse_csv": parse_csv,
             "compute_fifo": compute_fifo,
@@ -243,7 +193,6 @@ def _try_import():
         from .audit_digest import build_run_manifest, compute_digests  # type: ignore
         from .audit_utils import audit  # type: ignore
         from .utils_files import persist_uploaded_file  # type: ignore
-
         return {
             "parse_csv": parse_csv,
             "compute_fifo": compute_fifo,
@@ -256,14 +205,11 @@ def _try_import():
             "persist_uploaded_file": persist_uploaded_file,
         }
 
-
 # --- helpers for summary endpoint ---
-
 
 def _d0() -> Decimal:
     """Return Decimal zero."""
     return Decimal("0")
-
 
 def _as_str(x) -> str:
     """Safe stringify numerics (Decimal/int/float/None) for JSON."""
@@ -275,7 +221,6 @@ def _as_str(x) -> str:
         return str(Decimal(str(x)))
     except Exception:
         return "0"
-
 
 def _parse_iso_ts(ts: str) -> datetime | None:
     """
@@ -297,7 +242,6 @@ def _parse_iso_ts(ts: str) -> datetime | None:
         except Exception:
             return None
 
-
 _locals = _try_import()
 parse_csv = _locals["parse_csv"]
 compute_fifo = _locals["compute_fifo"]
@@ -317,13 +261,11 @@ SUPPORT_BUNDLES_DIR = PROJECT_ROOT / "support_bundles"
 BUNDLE_SCRIPT = os.getenv("AUTOMATION_BUNDLE_PS", r"automation\collect_support_bundle.ps1")
 BUNDLE_TOKEN = os.getenv("BUNDLE_TOKEN", "")
 
-
 def _abs_script_path() -> str:
     p = FSPath(BUNDLE_SCRIPT)
     if not p.is_absolute():
         p = PROJECT_ROOT / p
     return str(p.resolve())
-
 
 def _latest_zip_path() -> str | None:
     zips = list((SUPPORT_BUNDLES_DIR).glob("support_bundle_*.zip"))
@@ -331,7 +273,6 @@ def _latest_zip_path() -> str | None:
         return None
     zips.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return str(zips[0])
-
 
 def run_git_auto_push():
     script_path = PROJECT_ROOT / "automation" / "git_auto_push.ps1"
@@ -345,29 +286,20 @@ def run_git_auto_push():
         text=True,
         encoding="utf-8",
         errors="replace",
-        cwd=str(PROJECT_ROOT),
+        cwd=str(PROJECT_ROOT)
     )
     return {
         "return_code": process.returncode,
         "stdout": process.stdout,
         "stderr": process.stderr,
-        "log_file": str(
-            (
-                PROJECT_ROOT
-                / "automation"
-                / "logs"
-                / f"git_auto_push_{__import__('datetime').datetime.now().strftime('%Y-%m-%d')}.log"
-            )
-        ),
+        "log_file": str((PROJECT_ROOT / "automation" / "logs" / f"git_auto_push_{__import__('datetime').datetime.now().strftime('%Y-%m-%d')}.log"))
     }
-
 
 def _latest_log():
     if not LOG_DIR.exists():
         return None
     files = sorted(LOG_DIR.glob("git_auto_push_*.log"))
     return files[-1] if files else None
-
 
 def _save_calc_run_json(payload: dict) -> str:
     """
@@ -378,12 +310,8 @@ def _save_calc_run_json(payload: dict) -> str:
 
     # Write a compact JSON to reduce footprint.
     out_path = CALC_HISTORY_DIR / f"{run_id}.json"
-    out_path.write_text(
-        json.dumps(payload, separators=(",", ":"), ensure_ascii=False, default=_json_default),
-        encoding="utf-8",
-    )
+    out_path.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False, default=_json_default), encoding="utf-8")
     return run_id
-
 
 def _list_calc_runs_meta() -> list[dict]:
     """
@@ -395,22 +323,17 @@ def _list_calc_runs_meta() -> list[dict]:
             data = json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             continue
-        items.append(
-            {
-                "run_id": data.get("run_id", p.stem),
-                "created_at": data.get("created_at"),
-                "events_count": (
-                    len(data.get("events", [])) if isinstance(data.get("events"), list) else None
-                ),
-                "inputs_hash": data.get("inputs_hash"),
-                "outputs_hash": data.get("outputs_hash"),
-                "manifest": data.get("manifest"),
-            }
-        )
+        items.append({
+            "run_id": data.get("run_id", p.stem),
+            "created_at": data.get("created_at"),
+            "events_count": (len(data.get("events", [])) if isinstance(data.get("events"), list) else None),
+            "inputs_hash": data.get("inputs_hash"),
+            "outputs_hash": data.get("outputs_hash"),
+            "manifest": data.get("manifest"),
+        })
     # newest first
     items.sort(key=lambda d: (d.get("created_at") or ""), reverse=True)
     return items
-
 
 def _load_calc_run(run_id: str) -> dict | None:
     path = CALC_HISTORY_DIR / f"{run_id}.json"
@@ -421,7 +344,6 @@ def _load_calc_run(run_id: str) -> dict | None:
     except Exception:
         return None
 
-
 def _delete_calc_run(run_id: str) -> bool:
     path = CALC_HISTORY_DIR / f"{run_id}.json"
     if path.exists():
@@ -429,10 +351,8 @@ def _delete_calc_run(run_id: str) -> bool:
         return True
     return False
 
-
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 def _to_jsonable(obj):
     # primitives
@@ -470,7 +390,6 @@ def _to_jsonable(obj):
     # last resort: string
     return str(obj)
 
-
 def _json_default(obj):
     # Use strings for exactness (no float rounding)
     if isinstance(obj, Decimal):
@@ -486,14 +405,11 @@ def _json_default(obj):
     # Let json raise for anything unexpected (helps catch bugs)
     raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
-
 # --- JSON + hashing helpers (safe for Decimal, UUID, dataclasses, etc.) ---
-
 
 def _hash_text(s: str) -> str:
     """Return hex SHA256 of an input string."""
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
-
 
 def _to_plain_data(obj):
     """
@@ -522,17 +438,14 @@ def _to_plain_data(obj):
     # Fallback to string
     return str(obj)
 
-
 def _decimal_to_float(o):
     if isinstance(o, Decimal):
         return float(o)
     return o
 
-
 def json_dumps(data) -> str:
     # compact, ASCII-safe JSON with Decimal handling
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False, default=_decimal_to_float)
-
 
 def ev_to_dict(ev) -> Dict[str, Any]:
     # All numbers as strings -> avoids Decimal issues and keeps precision
@@ -547,14 +460,13 @@ def ev_to_dict(ev) -> Dict[str, Any]:
         "fee_applied": dec_to_str(getattr(ev, "fee_applied", Decimal("0"))),
         "matches": [
             {
-                "from_qty": dec_to_str(getattr(m, "from_qty", Decimal("0"))),
+                "from_qty":        dec_to_str(getattr(m, "from_qty", Decimal("0"))),
                 "lot_cost_per_unit": dec_to_str(getattr(m, "lot_cost_per_unit", Decimal("0"))),
-                "lot_cost_total": dec_to_str(getattr(m, "lot_cost_total", Decimal("0"))),
+                "lot_cost_total":  dec_to_str(getattr(m, "lot_cost_total", Decimal("0"))),
             }
             for m in getattr(ev, "matches", []) or []
         ],
     }
-
 
 def _get_client_ip(request: Request) -> str:
     """Extract client IP address from FastAPI Request."""
@@ -565,7 +477,6 @@ def _get_client_ip(request: Request) -> str:
     else:
         ip = request.client.host if request.client else "unknown"
     return ip
-
 
 def _resolve_db_run_id(run_id_param: str | int) -> int | None:
     """
@@ -578,9 +489,8 @@ def _resolve_db_run_id(run_id_param: str | int) -> int | None:
     try:
         maybe_int = int(run_id_param)  # works for "52" or 52
         with engine.begin() as conn:
-            row = conn.execute(
-                _sqltext("SELECT id FROM calc_runs WHERE id = :rid"), {"rid": maybe_int}
-            ).first()
+            row = conn.execute(_sqltext("SELECT id FROM calc_runs WHERE id = :rid"),
+                               {"rid": maybe_int}).first()
             if row:
                 return maybe_int
     except Exception:
@@ -592,56 +502,28 @@ def _resolve_db_run_id(run_id_param: str | int) -> int | None:
 
     with engine.begin() as conn:
         try:
-            row = conn.execute(
-                _sqltext(
-                    """
+            row = conn.execute(_sqltext("""
                 SELECT run_id
                 FROM calc_audit
                 WHERE json_extract(meta_json, '$.run_id') = :uuid
                 ORDER BY created_at DESC
                 LIMIT 1
-            """
-                ),
-                {"uuid": uuid_str},
-            ).first()
+            """), {"uuid": uuid_str}).first()
             if row and row[0] is not None:
                 return int(row[0])
         except Exception:
             # Fallback for SQLite builds without JSON1
-            row = conn.execute(
-                _sqltext(
-                    """
+            row = conn.execute(_sqltext("""
                 SELECT run_id
                 FROM calc_audit
                 WHERE meta_json LIKE :needle
                 ORDER BY created_at DESC
                 LIMIT 1
-            """
-                ),
-                {"needle": f'%\"run_id\":\"{uuid_str}\"%'},
-            ).first()
+            """), {"needle": f'%\"run_id\":\"{uuid_str}\"%'}).first()
             if row and row[0] is not None:
                 return int(row[0])
 
     return None
-
-
-# --- request/response DTOs ---
-class CalculateV2Request(BaseModel):
-    jurisdiction: Literal["HR", "IT"] = Field(default="HR")
-    rule_version: str = Field(default="2025.1")
-    lot_method: Literal["FIFO"] = "FIFO"
-    fx_source: Literal["HNB", "ECB"] = Field(default="HNB")
-    holding_exemption_days: Optional[int] = Field(default=730)  # HR default; IT typically None
-    it_threshold_eur: Optional[str] = Field(default="51645.69")  # string to avoid float drift
-    round_dp: int = Field(default=2)
-
-
-class CalculateV2Response(BaseModel):
-    run_id: int
-    summary: dict
-    digests: Optional[dict] = None
-
 
 # -----------------------------------------------------------------------------
 # Application factory & startup
@@ -652,11 +534,9 @@ app = FastAPI(
     description="Backend API for parsing crypto transactions and storing them safely.",
 )
 
-
 # --- History storage (file-based) ---
 CALC_HISTORY_DIR = FSPath("storage_raw/calc_runs")
 CALC_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-
 
 def _ensure_transactions_has_fair_value_column():
     with engine.connect() as conn:
@@ -664,7 +544,6 @@ def _ensure_transactions_has_fair_value_column():
         names = [c[1] for c in cols]
         if "fair_value" not in names:
             conn.execute(text("ALTER TABLE transactions ADD COLUMN fair_value VARCHAR(64)"))
-
 
 def _ensure_fx_rates_has_batch_id():
     # Add fx_rates.batch_id if the DB was created before we introduced the column
@@ -674,20 +553,13 @@ def _ensure_fx_rates_has_batch_id():
         if "batch_id" not in names:
             conn.execute(text("ALTER TABLE fx_rates ADD COLUMN batch_id INTEGER"))
 
-
 def _ensure_indexes():
     # create low-risk indexes if missing (idempotent)
     with engine.connect() as conn:
-        conn.execute(
-            text("CREATE INDEX IF NOT EXISTS idx_transactions_ts ON transactions(timestamp)")
-        )
-        conn.execute(
-            text("CREATE INDEX IF NOT EXISTS idx_transactions_ts_id ON transactions(timestamp, id)")
-        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_transactions_ts ON transactions(timestamp)"))
         # Optional (uncomment if you filter often by these):
         # conn.execute(text("CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type)"))
         # conn.execute(text("CREATE INDEX IF NOT EXISTS idx_transactions_asset ON transactions(base_asset)"))
-
 
 @app.on_event("startup")
 def on_startup() -> None:
@@ -697,7 +569,7 @@ def on_startup() -> None:
     """
     init_db()
     Base.metadata.create_all(bind=engine)
-
+    
     # Ensure columns that may have been added later
     _ensure_transactions_has_fair_value_column()
     _ensure_fx_rates_has_batch_id()
@@ -712,9 +584,7 @@ def on_startup() -> None:
             ).fetchone()
             if not exists:
                 raise RuntimeError("Missing table 'calc_runs' — run DB init/migrations.")
-
     _assert_schema()
-
 
 # -----------------------------------------------------------------------------
 # Health + version endpoints (simple sanity checks)
@@ -764,7 +634,6 @@ async def upload_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
         "errors": errors[:5],
     }
 
-
 @app.post("/import/csv", response_model=ImportCSVResponse)
 async def import_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
     """
@@ -776,7 +645,6 @@ async def import_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
 
     # Add a gentle deprecation warning header.
     return JSONResponse(result, headers={"Warning": '299 - "Deprecated; use /import/multiple"'})
-
 
 @app.post("/import/multiple")
 async def import_multiple(files: List[UploadFile] = File(...)):
@@ -810,31 +678,15 @@ async def import_multiple(files: List[UploadFile] = File(...)):
 
             with engine.begin() as conn:
                 res = conn.execute(
-                    text(
-                        """
+                    text("""
                     INSERT INTO raw_events (source_filename, file_sha256, mime_type, importer, received_at, notes, blob_path)
                     VALUES (:f, :h, :m, :imp, :ts, :n, :p)
-                    """
-                    ),
-                    dict(
-                        f=filename,
-                        h=digest,
-                        m=mime,
-                        imp="api/upload",
-                        ts=received_at,
-                        n=None,
-                        p=blob_path,
-                    ),
+                    """),
+                    dict(f=filename, h=digest, m=mime, imp="api/upload", ts=received_at, n=None, p=blob_path)
                 )
                 raw_event_id = res.lastrowid
 
-            audit(
-                "local-user",
-                "import:file",
-                "raw_events",
-                raw_event_id,
-                {"filename": filename, "sha256": digest},
-            )
+            audit("local-user", "import:file", "raw_events", raw_event_id, {"filename": filename, "sha256": digest})
 
             # Parse
             valid_rows, parse_errors = parse_csv(contents)
@@ -865,9 +717,7 @@ async def import_multiple(files: List[UploadFile] = File(...)):
                     fee_amount=(str(tx.fee_amount) if tx.fee_amount is not None else None),
                     exchange=tx.exchange,
                     memo=tx.memo,
-                    fair_value=(
-                        str(tx.fair_value) if getattr(tx, "fair_value", None) is not None else None
-                    ),
+                    fair_value=(str(tx.fair_value) if getattr(tx, "fair_value", None) is not None else None),
                     raw_event_id=raw_event_id,  # <-- link provenance
                 )
                 session.add(row)
@@ -877,25 +727,47 @@ async def import_multiple(files: List[UploadFile] = File(...)):
                 session.commit()
             except IntegrityError:
                 session.rollback()
-                results.append(
-                    {
-                        "filename": filename,
-                        "error": "Database integrity error (possibly duplicate hash).",
-                    }
-                )
+                results.append({
+                    "filename": filename,
+                    "error": "Database integrity error (possibly duplicate hash).",
+                })
                 continue
 
-        results.append(
-            {
-                "filename": filename,
-                "inserted": inserted,
-                "skipped_duplicates": skipped_duplicates,
-                "skipped_errors": skipped_errors,
-            }
-        )
+        results.append({
+            "filename": filename,
+            "inserted": inserted,
+            "skipped_duplicates": skipped_duplicates,
+            "skipped_errors": skipped_errors,
+        })
 
     return {"results": results}
 
+
+    """
+    Return the most recent 100 transactions from the database.
+
+    Later:
+    - add pagination & filters (by date range, asset, type)
+    - add authentication (only show the current user's data)
+    """
+    out: List[dict] = []
+    with SessionLocal() as session:
+        rows = session.query(TransactionRow).order_by(TransactionRow.id.desc()).limit(100).all()
+        for r in rows:
+            out.append({
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat(),
+                "type": r.type,
+                "base_asset": r.base_asset,
+                "base_amount": r.base_amount,
+                "quote_asset": r.quote_asset,
+                "quote_amount": r.quote_amount,
+                "fee_asset": r.fee_asset,
+                "fee_amount": r.fee_amount,
+                "exchange": r.exchange,
+                "memo": r.memo,
+            })
+    return out
 
 @app.get("/transactions")
 def list_transactions(
@@ -904,8 +776,8 @@ def list_transactions(
     asset: str | None = None,
     type: str | None = None,
     exchange: str | None = None,
-    date_from: str | None = None,  # YYYY-MM-DD
-    date_to: str | None = None,  # YYYY-MM-DD
+    date_from: str | None = None,   # YYYY-MM-DD
+    date_to: str | None = None,     # YYYY-MM-DD
     sort: str = Query("timestamp_desc", pattern="^(timestamp_asc|timestamp_desc)$"),
 ):
     """
@@ -948,27 +820,24 @@ def list_transactions(
         # Serialize minimal fields (unchanged keys to avoid breaking clients)
         data = []
         for r in items:
-            data.append(
-                {
-                    "id": r.id,
-                    "timestamp": r.timestamp.isoformat(timespec="seconds"),
-                    "type": r.type,
-                    "base_asset": r.base_asset,
-                    "base_amount": str(r.base_amount),
-                    "quote_asset": r.quote_asset,
-                    "quote_amount": (str(r.quote_amount) if r.quote_amount is not None else None),
-                    "fee_asset": r.fee_asset,
-                    "fee_amount": (str(r.fee_amount) if r.fee_amount is not None else None),
-                    "exchange": r.exchange,
-                    "memo": r.memo,
-                }
-            )
+            data.append({
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat(timespec="seconds"),
+                "type": r.type,
+                "base_asset": r.base_asset,
+                "base_amount": str(r.base_amount),
+                "quote_asset": r.quote_asset,
+                "quote_amount": (str(r.quote_amount) if r.quote_amount is not None else None),
+                "fee_asset": r.fee_asset,
+                "fee_amount": (str(r.fee_amount) if r.fee_amount is not None else None),
+                "exchange": r.exchange,
+                "memo": r.memo,
+            })
 
         return {
             "meta": {"page": page, "page_size": page_size, "total": total},
             "items": data,
         }
-
 
 @app.get("/calculate")
 def calculate_fifo(request: Request) -> Dict[str, Any]:
@@ -990,31 +859,23 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
     # Load transactions oldest-first
     tx_models: List[Transaction] = []
     with SessionLocal() as session:
-        rows = (
-            session.query(TransactionRow)
-            .order_by(TransactionRow.timestamp.asc(), TransactionRow.id.asc())
+        rows = session.query(TransactionRow)\
+            .order_by(TransactionRow.timestamp.asc(), TransactionRow.id.asc())\
             .all()
-        )
         for r in rows:
-            tx_models.append(
-                Transaction(
-                    timestamp=r.timestamp,
-                    type=r.type,
-                    base_asset=r.base_asset,
-                    base_amount=Decimal(str(r.base_amount)),
-                    quote_asset=r.quote_asset,
-                    quote_amount=(
-                        Decimal(str(r.quote_amount)) if r.quote_amount is not None else None
-                    ),
-                    fee_asset=r.fee_asset,
-                    fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
-                    exchange=r.exchange,
-                    memo=r.memo,
-                    fair_value=(
-                        Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None
-                    ),
-                )
-            )
+            tx_models.append(Transaction(
+                timestamp=r.timestamp,
+                type=r.type,
+                base_asset=r.base_asset,
+                base_amount=Decimal(str(r.base_amount)),
+                quote_asset=r.quote_asset,
+                quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
+                fee_asset=r.fee_asset,
+                fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
+                exchange=r.exchange,
+                memo=r.memo,
+                fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
+            ))
 
     _tx_inputs_view = [
         {
@@ -1038,31 +899,25 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
     lot_method = "FIFO"
 
     from .fx_utils import get_or_create_current_fx_batch_id
-
     fx_set_id = get_or_create_current_fx_batch_id()
 
-    params = {"rounding": "bankers", "tz_policy": "UTC", "fee_policy": "quote_fee_reduces_proceeds"}
+    params = {
+        "rounding": "bankers",
+        "tz_policy": "UTC",
+        "fee_policy": "quote_fee_reduces_proceeds"
+    }
 
     with engine.begin() as conn:
         run_id_db = conn.execute(
-            text(
-                """
+            text("""
             INSERT INTO calc_runs (started_at, jurisdiction, rule_version, lot_method, fx_set_id, params_json)
             VALUES (:sa, :j, :rv, :lm, :fx, :pj)
-            """
-            ),
-            dict(
-                sa=started_at,
-                j=jurisdiction,
-                rv=rule_version,
-                lm=lot_method,
-                fx=fx_set_id,
-                pj=json.dumps(params, default=_json_default),
-            ),
+            """),
+            dict(sa=started_at, j=jurisdiction, rv=rule_version, lm=lot_method, fx=fx_set_id, pj=json.dumps(params, default=_json_default))
         ).lastrowid
 
-    int_run_id = run_id_db  # internal integer PK for DB relations
-    run_id_str = run_id  # <-- the UUID string generated at the top of the handler
+    int_run_id = run_id_db            # internal integer PK for DB relations
+    run_id_str = run_id               # <-- the UUID string generated at the top of the handler
 
     # Compute FIFO
     events, summary, warnings = compute_fifo(tx_models)
@@ -1083,7 +938,9 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
         "created_at": created_at,
         "inputs_hash": inputs_hash,
         "outputs_hash": outputs_hash,
-        "manifest": {"params": {"lot_method": "FIFO"}},
+        "manifest": {
+            "params": {"lot_method": "FIFO"}
+        },
         "events": events_payload,
     }
 
@@ -1104,17 +961,13 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
                 ev_date = datetime.fromisoformat(ev.timestamp).date()
                 usd_per_eur = get_rate_for_date(session, ev_date)
                 if usd_per_eur is None:
-                    eur_notes.append(
-                        f"No EURUSD rate for {ev_date}; skipping conversion for event at {ev.timestamp}."
-                    )
+                    eur_notes.append(f"No EURUSD rate for {ev_date}; skipping conversion for event at {ev.timestamp}.")
                     continue
                 eur_totals["proceeds"] += usd_to_eur(ev.proceeds, usd_per_eur)
                 eur_totals["cost_basis"] += usd_to_eur(ev.cost_basis, usd_per_eur)
                 eur_totals["gain"] += usd_to_eur(ev.gain, usd_per_eur)
             else:
-                eur_notes.append(
-                    f"Unsupported quote asset {q} for event at {ev.timestamp}; no EUR conversion."
-                )
+                eur_notes.append(f"Unsupported quote asset {q} for event at {ev.timestamp}; no EUR conversion.")
 
     eur_summary = {
         "totals_eur": {
@@ -1122,20 +975,18 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
             "cost_basis": dec_to_str(eur_totals["cost_basis"]),
             "gain": dec_to_str(eur_totals["gain"]),
         },
-        "notes": eur_notes[:10],
+        "notes": eur_notes[:10]
     }
 
     # Persist realized events for this run
     with engine.begin() as conn:
         for ev in events:
             conn.execute(
-                text(
-                    """
+                text("""
                 INSERT INTO realized_events
                 (run_id, tx_id, timestamp, asset, qty_sold, proceeds, cost_basis, gain, quote_asset, fee_applied, matches_json)
                 VALUES (:rid, :tx, :ts, :asset, :qty, :p, :cb, :g, :qa, :fee, :mj)
-                """
-                ),
+                """),
                 dict(
                     rid=int_run_id,
                     tx=None,  # if you later track tx_id → set it here
@@ -1147,28 +998,20 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
                     g=str(ev.gain),
                     qa=ev.quote_asset,
                     fee=str(ev.fee_applied),
-                    mj=json.dumps(
-                        [
-                            {
-                                "from_qty": str(m.from_qty),
-                                "lot_cost_per_unit": str(m.lot_cost_per_unit),
-                                "lot_cost_total": str(m.lot_cost_total),
-                            }
-                            for m in ev.matches
-                        ],
-                        default=_json_default,
-                    ),
-                ),
+                    mj=json.dumps([
+                        {"from_qty": str(m.from_qty), "lot_cost_per_unit": str(m.lot_cost_per_unit), "lot_cost_total": str(m.lot_cost_total)}
+                        for m in ev.matches
+                    ], default=_json_default)
+                )
             )
         finished_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
         conn.execute(
             text("UPDATE calc_runs SET finished_at=:fa WHERE id=:rid"),
-            dict(fa=finished_at, rid=int_run_id),
+            dict(fa=finished_at, rid=int_run_id)
         )
 
     # --- NEW: build manifest + compute digests + persist in run_digests
     from .audit_digest import build_run_manifest, compute_digests
-
     manifest = build_run_manifest(int_run_id)  # run_id is a UUID string
     digests = compute_digests(manifest)
 
@@ -1177,8 +1020,7 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
     # IMPORTANT: open a fresh transaction/connection; the prior `conn` is closed
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
             INSERT INTO run_digests (run_id, input_hash, output_hash, manifest_hash, manifest_json, created_at)
             VALUES (:rid, :ih, :oh, :mh, :mj, :ts)
             ON CONFLICT(run_id) DO UPDATE SET
@@ -1187,8 +1029,7 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
                 manifest_hash=excluded.manifest_hash,
                 manifest_json=excluded.manifest_json,
                 created_at=excluded.created_at
-            """
-            ),
+            """),
             dict(
                 rid=int_run_id,
                 ih=digests["input_hash"],
@@ -1218,12 +1059,10 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
     # Persist in lightweight calc_audit table for quick lookup
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO calc_audit (run_id, actor, action, meta_json, created_at)
                 VALUES (:rid, :actor, :action, :meta, :ts)
-            """
-            ),
+            """),
             dict(
                 rid=int_run_id,
                 actor="local-user",
@@ -1241,143 +1080,6 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
         "warnings": warnings,
     }
 
-
-@app.post("/calculate/v2", response_model=CalculateV2Response, tags=["calc"])
-def calculate_v2(
-    req: CalculateV2Request = Body(...),
-    request: Request = None,
-    db: Session = Depends(get_db),
-):
-    """
-    Clean calculation endpoint:
-      1) creates calc_runs row
-      2) runs engine via calc_runner.run_calculation
-      3) persists realized events (done inside runner), finishes run
-      4) writes audit and digests
-      5) returns RunSummary as dict
-    """
-    # Ensure tables exist (idempotent, cheap)
-    Base.metadata.create_all(bind=db.get_bind())
-
-    # Resolve / create FX batch id once for this run
-    try:
-        fx_batch_id = get_or_create_current_fx_batch_id()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"FX setup failed: {e}")
-
-    # Build calc config from request
-    cfg = CalcConfig(
-        jurisdiction=req.jurisdiction,
-        rule_version=req.rule_version,
-        lot_method=req.lot_method,
-        fx_source=req.fx_source,
-        holding_exemption_days=req.holding_exemption_days,
-        it_threshold_eur=(
-            None if req.it_threshold_eur is None else req.it_threshold_eur
-        ),  # CalcConfig takes Decimal or None
-        round_dp=req.round_dp,
-    )
-
-    # Create calc_runs record
-    run = CalcRun(
-        started_at=_now_iso(),
-        jurisdiction=cfg.jurisdiction,
-        rule_version=cfg.rule_version,
-        lot_method=cfg.lot_method,
-        fx_set_id=fx_batch_id,
-        params_json=_safe_json_dumps(cfg.model_dump()),
-        finished_at=None,
-    )
-    db.add(run)
-    db.commit()
-    db.refresh(run)
-
-    # Optional: quick audit helper
-    def _audit(action: str, details: dict | None = None):
-        try:
-            db.add(
-                AuditLog(
-                    actor="local-user",
-                    action=action,
-                    target_type="calc_runs",
-                    target_id=run.id,
-                    details_json=_safe_json_dumps(details) if details else None,
-                    ip=(request.client.host if request and request.client else "n/a"),
-                    ts=_now_iso(),
-                )
-            )
-            db.commit()
-        except Exception:
-            db.rollback()  # don't fail the run for audit-only issues
-
-    _audit("calc:start", {"fx_batch_id": fx_batch_id})
-
-    try:
-        # Run the actual calculation
-        summary = run_calculation(db, run, cfg)  # returns RunSummary (pydantic)
-        # Mark run finished
-        run.finished_at = _now_iso()
-        db.add(run)
-        db.commit()
-
-        # Compute optional digests (input/output/manifest)
-        # NOTE: You can replace these with your existing "build_run_manifest" if desired.
-        summary_dict = summary.model_dump()
-        output_hash = _sha256_str(_safe_json_dumps(summary_dict))
-
-        # Very simple input hash placeholder: hash config + fx batch id
-        input_hash = _sha256_str(
-            _safe_json_dumps({"cfg": cfg.model_dump(), "fx_batch_id": fx_batch_id})
-        )
-
-        manifest_dict = {
-            "run_id": run.id,
-            "jurisdiction": cfg.jurisdiction,
-            "rule_version": cfg.rule_version,
-            "fx_batch_id": fx_batch_id,
-            "created_at": run.started_at,
-            "finished_at": run.finished_at,
-        }
-        manifest_hash = _sha256_str(_safe_json_dumps(manifest_dict))
-
-        # Persist digests (idempotent for the run)
-        try:
-            db.add(
-                RunDigest(
-                    run_id=run.id,
-                    input_hash=input_hash,
-                    output_hash=output_hash,
-                    manifest_hash=manifest_hash,
-                    manifest_json=_safe_json_dumps(manifest_dict),
-                    created_at=_now_iso(),
-                )
-            )
-            db.commit()
-        except Exception:
-            db.rollback()  # safe to ignore if duplicate unique constraint etc.
-
-        _audit("calc:finish", {"output_hash": output_hash})
-
-        return CalculateV2Response(
-            run_id=run.id,
-            summary=summary_dict,
-            digests={
-                "input_hash": input_hash,
-                "output_hash": output_hash,
-                "manifest_hash": manifest_hash,
-            },
-        )
-
-    except HTTPException:
-        # bubble FastAPI errors
-        _audit("calc:error", {"detail": "HTTPException"})
-        raise
-    except Exception as e:
-        db.rollback()
-        _audit("calc:error", {"detail": str(e)})
-        raise HTTPException(status_code=500, detail=f"Calculation failed: {e}")
-
-
 @app.get("/report/summary")
 def report_summary(
     year: int,
@@ -1386,33 +1088,25 @@ def report_summary(
 ):
     # 1) Load transactions from DB (oldest-first) and rebuild models
     with SessionLocal() as session:
-        rows = (
-            session.query(TransactionRow)
-            .order_by(TransactionRow.timestamp.asc(), TransactionRow.id.asc())
-            .all()
-        )
+        rows = session.query(TransactionRow).order_by(
+            TransactionRow.timestamp.asc(), TransactionRow.id.asc()
+        ).all()
 
         tx_models: list[Transaction] = []
         for r in rows:
-            tx_models.append(
-                Transaction(
-                    timestamp=r.timestamp,  # keep as datetime; compute_fifo handles it
-                    type=r.type,
-                    base_asset=r.base_asset,
-                    base_amount=Decimal(str(r.base_amount)),
-                    quote_asset=r.quote_asset,
-                    quote_amount=(
-                        Decimal(str(r.quote_amount)) if r.quote_amount is not None else None
-                    ),
-                    fee_asset=r.fee_asset,
-                    fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
-                    exchange=r.exchange,
-                    memo=r.memo,
-                    fair_value=(
-                        Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None
-                    ),
-                )
-            )
+            tx_models.append(Transaction(
+                timestamp=r.timestamp,  # keep as datetime; compute_fifo handles it
+                type=r.type,
+                base_asset=r.base_asset,
+                base_amount=Decimal(str(r.base_amount)),
+                quote_asset=r.quote_asset,
+                quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
+                fee_asset=r.fee_asset,
+                fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
+                exchange=r.exchange,
+                memo=r.memo,
+                fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
+            ))
 
         # 2) Compute FIFO (UNPACK the tuple!)
         all_events, _summary_unused, _warnings_unused = compute_fifo(tx_models)
@@ -1440,10 +1134,10 @@ def report_summary(
                 "summary_by_asset": {},
                 "eur_summary": {
                     "totals_eur": {"proceeds": "0", "cost_basis": "0", "gain": "0"},
-                    "notes": [f"No realized events found for {year} with current filters."],
+                    "notes": [f"No realized events found for {year} with current filters."]
                 },
                 "total_warnings": 0,
-                "warnings": [],
+                "warnings": []
             }
 
         # 5) Aggregate by quote asset
@@ -1454,9 +1148,7 @@ def report_summary(
             agg["proceeds"] += e.proceeds
             agg["cost_basis"] += e.cost_basis
             agg["gain"] += e.gain
-        summary_by_quote = {
-            q: {k: _as_str(v) for k, v in sums.items()} for q, sums in by_quote.items()
-        }
+        summary_by_quote = {q: {k: _as_str(v) for k, v in sums.items()} for q, sums in by_quote.items()}
 
         # 6) Aggregate by base asset
         by_base: dict[str, dict[str, Decimal]] = {}
@@ -1466,9 +1158,7 @@ def report_summary(
             agg["proceeds"] += e.proceeds
             agg["cost_basis"] += e.cost_basis
             agg["gain"] += e.gain
-        summary_by_asset = {
-            a: {k: _as_str(v) for k, v in sums.items()} for a, sums in by_base.items()
-        }
+        summary_by_asset = {a: {k: _as_str(v) for k, v in sums.items()} for a, sums in by_base.items()}
 
         # 7) Aggregate by month (YYYY-MM)
         per_month: dict[str, dict[str, Decimal]] = {}
@@ -1477,9 +1167,7 @@ def report_summary(
             if not dt:
                 continue
             mkey = f"{dt.year:04d}-{dt.month:02d}"
-            agg = per_month.setdefault(
-                mkey, {"proceeds": _d0(), "cost_basis": _d0(), "gain": _d0()}
-            )
+            agg = per_month.setdefault(mkey, {"proceeds": _d0(), "cost_basis": _d0(), "gain": _d0()})
             agg["proceeds"] += e.proceeds
             agg["cost_basis"] += e.cost_basis
             agg["gain"] += e.gain
@@ -1498,18 +1186,16 @@ def report_summary(
             q = (e.quote_asset or "").upper()
             if q == "EUR":
                 proceeds_eur += e.proceeds
-                basis_eur += e.cost_basis
-                gain_eur += e.gain
+                basis_eur    += e.cost_basis
+                gain_eur     += e.gain
             elif q in ("USD", "USDT"):
                 rate = get_rate_for_date(session, dt.date())  # <-- pass session here
                 if rate and rate != 0:
-                    proceeds_eur += e.proceeds / rate
-                    basis_eur += e.cost_basis / rate
-                    gain_eur += e.gain / rate
+                    proceeds_eur += (e.proceeds / rate)
+                    basis_eur    += (e.cost_basis / rate)
+                    gain_eur     += (e.gain / rate)
                 else:
-                    notes.append(
-                        f"No ECB USD-per-EUR rate for {dt.date()}; skipped conversion for an event."
-                    )
+                    notes.append(f"No ECB USD-per-EUR rate for {dt.date()}; skipped conversion for an event.")
             else:
                 notes.append(f"EUR conversion for quote '{q}' not implemented; skipped an event.")
 
@@ -1532,7 +1218,6 @@ def report_summary(
         "total_warnings": len(notes),
         "warnings": notes[:10],
     }
-
 
 @app.post("/fx/upload")
 async def fx_upload(file: UploadFile = File(...)) -> dict:
@@ -1565,7 +1250,7 @@ async def fx_upload(file: UploadFile = File(...)) -> dict:
         # insert batch
         bid = session.execute(
             text("INSERT INTO fx_batches (imported_at, source, rates_hash) VALUES (:t,:s,:h)"),
-            dict(t=now_iso, s="ECB CSV", h=None),
+            dict(t=now_iso, s="ECB CSV", h=None)
         ).lastrowid
 
         for row in reader:
@@ -1594,11 +1279,10 @@ async def fx_upload(file: UploadFile = File(...)) -> dict:
         # --- NEW: compute deterministic hash of this batch's rates and store in fx_batches.rates_hash
         rows_for_hash = session.execute(
             text("SELECT date, usd_per_eur FROM fx_rates WHERE batch_id = :b ORDER BY date"),
-            dict(b=bid),
+            dict(b=bid)
         ).fetchall()
 
         import hashlib
-
         h = hashlib.sha256()
         for r in rows_for_hash:
             # Use a fixed line format: YYYY-MM-DD|<rate>\n
@@ -1608,12 +1292,11 @@ async def fx_upload(file: UploadFile = File(...)) -> dict:
 
         session.execute(
             text("UPDATE fx_batches SET rates_hash = :rh WHERE id = :bid"),
-            dict(rh=rates_hash, bid=bid),
+            dict(rh=rates_hash, bid=bid)
         )
         session.commit()
 
     return {"inserted": inserted, "updated": updated, "errors": errors, "batch_id": int(bid)}
-
 
 @app.post("/maintenance/prune_fx")
 def prune_fx(keep_years: int = Query(5, ge=1, le=20)) -> Dict[str, Any]:
@@ -1636,7 +1319,6 @@ def prune_fx(keep_years: int = Query(5, ge=1, le=20)) -> Dict[str, Any]:
 
     return {"status": "ok", "kept_from": str(cutoff), "deleted_rows": deleted}
 
-
 @app.post("/maintenance/vacuum")
 def vacuum_sqlite() -> Dict[str, Any]:
     """
@@ -1645,7 +1327,6 @@ def vacuum_sqlite() -> Dict[str, Any]:
     with engine.connect() as conn:
         conn.execute(text("VACUUM"))
     return {"status": "ok"}
-
 
 @app.get("/export/db", summary="Download current database backup")
 def export_database():
@@ -1659,7 +1340,6 @@ def export_database():
 
     # Optional: create a timestamped copy before serving
     import shutil, datetime
-
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     backup_name = f"data_backup_{timestamp}.db"
     backup_path = os.path.join("backups", backup_name)
@@ -1669,16 +1349,16 @@ def export_database():
     shutil.copy2(file_path, backup_path)
 
     # Return the original file as a download
-    return FileResponse(path=file_path, filename=backup_name, media_type="application/x-sqlite3")
+    return FileResponse(
+        path=file_path,
+        filename=backup_name,
+        media_type="application/x-sqlite3"
+    )
 
-
-@app.post(
-    "/import/db",
-    summary="Restore the SQLite database from an uploaded .db file (with safety checks)",
-)
+@app.post("/import/db",summary="Restore the SQLite database from an uploaded .db file (with safety checks)")
 async def import_database(
     file: UploadFile = File(...),
-    confirm: str = Query("", description="Must be 'I_UNDERSTAND' to proceed"),
+    confirm: str = Query("", description="Must be 'I_UNDERSTAND' to proceed")
 ):
     """
     Restores the application's SQLite database from an uploaded file.
@@ -1692,7 +1372,7 @@ async def import_database(
     if confirm != "I_UNDERSTAND":
         raise HTTPException(
             status_code=400,
-            detail="Confirmation missing. Add ?confirm=I_UNDERSTAND to proceed (this will overwrite the current DB).",
+            detail="Confirmation missing. Add ?confirm=I_UNDERSTAND to proceed (this will overwrite the current DB)."
         )
 
     # 0) Ensure backups dir exists
@@ -1712,9 +1392,7 @@ async def import_database(
 
         # 2) Validate it's really a SQLite DB
         if not _is_sqlite_file(tmp_upload):
-            raise HTTPException(
-                status_code=400, detail="Uploaded file is not a valid SQLite database."
-            )
+            raise HTTPException(status_code=400, detail="Uploaded file is not a valid SQLite database.")
 
         # 3) Optional pre-check integrity of the uploaded DB
         if not _integrity_ok(tmp_upload):
@@ -1744,20 +1422,15 @@ async def import_database(
             # Roll back if broken
             if backup_path and os.path.exists(backup_path):
                 shutil.copy2(backup_path, src_db)
-            raise HTTPException(
-                status_code=500,
-                detail="Restored DB failed integrity_check; original DB has been restored.",
-            )
+            raise HTTPException(status_code=500, detail="Restored DB failed integrity_check; original DB has been restored.")
 
         # 8) Success
-        return JSONResponse(
-            {
-                "status": "ok",
-                "message": "Database restored successfully.",
-                "backup": (backup_path or "none"),
-                "restored_from": file.filename,
-            }
-        )
+        return JSONResponse({
+            "status": "ok",
+            "message": "Database restored successfully.",
+            "backup": (backup_path or "none"),
+            "restored_from": file.filename
+        })
 
     finally:
         # Cleanup temp directory
@@ -1765,7 +1438,6 @@ async def import_database(
             shutil.rmtree(tmp_dir, ignore_errors=True)
         except Exception:
             pass
-
 
 @app.get("/export/calculate.csv", summary="Download realized events (FIFO) as CSV")
 def export_calculate_csv() -> Response:
@@ -1775,60 +1447,48 @@ def export_calculate_csv() -> Response:
 
     tx_models: list[Transaction] = []
     for r in rows:
-        tx_models.append(
-            Transaction(
-                timestamp=r.timestamp,
-                type=r.type,
-                base_asset=r.base_asset,
-                base_amount=Decimal(str(r.base_amount)),
-                quote_asset=r.quote_asset,
-                quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
-                fee_asset=r.fee_asset,
-                fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
-                exchange=r.exchange,
-                memo=r.memo,
-                fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
-            )
-        )
+        tx_models.append(Transaction(
+            timestamp=r.timestamp,
+            type=r.type,
+            base_asset=r.base_asset,
+            base_amount=Decimal(str(r.base_amount)),
+            quote_asset=r.quote_asset,
+            quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
+            fee_asset=r.fee_asset,
+            fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
+            exchange=r.exchange,
+            memo=r.memo,
+            fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
+        ))
 
     events, summary, warnings = compute_fifo(tx_models)
 
     # Build CSV in-memory
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(
-        [
-            "timestamp",
-            "asset",
-            "qty_sold",
-            "proceeds",
-            "cost_basis",
-            "gain",
-            "quote_asset",
-            "fee_applied",
-            "matches_count",
-        ]
-    )
+    writer.writerow([
+        "timestamp","asset","qty_sold","proceeds","cost_basis","gain",
+        "quote_asset","fee_applied","matches_count"
+    ])
 
     for ev in events:
-        writer.writerow(
-            [
-                ev.timestamp,
-                ev.asset,
-                dec_to_str(ev.qty_sold),
-                dec_to_str(ev.proceeds),
-                dec_to_str(ev.cost_basis),
-                dec_to_str(ev.gain),
-                ev.quote_asset or "",
-                dec_to_str(ev.fee_applied),
-                len(ev.matches or []),
-            ]
-        )
+        writer.writerow([
+            ev.timestamp,
+            ev.asset,
+            dec_to_str(ev.qty_sold),
+            dec_to_str(ev.proceeds),
+            dec_to_str(ev.cost_basis),
+            dec_to_str(ev.gain),
+            ev.quote_asset or "",
+            dec_to_str(ev.fee_applied),
+            len(ev.matches or []),
+        ])
 
     csv_bytes = buf.getvalue().encode("utf-8")
-    headers = {"Content-Disposition": 'attachment; filename="calculate_events.csv"'}
+    headers = {
+        "Content-Disposition": 'attachment; filename="calculate_events.csv"'
+    }
     return Response(content=csv_bytes, media_type="text/csv; charset=utf-8", headers=headers)
-
 
 @app.get("/export/summary.csv", summary="Download summary (optionally by year) as CSV")
 def export_summary_csv(year: int | None = None) -> Response:
@@ -1840,21 +1500,19 @@ def export_summary_csv(year: int | None = None) -> Response:
     # Rebuild models
     tx_models: list[Transaction] = []
     for r in rows:
-        tx_models.append(
-            Transaction(
-                timestamp=r.timestamp,
-                type=r.type,
-                base_asset=r.base_asset,
-                base_amount=Decimal(str(r.base_amount)),
-                quote_asset=r.quote_asset,
-                quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
-                fee_asset=r.fee_asset,
-                fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
-                exchange=r.exchange,
-                memo=r.memo,
-                fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
-            )
-        )
+        tx_models.append(Transaction(
+            timestamp=r.timestamp,
+            type=r.type,
+            base_asset=r.base_asset,
+            base_amount=Decimal(str(r.base_amount)),
+            quote_asset=r.quote_asset,
+            quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
+            fee_asset=r.fee_asset,
+            fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
+            exchange=r.exchange,
+            memo=r.memo,
+            fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
+        ))
 
     # Compute FIFO once
     events, summary, warnings = compute_fifo(tx_models)
@@ -1867,9 +1525,7 @@ def export_summary_csv(year: int | None = None) -> Response:
     by_quote: dict[str, dict[str, Decimal]] = {}
     for ev in events:
         q = (ev.quote_asset or "").upper()
-        agg = by_quote.setdefault(
-            q, {"proceeds": Decimal("0"), "cost_basis": Decimal("0"), "gain": Decimal("0")}
-        )
+        agg = by_quote.setdefault(q, {"proceeds": Decimal("0"), "cost_basis": Decimal("0"), "gain": Decimal("0")})
         agg["proceeds"] += ev.proceeds
         agg["cost_basis"] += ev.cost_basis
         agg["gain"] += ev.gain
@@ -1895,43 +1551,40 @@ def export_summary_csv(year: int | None = None) -> Response:
     # Build CSV
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(["section", "key", "proceeds", "cost_basis", "gain"])
+    writer.writerow(["section","key","proceeds","cost_basis","gain"])
 
     # By quote asset
     for q, agg in by_quote.items():
-        writer.writerow(
-            [
-                "by_quote_asset",
-                q or "(none)",
-                dec_to_str(agg["proceeds"]),
-                dec_to_str(agg["cost_basis"]),
-                dec_to_str(agg["gain"]),
-            ]
-        )
+        writer.writerow([
+            "by_quote_asset",
+            q or "(none)",
+            dec_to_str(agg["proceeds"]),
+            dec_to_str(agg["cost_basis"]),
+            dec_to_str(agg["gain"]),
+        ])
 
     # Totals (all quotes combined)
     tot_pro = sum((v["proceeds"] for v in by_quote.values()), Decimal("0"))
-    tot_cb = sum((v["cost_basis"] for v in by_quote.values()), Decimal("0"))
-    tot_g = sum((v["gain"] for v in by_quote.values()), Decimal("0"))
+    tot_cb  = sum((v["cost_basis"] for v in by_quote.values()), Decimal("0"))
+    tot_g   = sum((v["gain"] for v in by_quote.values()), Decimal("0"))
 
-    writer.writerow(["totals", "ALL", dec_to_str(tot_pro), dec_to_str(tot_cb), dec_to_str(tot_g)])
+    writer.writerow(["totals","ALL",
+        dec_to_str(tot_pro),
+        dec_to_str(tot_cb),
+        dec_to_str(tot_g)
+    ])
 
     # EUR totals (converted)
-    writer.writerow(
-        [
-            "totals_eur",
-            "EUR",
-            dec_to_str(eur_totals["proceeds"]),
-            dec_to_str(eur_totals["cost_basis"]),
-            dec_to_str(eur_totals["gain"]),
-        ]
-    )
+    writer.writerow(["totals_eur","EUR",
+        dec_to_str(eur_totals["proceeds"]),
+        dec_to_str(eur_totals["cost_basis"]),
+        dec_to_str(eur_totals["gain"])
+    ])
 
     csv_bytes = buf.getvalue().encode("utf-8")
     filename = f"summary{('_' + str(year)) if year else ''}.csv"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return Response(content=csv_bytes, media_type="text/csv; charset=utf-8", headers=headers)
-
 
 @app.get("/export/summary.pdf", summary="Download PDF summary (optionally filtered by year)")
 def export_summary_pdf(year: int | None = None) -> StreamingResponse:
@@ -1941,21 +1594,19 @@ def export_summary_pdf(year: int | None = None) -> StreamingResponse:
 
     tx_models: list[Transaction] = []
     for r in rows:
-        tx_models.append(
-            Transaction(
-                timestamp=r.timestamp,
-                type=r.type,
-                base_asset=r.base_asset,
-                base_amount=Decimal(str(r.base_amount)),
-                quote_asset=r.quote_asset,
-                quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
-                fee_asset=r.fee_asset,
-                fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
-                exchange=r.exchange,
-                memo=r.memo,
-                fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
-            )
-        )
+        tx_models.append(Transaction(
+            timestamp=r.timestamp,
+            type=r.type,
+            base_asset=r.base_asset,
+            base_amount=Decimal(str(r.base_amount)),
+            quote_asset=r.quote_asset,
+            quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
+            fee_asset=r.fee_asset,
+            fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
+            exchange=r.exchange,
+            memo=r.memo,
+            fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
+        ))
 
     # 2) Compute FIFO once
     events, summary, warnings = compute_fifo(tx_models)
@@ -1968,9 +1619,7 @@ def export_summary_pdf(year: int | None = None) -> StreamingResponse:
     by_quote: dict[str, dict[str, Decimal]] = {}
     for ev in events:
         q = (ev.quote_asset or "").upper()
-        agg = by_quote.setdefault(
-            q, {"proceeds": Decimal("0"), "cost_basis": Decimal("0"), "gain": Decimal("0")}
-        )
+        agg = by_quote.setdefault(q, {"proceeds": Decimal("0"), "cost_basis": Decimal("0"), "gain": Decimal("0")})
         agg["proceeds"] += ev.proceeds
         agg["cost_basis"] += ev.cost_basis
         agg["gain"] += ev.gain
@@ -2000,25 +1649,22 @@ def export_summary_pdf(year: int | None = None) -> StreamingResponse:
                 eur_totals["gain"] += usd_to_eur(ev.gain, usd_per_eur)
 
     # 6) Build the PDF bytes
-    pdf_bytes = build_summary_pdf(
-        {
-            "title": "Crypto Tax – FIFO Summary",
-            "year": year,
-            "by_quote": by_quote,
-            "totals": totals,
-            "eur_totals": eur_totals,
-            "top_events": events,
-        }
-    )
+    pdf_bytes = build_summary_pdf({
+        "title": "Crypto Tax – FIFO Summary",
+        "year": year,
+        "by_quote": by_quote,
+        "totals": totals,
+        "eur_totals": eur_totals,
+        "top_events": events,
+    })
 
     # 7) Stream it to the client
     filename = f"summary{('_' + str(year)) if year else ''}.pdf"
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
-
 
 @app.get("/export/calculate.pdf", summary="Download realized events (FIFO) as a PDF table")
 def export_calculate_pdf() -> StreamingResponse:
@@ -2028,21 +1674,19 @@ def export_calculate_pdf() -> StreamingResponse:
 
     tx_models: list[Transaction] = []
     for r in rows:
-        tx_models.append(
-            Transaction(
-                timestamp=r.timestamp,
-                type=r.type,
-                base_asset=r.base_asset,
-                base_amount=Decimal(str(r.base_amount)),
-                quote_asset=r.quote_asset,
-                quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
-                fee_asset=r.fee_asset,
-                fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
-                exchange=r.exchange,
-                memo=r.memo,
-                fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
-            )
-        )
+        tx_models.append(Transaction(
+            timestamp=r.timestamp,
+            type=r.type,
+            base_asset=r.base_asset,
+            base_amount=Decimal(str(r.base_amount)),
+            quote_asset=r.quote_asset,
+            quote_amount=(Decimal(str(r.quote_amount)) if r.quote_amount is not None else None),
+            fee_asset=r.fee_asset,
+            fee_amount=(Decimal(str(r.fee_amount)) if r.fee_amount is not None else None),
+            exchange=r.exchange,
+            memo=r.memo,
+            fair_value=(Decimal(str(r.fair_value)) if getattr(r, "fair_value", None) else None),
+        ))
 
     events, summary, warnings = compute_fifo(tx_models)
 
@@ -2056,18 +1700,18 @@ def export_calculate_pdf() -> StreamingResponse:
         by_quote=by_quote_dummy,
         totals=totals_dummy,
         eur_totals=eur_dummy,
-        top_events=events,
+        top_events=events
     )
 
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="calculate_events.pdf"'},
+        headers={"Content-Disposition": 'attachment; filename="calculate_events.pdf"'}
     )
+
 
     # If we ever want deeper checks later (DB ping, FX cache), add them here.
     return {"status": "ok"}
-
 
 @app.get("/export/events_csv")
 def export_events_csv(run_id: str = "latest"):
@@ -2087,47 +1731,31 @@ def export_events_csv(run_id: str = "latest"):
             except:
                 raise HTTPException(status_code=400, detail="Invalid run_id")
 
-        rows = conn.execute(
-            text(
-                """
+        rows = conn.execute(text("""
             SELECT timestamp, asset, qty_sold, proceeds, cost_basis, gain, quote_asset, fee_applied, matches_json
             FROM realized_events
             WHERE run_id = :rid
             ORDER BY id
-        """
-            ),
-            dict(rid=run_id_val),
-        ).fetchall()
+        """), dict(rid=run_id_val)).fetchall()
 
     if not rows:
         raise HTTPException(status_code=400, detail=f"No realized events for run_id={run_id_val}")
 
     output = io.StringIO()
     w = _csv.writer(output)
-    w.writerow(
-        [
-            "timestamp",
-            "asset",
-            "qty_sold",
-            "proceeds",
-            "cost_basis",
-            "gain",
-            "quote_asset",
-            "fee_applied",
-            "matches_json",
-        ]
-    )
+    w.writerow(["timestamp","asset","qty_sold","proceeds","cost_basis","gain","quote_asset","fee_applied","matches_json"])
     for r in rows:
-        w.writerow([r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]])
+        w.writerow([
+            r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]
+        ])
     output.seek(0)
 
     filename = f"realized_events_run_{run_id_val}.csv"
     return StreamingResponse(
         iter([output.read()]),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
-
 
 @app.get("/audit/run/{run_id}")
 def audit_get_run(run_id: int):
@@ -2135,22 +1763,15 @@ def audit_get_run(run_id: int):
     Return the stored manifest + hashes for a run (and recompute to show parity).
     """
     from .audit_digest import build_run_manifest, compute_digests
-
     manifest = build_run_manifest(run_id)
     live = compute_digests(manifest)
 
     with engine.begin() as conn:
-        row = (
-            conn.execute(
-                text(
-                    "SELECT input_hash, output_hash, manifest_hash, created_at FROM run_digests WHERE run_id = :rid"
-                ),
-                dict(rid=int(run_id)),
-            )
-            .mappings()
-            .first()
-        )
-
+        row = conn.execute(
+            text("SELECT input_hash, output_hash, manifest_hash, created_at FROM run_digests WHERE run_id = :rid"),
+            dict(rid=int(run_id))
+        ).mappings().first()
+    
     # Compare ONLY the three hashes (ignore created_at to avoid false negatives)
     stored = dict(row) if row else None
 
@@ -2161,7 +1782,7 @@ def audit_get_run(run_id: int):
             and stored.get("output_hash") == live.get("output_hash")
             and stored.get("manifest_hash") == live.get("manifest_hash")
         )
-
+    
     return {
         "run_id": run_id,
         "stored": stored,
@@ -2170,50 +1791,38 @@ def audit_get_run(run_id: int):
         "manifest": manifest,  # include for transparency (you can omit in prod if large)
     }
 
-
 @app.get("/audit/verify/{run_id}")
 def audit_verify_run(run_id: int):
     """
     Recompute digest and compare with stored digests. Returns boolean + details.
     """
     from .audit_digest import build_run_manifest, compute_digests
-
     manifest = build_run_manifest(run_id)
     live = compute_digests(manifest)
 
     with engine.begin() as conn:
         row = conn.execute(
-            text(
-                "SELECT input_hash, output_hash, manifest_hash FROM run_digests WHERE run_id = :rid"
-            ),
-            dict(rid=int(run_id)),
+            text("SELECT input_hash, output_hash, manifest_hash FROM run_digests WHERE run_id = :rid"),
+            dict(rid=int(run_id))
         ).fetchone()
 
     if not row:
-        return {
-            "run_id": run_id,
-            "verified": False,
-            "reason": "No stored digest for this run.",
-            "recomputed": live,
-        }
+        return {"run_id": run_id, "verified": False, "reason": "No stored digest for this run.", "recomputed": live}
 
     stored = {"input_hash": row[0], "output_hash": row[1], "manifest_hash": row[2]}
-    ok = stored == live
+    ok = (stored == live)
     return {"run_id": run_id, "verified": bool(ok), "stored": stored, "recomputed": live}
-
 
 @app.post("/admin/bundle", tags=["admin"])
 def create_support_bundle(
     request: Request,
     token: str | None = Query(default=None, description="Admin token (alternative to header)"),
-    x_admin_token: str | None = Header(default=None, convert_underscores=False),
+    x_admin_token: str | None = Header(default=None, convert_underscores=False)
 ):
     # 1) Is server configured with a token?
     if not BUNDLE_TOKEN:
         # 500 so you know the server isn’t configured; we don’t accept any token here
-        raise HTTPException(
-            status_code=500, detail="Admin token not configured on server (BUNDLE_TOKEN missing)."
-        )
+        raise HTTPException(status_code=500, detail="Admin token not configured on server (BUNDLE_TOKEN missing).")
 
     # 2) Accept either header or query ?token=...
     supplied = x_admin_token or token or ""
@@ -2231,22 +1840,20 @@ def create_support_bundle(
     cmd = [
         "powershell.exe",
         "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        script,
+        "-ExecutionPolicy", "Bypass",
+        "-File", script,
     ]
 
     try:
         proc = subprocess.run(
-            cmd,
-            cwd=os.path.dirname(script),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",  # decode PowerShell output as UTF-8
-            errors="ignore",  # skip invalid bytes safely
-            timeout=300,
-        )
+        cmd,
+        cwd=os.path.dirname(script),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",   # decode PowerShell output as UTF-8
+        errors="ignore",    # skip invalid bytes safely
+        timeout=300,
+    )
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=500, detail="Bundle creation timed out (300s)")
 
@@ -2294,9 +1901,7 @@ def create_support_bundle(
         )
 
     if isinstance(download, str) and download.lower() in ("1", "true", "yes"):
-        return FileResponse(
-            path=zip_path, filename=os.path.basename(zip_path), media_type="application/zip"
-        )
+        return FileResponse(path=zip_path, filename=os.path.basename(zip_path), media_type="application/zip")
 
     return {
         "status": "ok",
@@ -2306,7 +1911,6 @@ def create_support_bundle(
         "stderr": stderr,
         "return_code": proc.returncode,
     }
-
 
 @app.post("/admin/git-sync", tags=["admin"])
 def admin_git_sync(token: str = Query(..., description="Admin token")):
@@ -2320,12 +1924,10 @@ def admin_git_sync(token: str = Query(..., description="Admin token")):
             "powershell",
             "-NoProfile",
             "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(GIT_SCRIPT),
+            "-ExecutionPolicy", "Bypass",
+            "-File", str(GIT_SCRIPT),
         ],
-        cwd=str(PROJECT_ROOT),  # ensure we run in repo root
+        cwd=str(PROJECT_ROOT),        # ensure we run in repo root
         text=True,
         capture_output=True,
         encoding="utf-8",
@@ -2345,12 +1947,11 @@ def admin_git_sync(token: str = Query(..., description="Admin token")):
         "status": "ok" if proc.returncode == 0 else "error",
         "script": str(GIT_SCRIPT),
         "return_code": proc.returncode,
-        "stdout": proc.stdout,  # often empty—use log_tail for real info
+        "stdout": proc.stdout,     # often empty—use log_tail for real info
         "stderr": proc.stderr,
         "log_path": str(log_path) if log_path else None,
         "log_tail": log_tail,
     }
-
 
 @app.get("/history", response_class=JSONResponse, tags=["history"])
 def history_index():
@@ -2359,7 +1960,6 @@ def history_index():
     """
     return JSONResponse(_list_calc_runs_meta())
 
-
 @app.get("/history/{run_id}/download", summary="Download calculation run as ZIP", tags=["history"])
 def history_download(run_id: str):
     db_run_id = _resolve_db_run_id(run_id)
@@ -2367,18 +1967,15 @@ def history_download(run_id: str):
         raise HTTPException(status_code=404, detail=f"Run not found for id '{run_id}'")
 
     try:
-        manifest = build_run_manifest(db_run_id)
+        manifest = build_run_manifest(run_id)
     except ValueError as e:
         # e.g. "calc_runs id=<uuid> not found" => return a clean 404
         raise HTTPException(status_code=404, detail=str(e))
-
+    
     bio = io.BytesIO()
 
     with zipfile.ZipFile(bio, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
-            "manifest.json",
-            json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), default=str),
-        )
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), default=str))
     bio.seek(0)
 
     return StreamingResponse(
@@ -2387,12 +1984,10 @@ def history_download(run_id: str):
         headers={"Content-Disposition": f'attachment; filename="run_{run_id}.zip"'},
     )
 
-
 @app.get("/history/run/{run_id}/download", include_in_schema=False)
 def history_download_compat(run_id: str):
     db_run_id = _resolve_db_run_id(run_id)
     return history_download(run_id)
-
 
 @app.get("/history/runs", response_class=JSONResponse, tags=["history"])
 def history_list_runs():
@@ -2401,7 +1996,6 @@ def history_list_runs():
     """
     return JSONResponse({"items": _list_calc_runs_meta()})
 
-
 @app.get("/history/run/{run_id}", response_class=JSONResponse, tags=["history"])
 def history_get_run(run_id: str = PathParam(..., description="The run_id (UUID) stored on disk")):
     data = _load_calc_run(run_id)
@@ -2409,14 +2003,12 @@ def history_get_run(run_id: str = PathParam(..., description="The run_id (UUID) 
         raise HTTPException(status_code=404, detail="Run not found")
     return JSONResponse(data)
 
-
 @app.delete("/history/run/{run_id}", response_class=JSONResponse, tags=["history"])
 def history_delete_run(run_id: str = PathParam(...)):
     ok = _delete_calc_run(run_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Run not found")
     return JSONResponse({"status": "deleted", "run_id": run_id})
-
 
 @app.get("/history/run/{run_id}/events.csv")
 def history_events_csv(run_id: str):
@@ -2429,10 +2021,9 @@ def history_events_csv(run_id: str):
     # Fetch events directly from DB (adapt column names if needed)
     try:
         with engine.begin() as conn:
-            rows = (
-                conn.execute(
-                    text(
-                        """
+            rows = conn.execute(
+                text(
+                    """
                     SELECT
                         timestamp      AS timestamp,
                         asset          AS asset,
@@ -2446,12 +2037,9 @@ def history_events_csv(run_id: str):
                     WHERE run_id = :rid
                     ORDER BY timestamp ASC, id ASC
                     """
-                    ),
-                    {"rid": run_id},
-                )
-                .mappings()
-                .all()
-            )
+                ),
+                {"rid": run_id},
+            ).mappings().all()
     except Exception:
         # If table/columns are missing or any other error, return just the header
         return Response(header, media_type="text/csv")
@@ -2467,39 +2055,31 @@ def history_events_csv(run_id: str):
     buf.write(header)
     writer = csv.writer(buf, lineterminator="\n")
     for ev in rows:
-        writer.writerow(
-            [
-                ev.get("timestamp", ""),
-                ev.get("asset", ""),
-                ev.get("qty_sold", ""),
-                ev.get("proceeds", ""),
-                ev.get("cost_basis", ""),
-                ev.get("gain", ""),
-                ev.get("quote_asset", ""),
-                ev.get("fee_applied", ""),
-            ]
-        )
+        writer.writerow([
+            ev.get("timestamp", ""),
+            ev.get("asset", ""),
+            ev.get("qty_sold", ""),
+            ev.get("proceeds", ""),
+            ev.get("cost_basis", ""),
+            ev.get("gain", ""),
+            ev.get("quote_asset", ""),
+            ev.get("fee_applied", ""),
+        ])
     return Response(buf.getvalue(), media_type="text/csv")
 
 
 @app.get("/audit/history")
 def audit_history(limit: int = 50):
     with engine.begin() as conn:
-        rows = (
-            conn.execute(
-                text(
-                    """
+        rows = conn.execute(
+            text("""
                 SELECT id, created_at, actor, action, meta_json
                 FROM calc_audit
                 ORDER BY id DESC
                 LIMIT :lim
-            """
-                ),
-                {"lim": limit},
-            )
-            .mappings()
-            .all()
-        )
+            """),
+            {"lim": limit}
+        ).mappings().all()
 
     items = []
     for r in rows:
@@ -2510,3 +2090,4 @@ def audit_history(limit: int = 50):
         items.append(d)
 
     return items
+

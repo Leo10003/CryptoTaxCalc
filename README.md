@@ -95,7 +95,7 @@ On first run the app will create tables/indexes automatically.
 4) Run the API locally
 powershell
 Kopiraj kod
-python -m uvicorn --app-dir src cryptotaxcalc.app:app --reload --host 127.0.0.1 --port 8000
+uvicorn cryptotaxcalc.app:app --reload --host 127.0.0.1 --port 8000
 Open Swagger: http://127.0.0.1:8000/docs
 
 🔌 API Endpoints (quick guide)

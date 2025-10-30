@@ -165,9 +165,7 @@ def build_summary_pdf(summary_data: Optional[Dict[str, Any]] = None, **kwargs: A
                 if k not in seen:
                     seen.add(k)
                     keys_union.append(k)
-        header = [k for k in preferred if k in seen] + [
-            k for k in keys_union if k not in set(preferred)
-        ]
+        header = [k for k in preferred if k in seen] + [k for k in keys_union if k not in set(preferred)]
 
     # Select page size
     page_size = A4 if (not header or len(header) <= 8) else landscape(A4)
@@ -194,9 +192,7 @@ def build_summary_pdf(summary_data: Optional[Dict[str, Any]] = None, **kwargs: A
     if totals:
         story.append(Paragraph("Totals", styles["Heading2"]))
         data = [["Field", "Value"]] + [[k, str(v)] for k, v in totals.items()]
-        t = _make_wrapped_table(
-            data, styles, page_width_pts=doc.width + doc.leftMargin + doc.rightMargin
-        )
+        t = _make_wrapped_table(data, styles, page_width_pts=doc.width + doc.leftMargin + doc.rightMargin)
         story.append(t)
         story.append(Spacer(1, 10))
 
@@ -204,9 +200,7 @@ def build_summary_pdf(summary_data: Optional[Dict[str, Any]] = None, **kwargs: A
     if eur_totals:
         story.append(Paragraph("EUR Totals", styles["Heading2"]))
         data = [["Field", "Value"]] + [[k, str(v)] for k, v in eur_totals.items()]
-        t = _make_wrapped_table(
-            data, styles, page_width_pts=doc.width + doc.leftMargin + doc.rightMargin
-        )
+        t = _make_wrapped_table(data, styles, page_width_pts=doc.width + doc.leftMargin + doc.rightMargin)
         story.append(t)
         story.append(Spacer(1, 10))
 
@@ -216,9 +210,7 @@ def build_summary_pdf(summary_data: Optional[Dict[str, Any]] = None, **kwargs: A
         data = [header]
         for row in top_events:
             data.append([row.get(k, "") for k in header])
-        t = _make_wrapped_table(
-            data, styles, page_width_pts=doc.width + doc.leftMargin + doc.rightMargin
-        )
+        t = _make_wrapped_table(data, styles, page_width_pts=doc.width + doc.leftMargin + doc.rightMargin)
         story.append(t)
     else:
         # If caller provided no events

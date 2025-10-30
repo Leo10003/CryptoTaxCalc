@@ -24,15 +24,7 @@ from .schemas import Transaction
 # Expected CSV columns (case-insensitive):
 # timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 REQUIRED_COLUMNS = {"timestamp", "type", "base_asset", "base_amount"}
-OPTIONAL_COLUMNS = {
-    "quote_asset",
-    "quote_amount",
-    "fee_asset",
-    "fee_amount",
-    "exchange",
-    "memo",
-    "fair_value",
-}
+OPTIONAL_COLUMNS = {"quote_asset", "quote_amount", "fee_asset", "fee_amount", "exchange", "memo", "fair_value"}
 
 
 def _normalize_headers(headers: List[str]) -> List[str]:
@@ -40,9 +32,7 @@ def _normalize_headers(headers: List[str]) -> List[str]:
     return [h.strip().lower() for h in headers]
 
 
-def parse_csv(
-    file_bytes: bytes, encoding: str = "utf-8"
-) -> Tuple[List[Transaction], List[Dict[str, Any]]]:
+def parse_csv(file_bytes: bytes, encoding: str = "utf-8") -> Tuple[List[Transaction], List[Dict[str, Any]]]:
     """
     Parse CSV bytes into a list of Transaction objects.
     Returns:
@@ -70,13 +60,7 @@ def parse_csv(
     header_set = set(headers)
     missing = REQUIRED_COLUMNS - header_set
     if missing:
-        errors.append(
-            {
-                "row_number": 0,
-                "error": f"Missing required columns: {sorted(missing)}",
-                "raw_row": None,
-            }
-        )
+        errors.append({"row_number": 0, "error": f"Missing required columns: {sorted(missing)}", "raw_row": None})
         return valid, errors
 
     # Read and validate each row
@@ -85,9 +69,7 @@ def parse_csv(
         normalized: Dict[str, Any] = {}
         for orig_key, value in row.items():
             key = header_map.get(orig_key, orig_key).lower()
-            value = (
-                value.strip() if isinstance(value, str) else value
-            )  # be forgiving with whitespace
+            value = value.strip() if isinstance(value, str) else value  # be forgiving with whitespace
             normalized[key] = value
 
         # Convert empty strings ("") to None for OPTIONAL fields so Pydantic accepts them

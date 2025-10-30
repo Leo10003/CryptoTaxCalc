@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 import sys, os
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import io
@@ -77,9 +76,7 @@ def _try_download_zip(run_id: str):
     last = (None, None, None, None)  # content, url, status, text
     for p in paths:
         r = client.get(p)
-        if r.status_code == 200 and r.headers.get("content-type", "").lower().startswith(
-            "application/zip"
-        ):
+        if r.status_code == 200 and r.headers.get("content-type", "").lower().startswith("application/zip"):
             return r.content, p, r.status_code, r.text
         last = (None, p, r.status_code, r.text)
     return last
@@ -91,9 +88,9 @@ def _try_download_zip(run_id: str):
 def test_calculate_creates_run_and_persists():
     run_id, payload = _call_calculate_and_get_payload()
     # Minimal structural checks on response payload
-    assert (
-        "summary" in payload or "eur_summary" in payload or "totals" in payload
-    ), "calculate should include a summary-like section"
+    assert "summary" in payload or "eur_summary" in payload or "totals" in payload, (
+        "calculate should include a summary-like section"
+    )
 
     # If history list exists, verify run presence (best-effort)
     r = client.get("/history")
@@ -117,9 +114,7 @@ def test_history_download_zip_contains_manifest_with_run_id():
 
     # If both endpoints are absent (404/405 etc.), SKIP rather than fail.
     if status in (404, 405, 422, 301, 302) and content is None:
-        pytest.skip(
-            f"history download endpoint not available (last tried {url_used}, status={status})"
-        )
+        pytest.skip(f"history download endpoint not available (last tried {url_used}, status={status})")
 
     assert content is not None, f"Download failed from {url_used} (status={status}): {txt}"
 
@@ -165,24 +160,18 @@ def test_transaction_model_and_schema_roundtrip():
         t = Transaction(
             timestamp=datetime.now(timezone.utc),
             type=TxType.BUY,
-            base_asset="BTC",
-            base_amount=Decimal("0.01"),
-            quote_asset="EUR",
-            quote_amount=Decimal("600"),
-            fee_asset="EUR",
-            fee_amount=Decimal("1.50"),
-            exchange="TestEx",
-            memo="schema check",
+            base_asset="BTC", base_amount=Decimal("0.01"),
+            quote_asset="EUR", quote_amount=Decimal("600"),
+            fee_asset="EUR", fee_amount=Decimal("1.50"),
+            exchange="TestEx", memo="schema check"
         )
-        db.add(t)
-        db.commit()
-        db.refresh(t)
+        db.add(t); db.commit(); db.refresh(t)
 
         dto = TransactionRead.model_validate(t)
         data = dto.model_dump()
         assert data["base_asset"] == "BTC"
         assert data["quote_asset"] == "EUR"
         assert Decimal(data["base_amount"]).quantize(Decimal("0.00000001")) == Decimal("0.01000000")
-
+        
     finally:
         db.close()

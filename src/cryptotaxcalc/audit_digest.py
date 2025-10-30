@@ -6,12 +6,10 @@ from typing import Any, Dict, List
 from sqlalchemy import text
 from .db import engine
 
-
 def _dec_to_str(x: Any) -> str:
     if isinstance(x, Decimal):
         return format(x, 'f').rstrip('0').rstrip('.') if '.' in format(x, 'f') else format(x, 'f')
     return str(x)
-
 
 def _json_c14n(obj: Any) -> str:
     """
@@ -20,7 +18,6 @@ def _json_c14n(obj: Any) -> str:
       - no spaces (compact separators)
       - decimals rendered as plain strings
     """
-
     def normalize(o: Any):
         if isinstance(o, dict):
             return {k: normalize(o[k]) for k in sorted(o.keys())}
@@ -30,14 +27,11 @@ def _json_c14n(obj: Any) -> str:
             return _dec_to_str(o)
         else:
             return o
-
     norm = normalize(obj)
     return json.dumps(norm, sort_keys=True, separators=(",", ":"))
 
-
 def _sha256_hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
-
 
 def build_run_manifest(run_id: str) -> Dict[str, Any]:
     """
@@ -49,75 +43,57 @@ def build_run_manifest(run_id: str) -> Dict[str, Any]:
     """
     with engine.begin() as conn:
         # NOTE: id is stored as TEXT/UUID in current schema
-        run = (
-            conn.execute(
-                text("SELECT * FROM calc_runs WHERE id = :rid"),
-                {"rid": run_id},
-            )
-            .mappings()
-            .first()
-        )
+        run = conn.execute(
+            text("SELECT * FROM calc_runs WHERE id = :rid"),
+            {"rid": run_id},
+        ).mappings().first()
 
         if not run:
             raise ValueError(f"calc_runs id={run_id} not found")
 
         fx = None
         if run["fx_set_id"] is not None:
-            fx = (
-                conn.execute(
-                    text("SELECT * FROM fx_batches WHERE id = :bid"),
-                    {"bid": run["fx_set_id"]},
-                )
-                .mappings()
-                .first()
-            )
+            fx = conn.execute(
+                text("SELECT * FROM fx_batches WHERE id = :bid"),
+                {"bid": run["fx_set_id"]},
+            ).mappings().first()
 
         finished_at = run["finished_at"]
 
         tx_rows = conn.execute(
-            text(
-                """
+            text("""
                 SELECT hash FROM transactions
                 WHERE timestamp <= :cutoff
                 ORDER BY hash
-            """
-            ),
+            """),
             {"cutoff": finished_at},
         ).fetchall()
         input_hashes = [r[0] for r in tx_rows]
 
-        out_rows = (
-            conn.execute(
-                text(
-                    """
+        out_rows = conn.execute(
+            text("""
                 SELECT timestamp, asset, qty_sold, proceeds, cost_basis, gain,
                        quote_asset, fee_applied, matches_json
                 FROM realized_events
                 WHERE run_id = :rid
                 ORDER BY id
-            """
-                ),
-                {"rid": run_id},
-            )
-            .mappings()
-            .all()
-        )
+            """),
+            {"rid": run_id},
+        ).mappings().all()
 
         outputs: List[Dict[str, Any]] = []
         for r in out_rows:
-            outputs.append(
-                {
-                    "timestamp": r["timestamp"],
-                    "asset": r["asset"],
-                    "qty_sold": str(r["qty_sold"]),
-                    "proceeds": str(r["proceeds"]),
-                    "cost_basis": str(r["cost_basis"]),
-                    "gain": str(r["gain"]),
-                    "quote_asset": r["quote_asset"],
-                    "fee_applied": str(r["fee_applied"]) if r["fee_applied"] is not None else None,
-                    "matches": json.loads(r["matches_json"] or "[]"),
-                }
-            )
+            outputs.append({
+                "timestamp": r["timestamp"],
+                "asset": r["asset"],
+                "qty_sold": str(r["qty_sold"]),
+                "proceeds": str(r["proceeds"]),
+                "cost_basis": str(r["cost_basis"]),
+                "gain": str(r["gain"]),
+                "quote_asset": r["quote_asset"],
+                "fee_applied": str(r["fee_applied"]) if r["fee_applied"] is not None else None,
+                "matches": json.loads(r["matches_json"] or "[]"),
+            })
 
         manifest: Dict[str, Any] = {
             "run": {
@@ -142,7 +118,6 @@ def build_run_manifest(run_id: str) -> Dict[str, Any]:
             "outputs": outputs,
         }
         return manifest
-
 
 def compute_digests(manifest: Dict[str, Any]) -> Dict[str, str]:
     """

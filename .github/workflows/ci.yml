@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-tests:
+    name: Lint & Tests (Linux, py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
+      - name: Install project (editable) + dev tools
+        run: |
+          python -m pip install --upgrade pip
+          # If you still have requirements.txt, install it first (optional):
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e ".[dev]"
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+      - name: Pre-commit (ruff/format/mypy hooks)
+        run: |
+          pre-commit run --all-files
+
+      - name: Run tests (pytest)
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+        run: |
+          pytest -q
+
+  ps-lint:
+    name: PowerShell lint (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PowerShell 7 (pwsh) & PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          # windows-latest already has pwsh; ensure analyzer is present
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber
+          Import-Module PSScriptAnalyzer
+
+      - name: Lint automation scripts
+        shell: pwsh
+        run: |
+          $paths = @(
+            "automation/collect_support_bundle.ps1"
+          ) | Where-Object { Test-Path $_ }
+          if ($paths.Count -gt 0) {
+            Invoke-ScriptAnalyzer -Path $paths -Recurse -Severity @('Error','Warning') -ReportSummary
+          } else {
+            "No PowerShell files found to lint." | Write-Host
+          }

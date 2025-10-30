@@ -6,12 +6,10 @@ from fastapi import UploadFile
 STORAGE_DIR = Path("storage_raw")
 STORAGE_DIR.mkdir(exist_ok=True)
 
-
 def sha256_bytes(data: bytes) -> str:
     h = hashlib.sha256()
     h.update(data)
     return h.hexdigest()
-
 
 def persist_uploaded_file(file: UploadFile, content: bytes) -> tuple[str, str]:
     """
