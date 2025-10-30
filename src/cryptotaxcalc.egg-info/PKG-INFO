@@ -1,3 +1,23 @@
+Metadata-Version: 2.4
+Name: cryptotaxcalc
+Version: 0.1.0
+Summary: Crypto tax calculation engine for Croatia and Italy
+Author: Your Name
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.110
+Requires-Dist: uvicorn>=0.29
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: pydantic>=2.5
+Requires-Dist: pandas
+Requires-Dist: numpy
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+
 # CryptoTaxCalc
 
 FastAPI-based crypto tax calculator with FIFO realization, run history persistence, downloadable artifacts, automated smoke tests (local + CI), Telegram alerts, and optional auto-push to GitHub.

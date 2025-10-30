@@ -1,6 +1,7 @@
 import getpass
 from pathlib import Path
 
+
 def generate_task_xml():
     user = getpass.getuser()
     xml_template = f"""<?xml version="1.0" encoding="UTF-16"?>
@@ -58,6 +59,7 @@ def generate_task_xml():
     out_path.write_text(xml_template, encoding="utf-16")
     print(f"✅ Generated XML for user {user}")
     print(f"📄 Saved to: {out_path}")
+
 
 if __name__ == "__main__":
     generate_task_xml()

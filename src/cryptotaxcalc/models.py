@@ -6,6 +6,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import Numeric, TypeDecorator
 from enum import Enum
 
+
 class TxType(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
@@ -16,21 +17,28 @@ class TxType(str, Enum):
     AIRDROP = "AIRDROP"
     FEE = "FEE"
 
+
 # ---------- Base ----------
 class Base(DeclarativeBase):
     pass
+
 
 # ---------- Decimal helper (fixed 6 dp) ----------
 class SqliteDecimal(TypeDecorator):
     impl = Numeric(38, 6, asdecimal=True)
     cache_ok = True
     SCALE = Decimal("0.000001")
+
     def process_bind_param(self, value, dialect):
-        if value is None: return None
+        if value is None:
+            return None
         return Decimal(value).quantize(self.SCALE)
+
     def process_result_value(self, value, dialect):
-        if value is None: return None
+        if value is None:
+            return None
         return Decimal(value).quantize(self.SCALE)
+
 
 # ---------- ORM models ----------
 class CalcRun(Base):
@@ -45,13 +53,16 @@ class CalcRun(Base):
     # used by app.py after finishing FIFO
     finished_at: Mapped[str | None] = mapped_column(String, nullable=True)
 
+
 class Transaction(Base):
     __tablename__ = "transactions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
 
     # Store as naive UTC datetimes in SQLite
-    timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=False), nullable=False, index=True)
+    timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, index=True
+    )
     # Use String to avoid Enum friction with CSV/parser
     type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
@@ -76,7 +87,9 @@ class Transaction(Base):
         default=lambda: datetime.datetime.utcnow(),
     )
 
+
 Index("idx_transactions_ts", Transaction.timestamp)
+
 
 # Fx rates aligned with /fx/upload (daily EURUSD)
 class FxRate(Base):
@@ -86,12 +99,14 @@ class FxRate(Base):
     usd_per_eur: Mapped[Decimal] = mapped_column(SqliteDecimal, nullable=False)
     batch_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
+
 class FxBatch(Base):
     __tablename__ = "fx_batches"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     imported_at: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     rates_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
 
 # Stores original uploads (provenance)
 class RawEvent(Base):
@@ -104,6 +119,7 @@ class RawEvent(Base):
     received_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     blob_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
 
 # Persisted realized events per calculation run
 class RealizedEvent(Base):
@@ -121,6 +137,7 @@ class RealizedEvent(Base):
     fee_applied: Mapped[str | None] = mapped_column(String(64), nullable=True)
     matches_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+
 class CalcAudit(Base):
     __tablename__ = "calc_audit"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -129,6 +146,7 @@ class CalcAudit(Base):
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     meta_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
 
 class RunDigest(Base):
     __tablename__ = "run_digests"
@@ -140,17 +158,20 @@ class RunDigest(Base):
     manifest_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    actor: Mapped[str] = mapped_column(String(64), nullable=False)          # e.g., "local-user"
-    action: Mapped[str] = mapped_column(String(64), nullable=False)         # e.g., "calc:run"
-    target_type: Mapped[str] = mapped_column(String(64), nullable=False)    # e.g., "calc_runs"
-    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # run id or other target
-    details_json: Mapped[str | None] = mapped_column(Text, nullable=True)   # JSON payload
-    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)       # "testclient" in tests
-    ts: Mapped[str] = mapped_column(String(32), nullable=False)             # ISO string, e.g. "2025-10-29T08:50:39Z"
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)  # e.g., "local-user"
+    action: Mapped[str] = mapped_column(String(64), nullable=False)  # e.g., "calc:run"
+    target_type: Mapped[str] = mapped_column(String(64), nullable=False)  # e.g., "calc_runs"
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # run id or other target
+    details_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON payload
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)  # "testclient" in tests
+    ts: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # ISO string, e.g. "2025-10-29T08:50:39Z"
 
 
 # Alias used by app.py
