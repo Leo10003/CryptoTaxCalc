@@ -1,7 +1,7 @@
 from __future__ import annotations
 from decimal import Decimal
 from datetime import datetime, timezone
-from cryptotaxcalc.rules.base import TaxRule, Match, RunContext
+from .base import TaxRule, Match, RunContext
 from cryptotaxcalc.models import TransactionRow
 
 TWO_YEARS_DAYS = 730

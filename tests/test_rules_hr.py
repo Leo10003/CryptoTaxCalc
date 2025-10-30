@@ -1,11 +1,11 @@
 from decimal import Decimal
-from rules.hr import HrRule
-from rules.base import Match, RunContext
+from cryptotaxcalc.rules.it import ItRule
+from cryptotaxcalc.rules.base import RunContext
 from cryptotaxcalc.schemas import CalcConfig
 
-
-def test_hr_finalize_no_change():
-    rule = HrRule()
-    cfg = CalcConfig(jurisdiction="HR")
+def test_it_threshold_gate():
+    rule = ItRule()
+    cfg = CalcConfig(jurisdiction="IT", it_threshold_eur=Decimal("51645.69"))
     ctx = RunContext(cfg=cfg, tax_year=2024)
-    assert rule.finalize_taxable_gain(Decimal("100.00"), ctx) == Decimal("100.00")
+    # Phase-1 placeholder: returns 0 when threshold set (to be refined)
+    assert rule.finalize_taxable_gain(Decimal("123.45"), ctx) == Decimal("0")

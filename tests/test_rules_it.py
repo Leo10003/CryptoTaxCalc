@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rules.it import ItRule
-from rules.base import RunContext
+from cryptotaxcalc.rules.base import RunContext
 from cryptotaxcalc.schemas import CalcConfig
 
 def test_it_threshold_gate():

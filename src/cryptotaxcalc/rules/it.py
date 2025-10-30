@@ -1,6 +1,6 @@
 from __future__ import annotations
 from decimal import Decimal
-from cryptotaxcalc.rules.base import TaxRule, Match, RunContext
+from .base import TaxRule, Match, RunContext
 from cryptotaxcalc.models import TransactionRow
 
 class ItRule(TaxRule):
