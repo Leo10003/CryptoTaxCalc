@@ -1,0 +1,5 @@
+timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo,fair_value
+2022-01-01 10:00:00,buy,BTC,0.01000000,EUR,500.00,EUR,1.00,FixtureEx,BTC buy,
+2025-01-01 10:00:00,sell,BTC,0.01000000,EUR,650.00,EUR,1.00,FixtureEx,BTC sell,
+2024-06-01 12:00:00,buy,ETH,1.00000000,EUR,2000.00,EUR,2.00,FixtureEx,ETH buy,
+2025-06-01 12:00:00,sell,ETH,1.00000000,EUR,2500.00,EUR,2.00,FixtureEx,ETH sell,

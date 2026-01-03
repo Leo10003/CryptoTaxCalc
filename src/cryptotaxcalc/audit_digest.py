@@ -1,48 +1,76 @@
-# audit_digest.py
 from __future__ import annotations
-import json, hashlib, datetime
+"""
+Audit digest builder.
+
+Responsible for generating reproducible manifests and SHA256 digests for
+calculation runs. Used for audit verification and export bundling.
+"""
+
+import json
+import hashlib
 from decimal import Decimal
 from typing import Any, Dict, List
 from sqlalchemy import text
-from .db import engine
+from pathlib import Path
+
+from cryptotaxcalc.db import engine
+from cryptotaxcalc.logging_setup import get_logger, _now_iso_z, _atomic_write_json
+
+logger = get_logger("audit.digest")
+
+
+# =========================================================
+# Internal helpers
+# =========================================================
 
 def _dec_to_str(x: Any) -> str:
+    """Convert Decimal to plain non-scientific string; otherwise str(x)."""
     if isinstance(x, Decimal):
-        return format(x, 'f').rstrip('0').rstrip('.') if '.' in format(x, 'f') else format(x, 'f')
+        s = format(x, "f")
+        return s.rstrip("0").rstrip(".") if "." in s else s
     return str(x)
+
 
 def _json_c14n(obj: Any) -> str:
     """
     Canonical JSON dump:
-      - sort keys
-      - no spaces (compact separators)
-      - decimals rendered as plain strings
+      - sorted keys
+      - compact separators
+      - Decimals → plain strings
     """
+
     def normalize(o: Any):
         if isinstance(o, dict):
             return {k: normalize(o[k]) for k in sorted(o.keys())}
-        elif isinstance(o, list):
+        if isinstance(o, list):
             return [normalize(v) for v in o]
-        elif isinstance(o, Decimal):
+        if isinstance(o, Decimal):
             return _dec_to_str(o)
-        else:
-            return o
-    norm = normalize(obj)
-    return json.dumps(norm, sort_keys=True, separators=(",", ":"))
+        return o
+
+    return json.dumps(normalize(obj), sort_keys=True, separators=(",", ":"))
+
 
 def _sha256_hex(s: str) -> str:
+    """Return SHA256 hexdigest for a given string."""
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
-def build_run_manifest(run_id: str) -> Dict[str, Any]:
+
+# =========================================================
+# Core manifest builder
+# =========================================================
+
+def build_run_manifest(run_id: int) -> Dict[str, Any]:
     """
-    Build a canonical manifest that captures:
+    Build a canonical manifest capturing:
       - calc_runs row (jurisdiction, rule_version, lot_method, params_json, timestamps, fx_set_id)
       - fx batch meta (imported_at, source, rates_hash)
-      - INPUT SET: ordered list of transaction hashes that existed at run finished_at
-      - OUTPUT SET: realized_events for this run with numeric strings for amounts and per-lot matches
+      - INPUT SET: ordered list of transaction hashes existing at run finished_at
+      - OUTPUT SET: realized_events for this run (stringified numeric fields)
     """
+    logger.info(f"[AUDIT] Building run manifest for run_id={run_id}")
+
     with engine.begin() as conn:
-        # NOTE: id is stored as TEXT/UUID in current schema
         run = conn.execute(
             text("SELECT * FROM calc_runs WHERE id = :rid"),
             {"rid": run_id},
@@ -51,24 +79,46 @@ def build_run_manifest(run_id: str) -> Dict[str, Any]:
         if not run:
             raise ValueError(f"calc_runs id={run_id} not found")
 
-        fx = None
+        fx_meta = None
         if run["fx_set_id"] is not None:
-            fx = conn.execute(
+            fx_meta = conn.execute(
                 text("SELECT * FROM fx_batches WHERE id = :bid"),
                 {"bid": run["fx_set_id"]},
             ).mappings().first()
 
         finished_at = run["finished_at"]
 
-        tx_rows = conn.execute(
-            text("""
-                SELECT hash FROM transactions
-                WHERE timestamp <= :cutoff
-                ORDER BY hash
-            """),
-            {"cutoff": finished_at},
-        ).fetchall()
-        input_hashes = [r[0] for r in tx_rows]
+        input_mode = "timestamp_cutoff"
+        input_hashes: List[str] = []
+
+        # Prefer frozen run_inputs snapshot if available (stable over time)
+        try:
+            snap = conn.execute(
+                text("""
+                    SELECT tx_hash
+                    FROM run_inputs
+                    WHERE run_id = :rid
+                    ORDER BY tx_hash
+                """),
+                {"rid": run_id},
+            ).fetchall()
+            if snap:
+                input_hashes = [r[0] for r in snap]
+                input_mode = "snapshot"
+        except Exception:
+            # Table may not exist on older DBs; fall back safely.
+            input_mode = "timestamp_cutoff"
+
+        if not input_hashes:
+            tx_rows = conn.execute(
+                text("""
+                    SELECT hash FROM transactions
+                    WHERE timestamp <= :cutoff
+                    ORDER BY hash
+                """),
+                {"cutoff": finished_at},
+            ).fetchall()
+            input_hashes = [r[0] for r in tx_rows]
 
         out_rows = conn.execute(
             text("""
@@ -81,67 +131,102 @@ def build_run_manifest(run_id: str) -> Dict[str, Any]:
             {"rid": run_id},
         ).mappings().all()
 
-        outputs: List[Dict[str, Any]] = []
-        for r in out_rows:
-            outputs.append({
-                "timestamp": r["timestamp"],
-                "asset": r["asset"],
-                "qty_sold": str(r["qty_sold"]),
-                "proceeds": str(r["proceeds"]),
-                "cost_basis": str(r["cost_basis"]),
-                "gain": str(r["gain"]),
-                "quote_asset": r["quote_asset"],
-                "fee_applied": str(r["fee_applied"]) if r["fee_applied"] is not None else None,
-                "matches": json.loads(r["matches_json"] or "[]"),
-            })
+    outputs: List[Dict[str, Any]] = []
+    for r in out_rows:
+        outputs.append({
+            "timestamp": r["timestamp"],
+            "asset": r["asset"],
+            "qty_sold": _dec_to_str(r["qty_sold"]),
+            "proceeds": _dec_to_str(r["proceeds"]),
+            "cost_basis": _dec_to_str(r["cost_basis"]),
+            "gain": _dec_to_str(r["gain"]),
+            "quote_asset": r["quote_asset"],
+            "fee_applied": _dec_to_str(r["fee_applied"]) if r["fee_applied"] is not None else None,
+            "matches": json.loads(r["matches_json"] or "[]"),
+        })
 
-        manifest: Dict[str, Any] = {
-            "run": {
-                "id": run["id"],
-                "started_at": run["started_at"],
-                "finished_at": run["finished_at"],
-                "jurisdiction": run["jurisdiction"],
-                "rule_version": run["rule_version"],
-                "lot_method": run["lot_method"],
-                "fx_set_id": run["fx_set_id"],
-                "params": json.loads(run["params_json"] or "{}"),
-            },
-            "fx_batch": {
-                "id": fx["id"] if fx else None,
-                "imported_at": fx["imported_at"] if fx else None,
-                "source": fx["source"] if fx else None,
-                "rates_hash": fx["rates_hash"] if fx else None,
-            },
-            "inputs": {
-                "transactions_hashes_ordered": input_hashes,
-            },
-            "outputs": outputs,
-        }
-        return manifest
+    manifest: Dict[str, Any] = {
+        "timestamp_built": _now_iso_z(),
+        "run_id": run["id"],
+        "run": {
+            "id": run["id"],
+            "started_at": run["started_at"],
+            "finished_at": run["finished_at"],
+            "jurisdiction": run["jurisdiction"],
+            "rule_version": run["rule_version"],
+            "lot_method": run["lot_method"],
+            "fx_set_id": run["fx_set_id"],
+            "params": json.loads(run["params_json"] or "{}"),
+        },
+        "fx_batch": {
+            "id": fx_meta["id"] if fx_meta else None,
+            "imported_at": fx_meta["imported_at"] if fx_meta else None,
+            "source": fx_meta["source"] if fx_meta else None,
+            "rates_hash": fx_meta["rates_hash"] if fx_meta else None,
+        },
+        "inputs": {
+            "mode": input_mode,
+            "cutoff_finished_at": finished_at if input_mode == "timestamp_cutoff" else None,
+            "transactions_hashes_ordered": input_hashes,
+        },
+        "outputs": outputs,
+    }
+
+    # Write debug manifest JSON for traceability
+    try:
+        out_path = Path("logs/audit") / f"manifest_run_{run_id}.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write_json(out_path, manifest)
+    except Exception as e:
+        logger.warning(f"Could not write manifest debug file: {e}")
+
+    logger.info(f"[AUDIT] Manifest built for run_id={run_id} with {len(outputs)} outputs.")
+    return manifest
+
+
+# =========================================================
+# Digest computation
+# =========================================================
 
 def compute_digests(manifest: Dict[str, Any]) -> Dict[str, str]:
     """
-    Compute:
-      - input_hash: hash over the input portion (params, fx metadata, input tx hashes)
-      - output_hash: hash over realized events list
-      - manifest_hash: hash over the full manifest
+    Compute three deterministic digests:
+      - input_hash: hash of parameters, fx metadata, and input transactions
+      - output_hash: hash of realized events list
+      - manifest_hash: hash of the full manifest (excluding volatile timestamp_built)
     """
-    # split logically
+    logger.debug("[AUDIT] Computing digests for manifest")
+
+    # Inputs: rule params + fx meta + ordered input tx hashes
     inputs_part = {
         "run_params": manifest["run"]["params"],
+        "input_mode": manifest["inputs"].get("mode"),
         "rule_version": manifest["run"]["rule_version"],
         "lot_method": manifest["run"]["lot_method"],
         "jurisdiction": manifest["run"]["jurisdiction"],
         "fx": manifest["fx_batch"],
         "input_hashes": manifest["inputs"]["transactions_hashes_ordered"],
     }
+
+    # Outputs: realized events (already normalized to strings and ordered)
     outputs_part = manifest["outputs"]
 
     input_hash = _sha256_hex(_json_c14n(inputs_part))
     output_hash = _sha256_hex(_json_c14n(outputs_part))
-    manifest_hash = _sha256_hex(_json_c14n(manifest))
-    return {
+
+    # Manifest hash must ignore volatile build timestamp
+    manifest_copy = dict(manifest)
+    manifest_copy.pop("timestamp_built", None)
+    manifest_hash = _sha256_hex(_json_c14n(manifest_copy))
+
+    digests = {
         "input_hash": input_hash,
         "output_hash": output_hash,
         "manifest_hash": manifest_hash,
     }
+
+    logger.info(
+        f"[AUDIT] Digests computed input={input_hash[:8]}… "
+        f"output={output_hash[:8]}… manifest={manifest_hash[:8]}…"
+    )
+    return digests

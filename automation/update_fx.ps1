@@ -48,4 +48,4 @@ try { $clean | Export-Csv -NoTypeInformation -Encoding utf8NoBOM -Path $out }
 catch { $clean | Export-Csv -NoTypeInformation -Encoding UTF8 -Path $out }
 
 # 9) Upload to FastAPI
-curl.exe -s -F "file=@$out;type=text/csv" http://127.0.0.1:8000/fx/upload
+curl.exe -s -H "X-Admin-Token: $env:ADMIN_TOKEN" -F "file=@$out;type=text/csv" http://127.0.0.1:8000/fx/upload

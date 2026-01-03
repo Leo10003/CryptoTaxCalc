@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cryptotaxcalc"
-version = "0.1.0"
+version = "0.4.8"
 description = "Crypto tax calculation engine for Croatia and Italy"
 authors = [{ name = "Your Name" }]
 readme = "README.md"
@@ -15,11 +15,16 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pydantic>=2.5",
     "pandas",
-    "numpy"
+    "numpy",
+    "jinja2>=3.1",
+    "python-dotenv>=1.0",
+    "python-multipart>=0.0.9",
+    "reportlab>=4.0",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "black", "ruff", "mypy", "pre-commit"]
+dev = ["pytest", "pytest-cov", "httpx", "black", "ruff", "mypy", "pre-commit"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -28,6 +33,11 @@ where = ["src"]
 minversion = "8.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+
+markers = [
+  "smoke: smoke tests",
+]
 
 [tool.black]
 line-length = 100

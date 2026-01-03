@@ -1,3 +1,3 @@
-timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
-2024-04-15T14:00:00Z,sell,ADA,100,USDT,80,USDT,0.2,Binance,Sold staking ADA
-2024-04-20T10:00:00Z,sell,ETH,0.25,USDT,700,USDT,1,Binance,Sold staking ETH
+timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo,fair_value
+2020-01-01T12:00:00,BUY,BTC,1,EUR,10000,,,Binance,"Buy 1 BTC long term", 
+2023-02-01T12:00:00,SELL,BTC,1,EUR,25000,,,Binance,"Sell 1 BTC after > 3 years", 

@@ -1,0 +1,6 @@
+[
+  { "tax_year": 2024, "gain_eur": "2000.00",  "expected_taxable": "0" },
+  { "tax_year": 2024, "gain_eur": "2000.01",  "expected_taxable": "2000.01" },
+  { "tax_year": 2025, "gain_eur": "123.45",   "expected_taxable": "123.45" },
+  { "tax_year": 2025, "gain_eur": "-100.129", "expected_taxable": "-100.13" }
+]

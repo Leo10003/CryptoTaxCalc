@@ -1,97 +1,174 @@
+# automation/git_auto_push.ps1
+# Safe auto-push with stale lock handling + strict git exit-code checks + optional worktree bootstrap.
+
 param(
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)
+  [Parameter(Mandatory=$true)]
+  [string]$RepoRoot,                 # where autosync runs (ideally a dedicated worktree)
+  [string]$RemoteName = "origin",
+  [string]$Branch = "main",
+  [int]$MaxDeletePct = 2,
+  [int]$MaxDeleteAbs = 50,
+  [string[]]$OnlyPaths = @(),
+  [switch]$WhatIf,
+  [string]$WorktreeRoot = ""         # OPTIONAL: dev repo root to bootstrap a worktree at RepoRoot
 )
 
-$ErrorActionPreference = 'Continue'   # don't abort before we capture output
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-# --- logging setup ---
-$LogDir = Join-Path $ProjectRoot "automation\logs"
-New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-$ts = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-$LogPath = Join-Path $LogDir "git_auto_push_$ts.log"
+function TS { (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") }
 
-function Write-Log([string]$msg) {
-    Add-Content -Path $LogPath -Value ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg)
+function Invoke-Git {
+  param([Parameter(Mandatory=$true)][string[]]$Args)
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = (Get-Command git -ErrorAction Stop).Source
+  $psi.Arguments = ($Args -join ' ')
+  $psi.WorkingDirectory = $PWD.Path
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError  = $true
+  $psi.UseShellExecute = $false
+  $p = New-Object System.Diagnostics.Process
+  $p.StartInfo = $psi
+  [void]$p.Start()
+  $out = $p.StandardOutput.ReadToEnd()
+  $err = $p.StandardError.ReadToEnd()
+  $p.WaitForExit()
+  if ($p.ExitCode -ne 0) {
+    throw "git $($Args -join ' ') failed (exit $($p.ExitCode)): $err$out"
+  }
+  if (-not [string]::IsNullOrWhiteSpace($out)) { Write-Host $out.TrimEnd() }
+  if (-not [string]::IsNullOrWhiteSpace($err)) { Write-Warning $err.TrimEnd() }
 }
 
-function Invoke-Git($cmdArgs, [switch]$AllowFail) {
-    $out = & git @cmdArgs 2>&1
-    $code = $LASTEXITCODE
-    if (-not $AllowFail -and $code -ne 0) {
-        throw "git $cmdArgs failed ($code): `n$out"
+function Test-GitBusy {
+  try { return $null -ne (Get-Process git -ErrorAction SilentlyContinue) } catch { return $false }
+}
+
+function Clear-StaleIndexLock {
+  param([Parameter(Mandatory=$true)][string]$RepoPath)
+  $lockPath = Join-Path $RepoPath ".git\index.lock"
+  if (Test-Path $lockPath) {
+    if (Test-GitBusy) {
+      Write-Warning "[WARN] $(TS) .git\index.lock exists and git appears active. Not removing."
+      return $false
+    } else {
+      Write-Warning "[WARN] $(TS) Removing stale lock: $lockPath"
+      Remove-Item -Force -LiteralPath $lockPath
+      return $true
     }
-    return @{ out = $out; code = $code }
+  }
+  return $false
 }
 
-Set-Location $ProjectRoot
-Write-Log "=== Auto-push started ==="
-Write-Log "ProjectRoot: $ProjectRoot"
-
-# Optional: show remote for troubleshooting
-$remoteOut = & git remote -v 2>&1
-Write-Log "git remote -v:`n$remoteOut"
-
-# Stage
-Write-Log "Running git add -A"
-& git add -A | Out-Null
-
-# Commit (will no-op if nothing to commit)
-$commitMsg = "auto: sync $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-Write-Log "Running git commit"
-$commitOut = & git commit -m $commitMsg 2>&1
-$commitCode = $LASTEXITCODE
-Write-Log "Commit exit: $commitCode"
-Write-Log "Commit output:`n$commitOut"
-
-# Push (capture output regardless of success/failure)
-Write-Log "Syncing with remote before push"
-
-# Ensure we’re on main and have an upstream
-Invoke-Git @("checkout","-q","main")
-$upstream = (& git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>$null)
-if (-not $upstream) {
-    Write-Log "No upstream set; wiring main -> origin/main"
-    Invoke-Git @("branch","--set-upstream-to=origin/main","main") -AllowFail
+# --- optional: ensure worktree exists ---
+if ($WorktreeRoot -and (Test-Path $WorktreeRoot)) {
+  $gitDir = Join-Path $WorktreeRoot ".git"
+  if (-not (Test-Path $gitDir)) { throw "WorktreeRoot is not a git repo: $WorktreeRoot" }
+  if (-not (Test-Path $RepoRoot)) {
+    Write-Host "[INFO] $(TS) Creating autosync worktree at $RepoRoot tracking $RemoteName/$Branch ..."
+    Push-Location $WorktreeRoot
+    Invoke-Git @('fetch',$RemoteName,'--quiet')
+    Invoke-Git @('worktree','add','--detach',$RepoRoot,"$RemoteName/$Branch")
+    Pop-Location
+    Push-Location $RepoRoot
+    Invoke-Git @('checkout','-b',$Branch,'--track',"$RemoteName/$Branch")
+    Pop-Location
+  }
 }
 
-# Fetch latest from origin
-$fetch = Invoke-Git @("fetch","origin") -AllowFail
-Write-Log ("Fetch output:`n{0}" -f $fetch.out)
+# --- main ---
+$root = (Resolve-Path $RepoRoot).Path
+$meta = Join-Path $root "support_bundles\_meta"
+New-Item -ItemType Directory -Force -Path $meta | Out-Null
+$logPath = Join-Path $meta ("git_autosync_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+Start-Transcript -Path $logPath -Append | Out-Null
 
-# Compare positions
-$behind = (& git rev-list --count "HEAD..origin/main" 2>$null)
-$ahead  = (& git rev-list --count "origin/main..HEAD" 2>$null)
-if (-not $behind) { $behind = 0 }
-if (-not $ahead)  { $ahead  = 0 }
+try {
+  Set-Location $root
+  if (-not (Test-Path ".git")) { throw "Not a git repo: $root" }
+  $gitBin = (Get-Command git -ErrorAction Stop).Source
+  Write-Host "[INFO] $(TS) git=$gitBin"
+  Write-Host "[INFO] $(TS) Remote=$RemoteName Branch=$Branch"
 
-Write-Log "Ahead=$ahead, Behind=$behind"
+  # Abort if working tree dirty (protect developer clone)
+  $porcelain = (& git status --porcelain)
+  if (-not [string]::IsNullOrWhiteSpace($porcelain)) {
+    throw "Working tree has uncommitted changes. Aborting autosync to avoid touching dev files."
+  }
 
-# If remote is ahead, rebase our local commits on top of it
-if ([int]$behind -gt 0) {
-    Write-Log "Remote is ahead by $behind commit(s); running: git pull --rebase origin main"
-    $pull = Invoke-Git @("pull","--rebase","origin","main") -AllowFail
-    if ($pull.code -ne 0) {
-        Write-Log ("ERROR: rebase failed. Output:`n{0}" -f $pull.out)
-        throw "Aborting push due to rebase error."
-    }
-    Write-Log ("Rebase output:`n{0}" -f $pull.out)
+  # Clean stale lock if any
+  [void](Clear-StaleIndexLock -RepoPath $root)
+
+  # safer pulls
+  Invoke-Git @('config','--local','pull.rebase','true')
+  Invoke-Git @('config','--local','merge.ff','only')
+
+  # fetch + divergence
+  Invoke-Git @('fetch', $RemoteName, '--quiet')
+  $counts = & git rev-list --left-right --count "$RemoteName/$Branch...$Branch" 2>$null
+  $behind, $ahead = 0,0
+  if ($counts) {
+    $parts = $counts -split '\s+'
+    if ($parts.Count -ge 2) { $behind = [int]$parts[0]; $ahead=[int]$parts[1] }
+  }
+  Write-Host "[INFO] $(TS) Divergence: behind=$behind ahead=$ahead"
+
+  if ($behind -gt 0) {
+    Write-Host "[INFO] $(TS) Pulling with rebase…"
+    Invoke-Git @('pull','--rebase',$RemoteName,$Branch)
+  }
+
+  # count tracked & deletions
+  $trackedRaw = (& git ls-files -z) -join ""
+  $trackedCount = (($trackedRaw -split "`0") | Where-Object { $_ -ne "" } | Measure-Object).Count
+  $porc = (& git status --porcelain -z) -join ""
+  $entries = ($porc -split "`0") | Where-Object { $_ -ne "" }
+  $delCount = 0
+  foreach ($e in $entries) { if ($e.Length -ge 2 -and $e.Substring(0,2).Contains('D')) { $delCount++ } }
+  $delPct = if ($trackedCount -gt 0) { [math]::Round(100.0 * $delCount / $trackedCount, 2) } else { 0 }
+  Write-Host "[INFO] $(TS) tracked=$trackedCount deletions=$delCount (${delPct}%)"
+  if (($delCount -gt $MaxDeleteAbs) -or ($delPct -gt $MaxDeletePct)) {
+    throw "Deletion threshold exceeded (del=$delCount, pct=$delPct%). Aborting push."
+  }
+
+  # Stage
+  if ($WhatIf) {
+    Write-Host "[DRY-RUN] Would stage: " + ($(if ($OnlyPaths) { $OnlyPaths -join ', ' } else { 'ALL changes (git add -A)' }))
+  } else {
+    if ($OnlyPaths.Count -gt 0) { foreach ($p in $OnlyPaths) { if (Test-Path $p) { Invoke-Git @('add',$p) } } }
+    else { Invoke-Git @('add','-A') }
+  }
+
+  $diffIndex = (& git diff --cached --name-only)
+  if ([string]::IsNullOrWhiteSpace($diffIndex)) {
+    Write-Host "[INFO] $(TS) Nothing to commit. Exiting."
+    exit 0
+  } else {
+    Write-Host "[INFO] Staged files:`n$diffIndex"
+  }
+
+  if ($WhatIf) {
+    Write-Host "[DRY-RUN] Would tag, commit and push. Exiting."
+    exit 0
+  }
+
+  # Safety tag + commit + push
+  $stamp = (Get-Date -Format "yyyyMMdd_HHmmss")
+  $safeTag = "autosync/safety/$stamp"
+  Invoke-Git @('tag','-f',$safeTag)
+  $hostname = [System.Net.Dns]::GetHostName()
+  $user = $env:USERNAME
+  $msg = "auto: sync $stamp on $hostname by $user"
+  Invoke-Git @('commit','-m', $msg)
+  Invoke-Git @('push',$RemoteName,"HEAD:$Branch")
+
+  Write-Host "[OK] $(TS) Autosync completed."
+  exit 0
 }
-
-# Now push
-Write-Log "Running git push"
-$push = Invoke-Git @("push","origin","HEAD:main") -AllowFail
-Write-Log ("Push exit={0}`nPush output:`n{1}" -f $push.code, $push.out)
-if ($push.code -ne 0) { throw "git push failed" }
-
-$pushOut = & git push 2>&1
-$pushCode = $LASTEXITCODE
-Write-Log "Push exit: $pushCode"
-Write-Log "Push output:`n$pushOut"
-
-# Return non-zero on failure so FastAPI can indicate error
-if ($pushCode -ne 0) {
-    Write-Log "ERROR: git push failed with exit code $pushCode"
-    exit 1
+catch {
+  Write-Host "[ERROR] $(TS) $($_.Exception.Message)"
+  exit 2
 }
-Write-Log "SUCCESS: push completed"
-exit 0
+finally {
+  Stop-Transcript | Out-Null
+}

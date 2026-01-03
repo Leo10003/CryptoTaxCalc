@@ -1,0 +1,4 @@
+[
+  { "tax_year": 2025, "gain_eur": "0.00", "expected_taxable": "0.00" },
+  { "tax_year": 2025, "gain_eur": "100.00", "expected_taxable": "100.00" }
+]

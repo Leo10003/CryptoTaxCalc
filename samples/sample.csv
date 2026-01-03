@@ -1,3 +1,4 @@
-timestamp,type,base_asset,base_amount,fair_value,exchange,memo
-2024-03-01T12:00:00Z,income,ADA,100,0.5,Bybit,Staking reward
-2024-03-10T12:00:00Z,income,ETH,0.25,2200,Binance,Staking reward
+timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo,fair_value
+2023-01-10T12:00:00,BUY,BTC,1,EUR,20000,,,Binance,"Initial BTC buy", 
+2023-06-15T12:00:00,BUY,BTC,1,EUR,25000,,,Binance,"Second BTC buy", 
+2024-01-10T12:00:00,SELL,BTC,1.5,EUR,45000,,,Binance,"Sell 1.5 BTC", 

@@ -1,123 +1,239 @@
-# COLLAB_RULES.md
-
-A living contract for how we build and maintain **CryptoTaxCalc** together.  
-Whenever a new rule is added, this file will be re-issued in full.
+# COLLAB_RULES — FINAL UNIFIED SPEC  
+**CryptoTaxCalc Project — Collaboration, Development, and Design Rules**  
+**Authoritative Source of Truth | Applies to ALL Workflows**
 
 ---
 
-## 1) Don’t guess APIs or filenames
-Only use functions, modules, env vars, and endpoints that exist in the repo or were explicitly introduced in this chat. If something’s missing, say so and propose options.
+# 1. HARD RULES (OVERRIDE EVERYTHING BELOW)
+These rules take absolute priority. No exceptions.
 
-## 2) Match names exactly
-Keep imports, module names, function names, table/column names, and route paths **exactly** consistent. If a rename is needed, provide a repo-wide diff plan.
+## 1.1 Never Assume File State
+- If the assistant is **not 100% certain** about a file's current content → **ask the user to upload it**.
+- Never guess. Never approximate. Never “work around” missing context.
+- Always work with the **latest file version explicitly provided**.
 
-## 3) No invented code
-Never fabricate helper functions, settings, or constants. If a helper is needed, define it first (with filename and placement), then use it.
+## 1.2 If Unsure → STOP and Ask
+- Any ambiguity, missing snippet, unclear context, or multi-file dependency → ask the user.
+- No silent assumptions.
 
-## 4) Prefer additive diffs
-Show minimal, focused changes. Avoid large refactors unless asked. Provide before/after snippets when possible.
+## 1.3 Always Provide Exact Placement Instructions
+When providing code:
+- Include **the exact line before and after** the insertion point.
+- Show **the exact indentation required**.
+- Provide **copy-paste-ready** blocks.
 
-## 5) Validate endpoints
-Every new/changed endpoint must include a quick curl/requests example and expected HTTP status codes.
+## 1.4 psychology-First Visual Decisions
+- Visual decisions **must** be backed by human-behavior psychology principles.
+- This applies to **PDF layout, UI layout, spacing, icons, color, rhythm, hierarchy**.
+- The assistant must explicitly use psychology when producing design/layout decisions.
 
-## 6) Preserve contracts
-Backwards-compatibility matters. Changing schemas, responses, or DB shape requires a clear migration + version bump + changelog note.
+## 1.5 One-Shot Completeness (When Context Is Guaranteed)
+- If all necessary files are present → produce **complete, self-contained responses**.
+- No partial solutions.
+- This rule yields to **1.1** (Never Assume File State).
 
-## 7) Explicit error handling
-Return structured errors (status + code + message). Log the root cause server-side. Don’t leak secrets or stack traces to clients.
+## 1.6 Stability & Determinism
+- All code must be deterministic.
+- No randomness.
+- Output must be reproducible across sessions.
 
-## 8) Deterministic hashing
-Any audit or digest hash must be stable across runs. Specify inputs, serialization order, and normalization rules.
+---
 
-## 9) No hidden global state
-Pass dependencies explicitly. If cached state is needed, document scope and invalidation.
+# 2. WORKFLOW RULES
+## 2.1 File-State Discipline
+The assistant must:
+- Always request the latest file if unsure.
+- Never rely on memory of older uploads.
+- Treat every task as if code may have changed unless the user explicitly says otherwise.
 
-## 10) Idempotent migrations
-DB migrations must be safe to re-run. Include up/down or guards. Never destroy data without an opt-in flag.
+## 2.2 Task Sequencing
+- When requested: provide **up to 4 next steps** ordered by priority.
+- Once the user selects a step, complete it before moving to another.
 
-## 11) SQLite pragmas & integrity
-Use WAL mode for concurrency, foreign_keys=ON, and reasonable busy_timeout. Document these settings.
+## 2.3 No Divergence
+- If a task is started, it must be finished unless the user asks to change direction.
 
-## 12) DB lock resilience
-Wrap critical writes in retry w/ backoff. Surface a clean 409/423-style error if contention persists.
+---
 
-## 13) UTC everywhere
-Store timestamps in UTC ISO-8601. Convert only at the UI/report layer.
+# 3. PSYCHOLOGICAL DESIGN RULES
+## 3.1 Visual Hierarchy Based on Human Perception
+- Top-left = strongest position.
+- Large → important. Small → supportive.
+- Big spacing between sections = clarity.
+- Tiny spacing between related elements = grouping (Gestalt proximity).
 
-## 14) Pagination by default
-List endpoints accept `page` & `page_size` and return `{page, page_size, total, items}`.
+## 3.2 Rhythm Rules
+- Avoid spacing entropy.
+- Use consistent vertical rhythm.
+- Every section starts with more space above than below.
 
-## 15) Audit trails
-Log calculation runs, inputs, outputs, and digests. Provide `/audit/run/{id}` to compare stored vs recomputed.
+## 3.3 Dual Accent Palette (Premium)
+- Primary: **#4B9BFF**
+- Secondary: **softened version** (#4B9BFF @30–40% opacity or desaturated variant)
 
-## 16) Rate-limit safety
-External calls (FX, email, etc.) respect limits, timeouts, and retries with jitter. Cache where sensible.
+## 3.4 Premium-feel Applies ONLY to Visual Components
+This rule is explicit from now on:
+- **Premium-feel overrides basic functionality ONLY for PDF, UI, icons, layout, visuals.**
+- It does *not* override correctness of calculations, API logic, or backend output.
 
-## 17) Idempotent schedulers
-Nightly tasks must be safe to re-run; no duplicate inserts. Use upsert/merge or unique constraints.
+---
 
-## 18) Cross-OS paths
-Use `pathlib` and avoid hardcoded separators. Document Windows-specific steps when needed.
+# 4. DEMO MODE CONSISTENCY RULE
+Demo mode MUST:
+- Follow exactly the same visual psychology principles.
+- Use the same spacing, icons, palette, hierarchy.
+- Avoid visual drift from the real system.
 
-## 19) CLI = API parity
-If it exists in the API, provide a thin CLI (or vice versa) that calls the same code paths.
+---
 
-## 20) Smoke tests
-Maintain a fast `smoke_test.py` that hits `/health`, a read endpoint, and a write+read flow. Fails the run on any non-2xx.
+# 5. CRITICAL PATH AWARENESS
+Whenever a change affects:
+- the PDF  
+- the dashboard  
+- the backend models  
+- the runner  
+- the exporter  
 
-## 21) Support bundles
-Provide a script/endpoint to collect logs, DB, configs, and versions into a timestamped zip under `support_bundles/`.
+The assistant must:
+1. Warn the user of cross-module impact.  
+2. Request all relevant files before touching shared logic.
 
-## 22) Secrets management
-No secrets in code or logs. Use `.env`, environment variables, or OS secrets. Document required keys.
+---
 
-## 23) Package structure conventions
-`src/cryptotaxcalc/` houses importable code. Keep APIs in `api/`, core logic in `core/`, helpers in `utils/`, ORM in `models/`.
+# 6. PDF_STYLE_CONTRACT (NEW — AUTHORITATIVE)
+This governs all PDF generation forever.
 
-## 24) Versioning & changelog
-Every user-visible change bumps version and updates `CHANGELOG.md` with brief notes and migration steps.
+## 6.1 Margins & Grid
+- Fixed outer margin: **36 pt (0.5 inch)**
+- Two-column layout discouraged unless explicitly requested.
+- Always left-align body text.
 
-## 25) Contracts doc
-Keep a `contracts.md` describing request/response schemas, DB tables, and invariants. Update when interfaces evolve.
+## 6.2 Section Headers
+Each major section:
+- Starts on a **new page** (if requested by user).
+- Uses:
+  - Icon (44–54 px)
+  - Title (14–16 pt, semi-bold)
+  - Lead-in sentence (psychology tuned)
 
-## 26) File organization & structural clarity
-Group by purpose, enforce single responsibility per file, maintain consistent names, avoid orphan files, and keep generated/temporary artifacts out of the repo root. Example:
+## 6.3 Section Rhythm
+- 28–38 pt above section header.
+- 12–18 pt between header and lead-in.
+- 10–16 pt between lead-in and content.
 
-## 27) Context Verification Before Any Code Action
+## 6.4 Icon Rules
+- Icons ALWAYS:
+  - are 512×512 source PNG/SVG
+  - scaled to 36–52 px depending on importance
+  - aligned precisely with title baseline
+  - use #1F1F1F for strokes and #4B9BFF for accents
+  - NEVER blurry, never stretched, never pixelated.
 
-Rule:
-ChatGPT must never modify, debug, or extend the code without being 100% certain about the current project state.
+## 6.5 Color Rules
+- No gradients.
+- No shadows.
+- No glowing edges.
+- Pure flat vector look.
+- Blue accent used sparingly for highlights.
 
-Behavior:
+## 6.6 Table Rules
+- Header shading: 10–14% grey.
+- Row padding: 4–6 pt vertically.
+- Column spacing: psychologically balanced.
+- Never let a table exceed page width.
+- At page break:
+  - Repeat table header automatically.
 
-If there’s any uncertainty about function names, variables, imports, or structure, ChatGPT must pause immediately.
+## 6.7 Page Break Behavior
+- Never break between a section header and its first paragraph.
+- Never isolate a section icon alone at the bottom.
+- If needed, force a manual break.
 
-ChatGPT must explicitly request the relevant files (e.g., app.py, models.py, etc.) before proceeding.
+---
 
-Only after verifying the actual state of those files may ChatGPT propose new code, patches, or edits.
+# 7. ICON SYSTEM RULES
+- All icons must follow the EXACT same style contract:
+  - 2px stroke
+  - Dark-gray outline (#1F1F1F)
+  - Blue accent (#4B9BFF)
+  - Rounded caps & joins
+  - No background
+  - No blur, no glow
+  - Perfectly centered geometry
 
-No assumptions, placeholders, or speculative imports allowed.
+- The assistant must regenerate icons with a consistent command when needed.
 
-Goal:
-Ensure zero errors due to missing context or mismatched code assumptions.
-This keeps all changes precise, frictionless, and compatible with your actual environment.
+---
 
-## 28) Code Optimization & Minimal Clutter
+# 8. FRONTEND RULES
+## 8.1 No Breaking Styles
+- CSS layout changes must respect existing structure.
+- If unsure, ask for theme.css, base.html, or related files.
 
-Rule:
-The codebase must always remain optimized, efficient, and free from clutter or redundancy.
+## 8.2 Visual Changes Must Be Psychological
+- Every UI decision must state *why* it helps the user’s cognition.
 
-Behavior:
+---
 
-ChatGPT should periodically suggest code cleanup or optimization if inefficiencies are detected.
+# 9. BACKEND RULES
+## 9.1 Data Integrity
+- Never change database models without asking.
+- Never rename fields silently.
 
-Before removing or refactoring any logic, ChatGPT must explicitly ask for confirmation.
+## 9.2 API Stability
+- New endpoints require explicit user approval.
+- Avoid breaking frontend compatibility.
 
-Dead code, unused imports, and redundant logic must be identified and (upon approval) removed.
+---
 
-ChatGPT should optimize code for clarity and runtime efficiency, not just brevity.
+# 10. CALCULATION ENGINE RULES
+- Must remain deterministic.
+- Must match tax logic for Croatia & Italy only (for now).
+- Any uncertainty → ask before implementing.
 
-ChatGPT may ask: “Would you like me to optimize this function for performance or readability?”
+---
 
-Goal:
-Deliver a clean, professional, high-performance codebase where every line serves a clear purpose.
+# 11. ERROR HANDLING RULES
+- Always surface meaningful, actionable errors.
+- PDF errors must not crash application; return logged issue.
+
+---
+
+# 12. COLLABORATION RULES
+## 12.1 No Guessing
+If something is not absolutely known → **ask**.
+
+## 12.2 Clarity First
+All instructions, code, and design decisions must be:
+- explicit  
+- reproducible  
+- direct  
+- psychology aware  
+
+## 12.3 Strong Alignment
+Assistant must maintain perfect awareness of:
+- the project identity  
+- tone  
+- premium design language  
+- target users (Croatia & Italy)  
+
+---
+
+# 13. RULE PRECEDENCE (VERY IMPORTANT)
+When rules conflict, use this priority order:
+
+1. **Hard Rules (Section 1)**
+2. **PDF Style Contract (Section 6)**
+3. **Psychology Rules (Section 3)**
+4. **Critical Path Awareness (Section 5)**
+5. **Backend Stability Rules**
+6. **Frontend Rules**
+7. **Collaboration Rules**
+
+This guarantees deterministic behavior.
+
+---
+
+# 14. FINAL PRINCIPLE
+> **When in doubt: STOP, verify file state, ask user, then produce a complete, psychologically tuned, premium-standard solution.**
+
