@@ -168,12 +168,12 @@ def _set_sqlite_pragmas():
 def _try_import():
     # try flat layout first
     try:
-        from .csv_normalizer import parse_csv  # noqa:F401
-        from .fifo_engine import compute_fifo  # noqa:F401
-        from .fx_utils import usd_to_eur, get_rate_for_date, get_or_create_current_fx_batch_id  # noqa:F401
+        from csv_normalizer import parse_csv  # noqa:F401
+        from fifo_engine import compute_fifo  # noqa:F401
+        from fx_utils import usd_to_eur, get_rate_for_date, get_or_create_current_fx_batch_id  # noqa:F401
         from .audit_digest import build_run_manifest, compute_digests  # noqa:F401
-        from .audit_utils import audit  # noqa:F401
-        from .utils_files import persist_uploaded_file  # noqa:F401
+        from audit_utils import audit  # noqa:F401
+        from utils_files import persist_uploaded_file  # noqa:F401
         return {
             "parse_csv": parse_csv,
             "compute_fifo": compute_fifo,
