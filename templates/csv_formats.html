@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}CryptoTaxCalc — CSV Formats{% endblock %}
+
+{% block head_extra %}
+<style>
+  .cf-shell {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 18px 48px;
+  }
+
+  .cf-title {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    margin: 6px 0 6px;
+  }
+
+  .cf-sub {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 720px;
+  }
+
+  .cf-grid {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  @media (max-width: 860px) {
+    .cf-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .cf-card {
+    border-radius: 18px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    padding: 14px 14px 12px;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.12);
+    min-width: 0;
+  }
+
+  html[data-theme="light"] .cf-card {
+    background: #ffffff;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  }
+
+  .cf-card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .cf-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cf-id {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .cf-row {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .cf-row:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .cf-k {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+
+  .cf-v {
+    min-width: 0;
+  }
+
+  .cf-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    margin: 0 6px 6px 0;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    color: color-mix(in srgb, var(--text) 75%, var(--muted));
+    white-space: nowrap;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cf-shell">
+  <div class="cf-title">Supported CSV formats</div>
+  <div class="cf-sub">
+    Export your transaction history in one of the formats below. If your CSV is not recognized,
+    CryptoTaxCalc will save the structure for implementation and prompt you with supported alternatives.
+  </div>
+
+  <div class="cf-grid">
+    {% for s in sources %}
+      <div class="cf-card">
+        <div class="cf-card-head">
+          <div class="cf-name">{{ s.name }}</div>
+          <div class="cf-id">{{ s.id }}</div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-k">Required</div>
+          <div class="cf-v">
+            {% if s.match.headers_all %}
+              {% for h in s.match.headers_all %}
+                <span class="cf-pill">{{ h }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="cf-pill">—</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-k">Optional</div>
+          <div class="cf-v">
+            {% if s.match.headers_any %}
+              {% for h in s.match.headers_any %}
+                <span class="cf-pill">{{ h }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="cf-pill">—</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-k">Filename hints</div>
+          <div class="cf-v">
+            {% if s.match.filename_keywords %}
+              {% for k in s.match.filename_keywords %}
+                <span class="cf-pill">{{ k }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="cf-pill">—</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

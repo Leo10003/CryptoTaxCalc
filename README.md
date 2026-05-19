@@ -1,255 +1,196 @@
-# CryptoTaxCalc
+# 💼 CryptoTaxCalc
 
-FastAPI-based crypto tax calculator with FIFO realization, run history persistence, downloadable artifacts, automated smoke tests (local + CI), Telegram alerts, and optional auto-push to GitHub.
-
----
-
-## ✨ Features
-
-- **FIFO engine**: Calculates cost basis, proceeds, gains.
-- **Persistence**: Every `/calculate` run is stored (SQLite) with a `run_id` (UUID).
-- **History API**:
-  - `GET /history` – list recent calculation runs.
-  - `GET /history/{run_id}` – details for a specific run.
-  - `GET /history/{run_id}/download` – zipped bundle of the run (JSON + artifacts).
-- **Audit trail**: Audit events tied to each `run_id`.
-- **Smoke tests**:
-  - Local: `pytest -q -m smoke`
-  - CI: GitHub Actions runs on each push, optional Telegram alerts on start/success/failure.
-- **Automation**:
-  - Windows Task Scheduler runner for nightly smoke + alerts.
-  - `git_auto_push.ps1` for auto-commit/push (manual or scheduled).
-- **Telegram notifications**: Start, success, failure pings.
+**FastAPI + modern frontend crypto tax platform**  
+Local-first, compliance-aware, and designed for professional investor demos.  
+Includes full **Demo Mode**, offline EXE packaging, self-checks, smart backups,  
+and visual dashboards for transaction import, calculation, and export.
 
 ---
 
-## 🗂️ Project Layout (key files)
+## ✨ Key Features
 
+### ⚙️ Core Engine
+- **FIFO tax calculator** — precise cost basis, proceeds, and gains computation.
+- **Persistent history** — all calculation runs stored in SQLite with unique `run_id`.
+- **Jurisdiction-aware rules** — supports `HR` (Croatia) and `IT` (Italy) frameworks.
+- **Automated backups** — Smart Backup & Revert Gatekeeper keeps last 30 bundles.
+
+### 🧩 Demo Mode System
+Built for **offline investor showcases**.
+
+- 🟢 **Demo banner** – visible "Demo Mode" indicator (synthetic local data only)
+- 🔄 **Reset environment** – restores DB and synthetic sample data in one click
+- 🧮 **Guided flow** – prebuilt demo scenarios (`Import → Calculate → Export`)
+- 🩺 **Self-check widget** – database, backup, and Git gatekeeper status
+- 🧰 **Diagnostics Export** – creates a ZIP with logs, manifest, and environment info
+- 🔒 **Read-only sandbox** – prevents destructive or real-world data writes
+- 🌙 **Dark/Light themes** with toggle and logo adaptation
+
+### 🖥️ Visual & UX Design
+Professional fintech-grade frontend designed for investor confidence:
+
+- **Dark theme (default):** deep navy, teal, and violet glow scheme  
+- **Light theme:** clean, white-fintech minimalism  
+- **Animated dashboard:** teal glow trails, smooth transitions, hover depth  
+- **Context tooltips** explaining each KPI  
+- **Glass panels** with rounded corners and subtle glow feedback  
+- **Fully responsive layout** (desktop-first optimized for 1080p+)
+
+### 📦 Executable Demo Builder
+Generate a full offline `.exe` showcase:
+```bash
+POST /build/demo-exe
+✅ Auto-packs app + DB + assets
+✅ Verifies smoke tests
+✅ Bundles version, build date, and commit info
+✅ One verified EXE kept under /artifacts/demo/CryptoTaxCalc_Demo.exe
+
+🗂️ Project Layout
+bash
+Kopiraj kod
 CryptoTaxCalc/
 ├─ src/cryptotaxcalc/
-│ ├─ app.py # FastAPI app, /calculate + /history endpoints
-│ ├─ db.py # SQLite models & init
-│ ├─ fifo_engine.py # FIFO calculation core
-│ ├─ audit_utils.py # audit helpers
-│ ├─ audit_digest.py # run manifest
-│ ├─ schemas.py, models.py # Pydantic & SQLAlchemy
-│ └─ about.py
-├─ tests/
-│ └─ smoke_test.py # smoke tests (API + persistence + download)
-├─ automation/
-│ ├─ run_smoke_and_email.py # runs smoke and sends Telegram alerts
-│ ├─ run_smoke_wrapper.ps1 # wrapper (loads .env, runs python, logs)
-│ ├─ git_auto_push.ps1 # auto add/commit/push + (optional) Telegram
-│ ├─ generate_task_xml.py # helper to generate Task Scheduler XML
-│ └─ nightly_smoke_task.xml # ready-to-import Task Scheduler definition
-├─ .github/workflows/
-│ └─ smoke.yml # CI smoke on push
-├─ .env # local secrets/config (NOT committed)
-├─ data.db # SQLite database (local dev)
+│  ├─ app.py              # FastAPI app (core routes)
+│  ├─ demo_mode.py        # Investor Demo Mode system (UI + API)
+│  ├─ exporter.py         # Smart backup & diagnostics bundle
+│  ├─ calc_runner.py      # FIFO calculation pipeline
+│  ├─ csv_normalizer.py   # Transaction import / normalization
+│  ├─ models.py, schemas.py
+│  ├─ rules/
+│  │   ├─ hr.py           # Croatia tax logic
+│  │   └─ it.py           # Italy tax logic
+│  ├─ demo_assets.py      # Demo data seeding & environment tools
+│  └─ audit_digest.py     # Run manifests, audit summaries
+│
+├─ logo/                  # Brand assets (white/black icons)
+├─ static/                # Web assets (theme.css, glow.js, favicon)
+├─ samples/               # CSV demo inputs
+├─ logs/                  # App, audit, and demo logs
+├─ tests/                 # Smoke tests
+├─ artifacts/             # Build outputs (demo EXE, bundles)
+├─ docs/                  # Terms, Privacy, policies
 └─ README.md
+🚀 Quick Start
+1️⃣ Setup environment
+powershell
+Kopiraj kod
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -U pip
+pip install -r requirements.txt
+2️⃣ Run development server
+powershell
+Kopiraj kod
+uvicorn cryptotaxcalc.app:app --reload --host 127.0.0.1 --port 8000
+Then open:
+➡️ http://127.0.0.1:8000 — Main landing page
+➡️ http://127.0.0.1:8000/demo/dashboard — Demo Mode dashboard
+➡️ http://127.0.0.1:8000/docs — API docs
+
+🧭 Demo Mode Usage
+Reset Demo Environment
+Restores the local SQLite DB and sample data.
+
+Upload Sample CSVs
+Import samples/sample.csv and samples/sample2.csv.
+
+Run Calculation
+Choose jurisdiction (Croatia 🇭🇷 or Italy 🇮🇹).
+Results show gains, cost, and tax summary.
+
+Export Diagnostics
+Downloads a .zip with logs, configs, and manifest.
+
+Switch Theme
+Use top-right toggle for Light/Dark visual modes.
+
+🧰 Diagnostics & Support Bundle
+Create a full support bundle (for developer handover or debugging):
+
+bash
+Kopiraj kod
+python -m cryptotaxcalc.exporter --support
+Contents include:
+
+Full source (src/)
+
+Logs and audit history
+
+Config manifests
+
+Samples and static assets
+
+Build metadata and environment snapshot
+
+🧪 Testing
+Run smoke tests locally:
+
+powershell
+Kopiraj kod
+pytest -q -m smoke
+🧾 Compliance & Legal
+Local-first data handling — no cloud sync by default.
+
+Data sandboxed; demo uses synthetic non-identifiable data.
+
+Includes /docs/Privacy_and_Data_Processing.md and /docs/Terms_of_Use.md.
+
+All reports labeled:
+
+“Informational only — not tax advice.”
+
+🧠 Visual Style Summary
+Element	Dark Theme	Light Theme
+Background	#0A0F1C	#F9FAFC
+Primary Accent	#0CE6C8	#0CCAB4
+Secondary Accent	#8F6FFF	#7C5CFF
+Typography	White / Gray	Charcoal / Graphite
+Feedback Glow	Teal / Violet	Teal shadow
+Emotion	Trust & Intelligence	Clarity & Confidence
+
+🧩 Build Info
+Displayed on dashboard footer:
+
+yaml
+Kopiraj kod
+Version: dev | Commit: local | Mode: Demo | Build: verified
+
+Read from demo_build_manifest.json (written by the demo builder).
+The demo builder uses environment variables:
+- APP_VERSION (defaults to "dev")
+- GIT_COMMIT (defaults to "local")
+
+🔒 Security Notes
+No secrets in demo build.
+
+Use .env.example as a template; never ship real secrets in demo/production builds.
+
+Sandboxed SQLite DB prevents external writes.
+
+Telemetry optional, off by default.
+
+📦 License
+MIT (or your chosen license)
+
+🙌 Acknowledgments
+Thanks to all contributors and testers helping evolve
+CryptoTaxCalc into a complete local-first investor demo system
+combining professional UX, safe offline execution, and smart automation.
+
+🧠 TL;DR
+CryptoTaxCalc = professional-grade crypto tax calculator
+with demo mode, smart backup, beautiful UI, and complete local control.
 
 yaml
 Kopiraj kod
 
 ---
 
-## ✅ Requirements
+Would you like me to:
+- add **screenshot placeholders** (e.g., `![Dashboard Preview](static/demo_dashboard_dark.png)`)  
+or  
+- generate a **short summary section** for `support_bundle` usage at the top (developer handover paragraph)?
 
-- Python 3.12 (recommended) + venv
-- Git
-- Windows PowerShell (for automation scripts)
-- (Optional) Telegram Bot & Chat for alerts
 
----
 
-## 🚀 Setup & Run
 
-### 1) Create & activate venv, install deps
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -U pip
-pip install -r requirements.txt
-If you don’t have requirements.txt, install the known essentials:
-
-powershell
-Kopiraj kod
-pip install fastapi uvicorn[standard] sqlalchemy pydantic httpx reportlab pytest python-dotenv
-2) Environment variables (.env)
-Create .env in the project root:
-
-ini
-Kopiraj kod
-# Telegram alerts (optional but recommended)
-TELEGRAM_BOT_TOKEN=123456:ABC...
-TELEGRAM_CHAT_ID=123456789
-
-# (Optional) Additional config consumed by scripts/app can go here
-# e.g. LOG_DIR, DB_PATH, etc. Defaults are sensible.
-Keep .env out of source control.
-
-3) Initialize DB (auto)
-On first run the app will create tables/indexes automatically.
-
-4) Run the API locally
-powershell
-Kopiraj kod
-uvicorn cryptotaxcalc.app:app --reload --host 127.0.0.1 --port 8000
-Open Swagger: http://127.0.0.1:8000/docs
-
-🔌 API Endpoints (quick guide)
-GET /calculate
-Runs FIFO over current transactions, persists a new run, returns summary and run_id (UUID).
-
-GET /history
-Returns an array of persisted runs (metadata).
-
-GET /history/{run_id}
-Returns details for run_id.
-
-GET /history/{run_id}/download
-Returns a ZIP with run artifacts (JSON etc.).
-
-🧪 Smoke Tests
-Local
-powershell
-Kopiraj kod
-pytest -q -m smoke --maxfail=1 --disable-warnings -rA
-Requires httpx, reportlab, etc. (see requirements above).
-
-CI (GitHub Actions)
-Workflow file: .github/workflows/smoke.yml
-
-Triggers on push.
-
-Uses repository Secrets for Telegram:
-
-TELEGRAM_BOT_TOKEN
-
-TELEGRAM_CHAT_ID
-
-Configure in GitHub: Settings → Secrets and variables → Actions → New repository secret
-
-CI logs will show whether Telegram steps were skipped (if secrets missing) or sent.
-
-🔔 Telegram Alerts
-Both local run_smoke_and_email.py and CI can send:
-
-Start ping (“Smoke test started”)
-
-Success ping
-
-Failure ping (with exit code; includes stdio snippets if available)
-
-Make sure .env (local) or Actions secrets (CI) have:
-
-ini
-Kopiraj kod
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=...
-🕗 Nightly Smoke via Windows Task Scheduler (local)
-You can import the prebuilt XML:
-
-automation\nightly_smoke_task.xml
-
-Or run the helper:
-
-powershell
-Kopiraj kod
-python automation\generate_task_xml.py
-Then in Task Scheduler:
-
-Import Task… → pick nightly_smoke_task.xml.
-
-Confirm “Run whether user is logged on or not”.
-
-Set time (e.g., 00:00), save with your credentials.
-
-What runs:
-automation\run_smoke_wrapper.ps1 → loads .env, runs automation\run_smoke_and_email.py, logs, and posts Telegram pings.
-
-Logs:
-
-automation\task_wrapper.log (wrapper)
-
-automation\smoke_YYYY-MM-DD_HH-MM-SS.log (per-run)
-
-automation\last_alert.txt (debug last Telegram payload)
-
-🔁 Auto Git Push (manual or scheduled)
-Script: automation\git_auto_push.ps1
-
-Adds/commits all changes with an auto message.
-
-Pushes to the configured remote.
-
-Optionally sends a Telegram ping on success/failure (if .env has Telegram vars).
-
-Manual run:
-
-powershell
-Kopiraj kod
-powershell -ExecutionPolicy Bypass -File automation\git_auto_push.ps1
-Schedule it (optional):
-Create a Task Scheduler task pointing to git_auto_push.ps1.
-Ensure your remote is set (and credentials stored if you use HTTPS):
-
-powershell
-Kopiraj kod
-git remote -v
-# If needed:
-git remote set-url origin https://<TOKEN>@github.com/<USER>/<REPO>.git
-git config --global credential.helper store
-If you see non-fast-forward or fetch first errors:
-
-powershell
-Kopiraj kod
-git pull --rebase origin main
-# resolve if needed, then:
-git push origin main
-🧰 Troubleshooting
-No Telegram alerts
-
-Check .env exists and has valid TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID.
-
-Look at automation\task_wrapper.log and automation\last_alert.txt.
-
-For CI, verify repo Actions secrets are set.
-
-Task shows Last Result: 1/2
-
-Open automation\task_wrapper.log for exact error.
-
-Ensure Execution Policy allows the script (wrapper sets Bypass).
-
-Verify Python venv path in run_smoke_wrapper.ps1 points to .venv\Scripts\python.exe.
-
-Git push rejected
-
-git pull --rebase origin main, resolve conflicts, re-run push.
-
-Ensure DB lock files (data.db-shm, data.db-wal) are not held by a running server when committing.
-
-Module import errors in CI
-
-Add missing packages to requirements.txt (e.g., reportlab, httpx).
-
-🔒 Security Notes
-Never commit your .env.
-
-Prefer a scoped GitHub Personal Access Token when embedding credentials in remotes.
-
-Telegram bot token and chat ID should be secrets (local .env, CI secrets).
-
-📜 License
-MIT (or your chosen license).
-
-🙌 Acknowledgements
-Thanks to everyone who contributed to wiring endpoints, persistence, smoke tests, Windows automation, and CI!
-
-pgsql
-Kopiraj kod
-
-If you want, I can also generate a trimmed `requirements.txt` based on what we used so far.
-::contentReference[oaicite:0]{index=0}

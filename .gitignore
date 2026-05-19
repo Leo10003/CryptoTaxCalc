@@ -1,30 +1,17 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-
-# Virtual env
-.venv/
-
-# Local data / caches / bundles
+# === BEGIN: autosync safety additions ===
 support_bundles/
-support_bundles_temp/
-*.zip
+support_bundles/_meta/*.log
+support_bundles/_meta/export_error_*.txt
+artifacts/
+logs/
 *.log
-last_alert.txt
-
-# OS / editors
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# Secrets (RECOMMENDED to exclude)
+*.zip
+*.rar
+__pycache__/
+.venv/
 .env
-
-# SQLite (usually exclude; include only if you want DB in git)
-data.db
-
-# SQLite temp files
-*.db-shm
-*.db-wal
+.env.*
+*.env
+*.sqlite
+*.db
+# === END: autosync safety additions ===

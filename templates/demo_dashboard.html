@@ -1,0 +1,4213 @@
+{% extends "base.html" %}
+
+{% block title %}CryptoTaxCalc — Demo Dashboard{% endblock %}
+
+{% block head_extra %}
+  <style>
+    /* Basic scrolling; programmatic scroll will be controlled via JS */
+    html, body {
+      scroll-behavior: auto;
+    }
+
+    /* ---- Top demo strip (same visual language as landing) ---- */
+    .demo-strip {
+      width: 100%;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 90;
+      backdrop-filter: blur(10px);
+      background: color-mix(in srgb, var(--surface) 85%, transparent);
+    }
+    .demo-strip-inner {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 6px 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .demo-strip-inner img {
+      filter: drop-shadow(0 0 3px rgba(12,230,200,.5));
+    }
+
+    /* ---- Hero: Stripe-style summary card, aligned with landing ---- */
+    .demo-hero {
+      margin: 26px auto 0;
+      padding: 22px 22px 18px;
+      max-width: 1080px;
+      border-radius: 26px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .demo-hero::before {
+      content: "";
+      position: absolute;
+      inset: -30%;
+      background:
+        radial-gradient(60% 60% at 15% 0%,
+          color-mix(in srgb, var(--brand) 18%, transparent), transparent),
+        radial-gradient(60% 60% at 85% 100%,
+          color-mix(in srgb, var(--accent) 16%, transparent), transparent);
+      opacity: .6;
+      filter: blur(64px);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .demo-hero-main h1 {
+      margin: 0 0 6px;
+      font-size: clamp(26px, 3vw, 34px);
+    }
+
+    .demo-hero-tagline {
+      font-size: 14px;
+      color: var(--text-soft);
+      max-width: 520px;
+    }
+
+    .demo-hero-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      text-align: right;
+      font-size: 12px;
+    }
+
+    .demo-hero .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+
+    /* ---- Small chip bar under hero: FX / Last run / Warnings ---- */
+    .status-chips {
+      max-width: 1080px;
+      margin: 12px auto 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+    }
+
+    /* --- Result summary strip: taxable / exempt / total gain --- */
+    .result-strip {
+      max-width: 1080px;
+      margin: 0 auto; /* margin-top is controlled by .result-strip--has-data */
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transform: translateY(8px);
+      transition:
+        max-height .25s var(--ease),
+        opacity .25s var(--ease),
+        transform .25s var(--ease),
+        margin-top .25s var(--ease);
+    }
+
+    .result-strip.result-strip--has-data {
+      margin-top: 14px;
+      max-height: 300px; /* enough for three cards */
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 900px) {
+      .result-strip {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .result-card {
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      padding: 10px 12px 11px;
+      box-shadow: 0 10px 24px rgba(0,0,0,.14);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 12px;
+    }
+
+    .result-card .label {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .result-card .value {
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .result-card .hint {
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .result-card--taxable .value {
+      color: color-mix(in srgb, var(--accent) 75%, #ffffff);
+    }
+
+    .result-card--exempt .value {
+      color: color-mix(in srgb, var(--brand) 75%, #ffffff);
+    }
+
+    .result-card--total .value {
+      color: var(--text);
+    }
+
+
+    .status-pill strong {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .status-pill-warn {
+      border-color: var(--warn);
+      color: var(--warn);
+    }
+
+    /* ---- Main dashboard grid: Workflow ←→ Status ---- */
+    .dashboard-main {
+      max-width: 1080px;
+      margin: 20px auto 0;
+    }
+
+    /* Top tabs: Workflow / Status */
+    .dashboard-tabs {
+      display: inline-flex;
+      gap: 6px;
+      padding: 0 4px 10px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+      margin-bottom: 12px;
+    }
+
+    .dashboard-tab {
+      position: relative;
+      border-radius: 999px;
+
+      /* stronger border so the tab is readable on white background */
+      border: 1px solid color-mix(in srgb, var(--border) 120%, var(--surface) 20%);
+
+      /* gentle pill background for light mode */
+      background: color-mix(in srgb, var(--surface) 98%, var(--border) 3%);
+
+      padding: 5px 14px;
+      font-size: 12px;
+
+      /* higher contrast label */
+      color: color-mix(in srgb, var(--text) 70%, var(--muted) 30%);
+
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .16s var(--ease),
+                  color .16s var(--ease),
+                  border-color .16s var(--ease),
+                  box-shadow .16s var(--ease);
+    }
+
+    /* ---------- LIGHT THEME FIXES FOR WORKFLOW/STATUS TABS ---------- */
+    html[data-theme="light"] .dashboard-tab.is-active {
+      /* Stronger shadow so it stands out from white background */
+      box-shadow: 0 2px 9px rgba(0,0,0,0.15);
+
+      /* Slightly more saturated gradient for active tab */
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--brand), white 10%) 0%,
+        color-mix(in srgb, var(--accent), white 10%) 100%
+      );
+      
+      /* Make text clearly readable in light mode */
+      color: #000 !important;  /* pure black gives best clarity */
+    }
+
+    html[data-theme="light"] .dashboard-tab.is-active:hover {
+      /* Slight hover lift */
+      box-shadow: 0 3px 11px rgba(0,0,0,0.23);
+      color: #000 !important;
+    }
+
+    .dashboard-tab:hover {
+      background: color-mix(in srgb, var(--surface) 98%, var(--border) 10%);
+      color: var(--text);
+    }
+
+    .dashboard-tab::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 2px;
+      height: 2px;
+      border-radius: 999px;
+      background: transparent;
+      opacity: 0;
+      transform: translateY(2px);
+      transition: opacity .16s var(--ease), transform .16s var(--ease);
+    }
+
+    .dashboard-tab.is-active {
+      border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+      background:
+        linear-gradient(135deg,
+          color-mix(in srgb, var(--brand) 24%, var(--surface)),
+          color-mix(in srgb, var(--accent) 20%, var(--surface)));
+      color: #fff;
+      box-shadow: 0 10px 26px rgba(0,0,0,.35);
+    }
+
+    .dashboard-tab.is-active::after {
+      background: rgba(255,255,255,.85);
+      opacity: .6;
+      transform: translateY(0);
+    }
+
+    .dashboard-tab-panels {
+      margin-top: 4px;
+    }
+
+    .tab-panel {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition:
+        max-height .22s var(--ease),
+        opacity .18s var(--ease),
+        transform .18s var(--ease);
+    }
+
+    .tab-panel.is-active {
+      max-height: 2000px; /* enough for content height */
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    /* --- Light Theme Active Tab (clear but still soft) --- */
+    html[data-theme="light"] .dashboard-tab.is-active {
+      /* Stronger brand tint so the active tab is clearly visible */
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--brand) 40%, #ffffff 60%) 0%,
+        color-mix(in srgb, var(--accent) 40%, #ffffff 60%) 100%
+      );
+      border-color: color-mix(in srgb, var(--brand) 65%, var(--border));
+
+      /* Gentle elevation */
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+
+      /* Clear black label */
+      color: #000 !important;
+    }
+
+    html[data-theme="light"] .dashboard-tab.is-active:hover {
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--brand) 45%, #ffffff 55%) 0%,
+        color-mix(in srgb, var(--accent) 45%, #ffffff 55%) 100%
+      );
+      box-shadow: 0 5px 14px rgba(0, 0, 0, 0.18);
+    }
+
+    @media (max-width: 980px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ---- Workflow shell (left card) ---- */
+    .workflow-shell {
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 97%, transparent);
+      box-shadow: var(--shadow);
+      padding: 18px 18px 20px;
+      display: flex;
+      gap: 18px;
+    }
+
+    .workflow-steps-col {
+      width: 150px;                /* Option A: slim sidebar */
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .workflow-head h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .pipeline-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .pipeline-step {
+      padding: 4px 10px;
+      min-width: 0;
+      text-align: left;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      font-size: 11px;
+      line-height: 1.35;
+      cursor: pointer;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      transition: background .16s var(--ease), color .16s var(--ease), border-color .16s var(--ease);
+    }
+
+    .pipeline-step.is-active {
+      border-color: color-mix(in srgb, var(--brand) 60%, var(--border));
+      color: var(--text);
+      background:
+        linear-gradient(135deg,
+          color-mix(in srgb, var(--brand) 26%, var(--surface)),
+          color-mix(in srgb, var(--accent) 20%, var(--surface)));
+    }
+
+    .pipeline-step::after {
+      content: "✓";
+      font-size: 11px;
+      opacity: .0;
+      transform: translateY(1px);
+      transition: opacity .16s var(--ease);
+    }
+    .pipeline-step.is-complete::after {
+      opacity: .7;
+    }
+
+    .stage-back {
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      border: 1px dashed var(--border);
+      background: transparent;
+      padding: 4px 9px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .stage-back-icon {
+      width: 12px;
+      height: 12px;
+      opacity: .8;
+      display: inline-block;
+    }
+
+    /* Default (dark theme, or anything that is not explicitly light): show white arrow */
+    .stage-back-icon-light {
+      display: none;
+    }
+
+    /* Light theme: hide white arrow, show black arrow */
+    html[data-theme="light"] .stage-back-icon-dark {
+      display: none;
+    }
+    html[data-theme="light"] .stage-back-icon-light {
+      display: inline-block;
+    }
+
+    .juris-switch {
+      margin-top: auto;
+      display: flex;
+      gap: 6px;
+      padding-top: 6px;
+    }
+
+    .seg-pill {
+      flex: 1;
+      padding: 5px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      font-size: 11px;
+      cursor: pointer;
+      color: var(--muted);
+      text-align: center;
+    }
+    .seg-pill.is-active {
+      border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      color: #fff;
+    }
+
+    .fx-mode-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .fx-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      font-size: 11px;
+      cursor: pointer;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .fx-pill.is-active {
+      border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+      background: linear-gradient(135deg, var(--brand), var(--accent));
+      color: #fff;
+    }
+
+    /* ---- Workflow main column (stage content) ---- */
+    .workflow-main-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .stage-caption {
+      font-size: 13px;
+      color: var(--text-soft);
+      margin: 0 0 8px;
+    }
+
+    .next-step-hint {
+      margin: 10px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .workflow-stage {
+      display: none;
+    }
+    .workflow-stage.is-active {
+      display: block;
+    }
+
+    .stage-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    }
+
+    .workflow-panel-card {
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      padding: 14px 14px 16px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.16);
+    }
+
+    .workflow-panel-card strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .workflow-panel-card .muted {
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .input {
+      flex: 1;
+      min-width: 0;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .safety-note {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .switch-row {
+      margin-top: 10px;
+      gap: 10px;
+    }
+
+    /* Simple iOS-style switch */
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-soft);
+      cursor: pointer;
+    }
+    .switch input {
+      display: none;
+    }
+    .switch-track {
+      width: 34px;
+      height: 18px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--border) 70%, transparent);
+      display: inline-flex;
+      align-items: center;
+      padding: 2px;
+      box-sizing: border-box;
+    }
+    .switch-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: #fff;
+      transform: translateX(0);
+      transition: transform .18s var(--ease), background .18s var(--ease);
+    }
+    .switch input:checked + .switch-track .switch-thumb {
+      transform: translateX(16px);
+      background: var(--brand);
+    }
+
+    /* Run Calculation strip shares the same card style */
+    .run-card {
+      margin-top: 6px;
+      border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      padding-top: 12px;
+    }
+
+    /* ---- Status shell (right card) ---- */
+    .status-shell {
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 97%, transparent);
+      box-shadow: var(--shadow);
+      padding: 18px 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .status-shell h2 {
+      margin: 0 0 4px;
+      font-size: 18px;
+    }
+
+    .status-subtitle {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .status-kpis {
+      margin-top: 10px;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    @media (max-width: 900px) {
+      .status-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .kpi {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      padding: 10px 10px 11px;
+      font-size: 12px;
+    }
+    .kpi .k {
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .kpi .v {
+      font-weight: 700;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Soft flip animation when KPI numbers change (used by updateKpi in JS) */
+    .kpi-flip {
+      animation: kpiFlip .35s var(--ease);
+    }
+
+    @keyframes kpiFlip {
+      0% {
+        transform: translateY(3px);
+        opacity: 0.0;
+      }
+      50% {
+        transform: translateY(-1px);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .status-divider {
+      height: 1px;
+      margin: 10px 0;
+      background: var(--border);
+      opacity: .7;
+    }
+
+    .activity-wrapper {
+      border-radius: 14px;
+      border: 1px dashed color-mix(in srgb, var(--border) 90%, transparent);
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      padding: 10px 10px 8px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .runs-list {
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .runs-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      transition:
+        background .16s var(--ease),
+        color .16s var(--ease),
+        border-color .16s var(--ease);
+      border: 1px solid transparent;
+    }
+
+    .runs-item:hover {
+      background: color-mix(in srgb, var(--surface) 97%, var(--border) 10%);
+      color: var(--text);
+      border-color: color-mix(in srgb, var(--border) 120%, transparent);
+    }
+
+    .runs-item-main {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: baseline;
+    }
+
+    .runs-item-main span {
+      margin-right: 6px;
+    }
+
+    .runs-item-badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
+    }
+
+    .runs-item-badge.warn {
+      border-color: var(--warn);
+      color: var(--warn);
+    }
+
+    /* Subtle highlight to guide the eye to Recent runs */
+    .runs-highlight {
+      animation: runs-highlight 900ms ease-out 0s 2;
+    }
+
+    @keyframes runs-highlight {
+      0% {
+        box-shadow: 0 0 0 rgba(75, 155, 255, 0);
+        border-color: color-mix(in srgb, var(--border) 90%, transparent);
+      }
+      40% {
+        box-shadow: 0 0 0 4px rgba(75, 155, 255, 0.35);
+        border-color: color-mix(in srgb, var(--brand) 80%, var(--border));
+      }
+      100% {
+        box-shadow: 0 0 0 rgba(75, 155, 255, 0);
+        border-color: color-mix(in srgb, var(--border) 90%, transparent);
+      }
+    }
+
+    .activity-summary {
+      color: var(--text-soft);
+    }
+
+    .log-details summary {
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .log-details pre {
+      margin-top: 6px;
+      max-height: 200px;
+      overflow: auto;
+      font-size: 11px;
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      border-radius: 10px;
+      padding: 8px;
+      border: 1px solid var(--border);
+    }
+
+    /* ---- Realized Events section reveal ---- */
+    #realizedEventsSection {
+      display: none;           /* fully hidden until we have data */
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transform: translateY(8px);
+      transition:
+        max-height .25s var(--ease),
+        opacity .25s var(--ease),
+        transform .25s var(--ease),
+        margin-top .25s var(--ease);
+    }
+
+    #realizedEventsSection.events-section--has-data {
+      display: block;
+      max-height: 600px;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .context-section {
+      max-width: 1080px;
+      margin: 40px auto 0;
+      padding-bottom: 32px;
+    }
+
+    .context-grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    }
+
+        /* ---- Realized Events table (premium-finance look) ---- */
+    .table-shell {
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      box-shadow: 0 10px 24px rgba(0,0,0,.16);
+      padding: 8px 8px 10px;
+    }
+
+    .table-scroll {
+      max-height: 360px;
+      overflow: auto;
+      border-radius: 12px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 640px;
+    }
+
+    .table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      color: var(--muted);
+      font-weight: 600;
+      padding: 6px 8px;
+      text-align: left;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+      backdrop-filter: blur(8px);
+    }
+
+    .table tbody td {
+      padding: 6px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      max-width: 140px;
+    }
+
+    .table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .table tbody tr:hover {
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+    }
+
+    .table tbody td:nth-child(4),
+    .table tbody td:nth-child(5),
+    .table tbody td:nth-child(6),
+    .table tbody td:nth-child(7) {
+      font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 11px;
+    }
+
+    /* Gain coloring using data attributes set from JS */
+    .table td[data-gain="positive"] {
+      color: color-mix(in srgb, #3be27e 80%, var(--text));
+    }
+
+    .table td[data-gain="negative"] {
+      color: color-mix(in srgb, #ff6b6b 80%, var(--text));
+    }
+
+    .table td[data-gain="neutral"] {
+      color: var(--text-soft);
+    }
+
+    /* Slight right-align for numeric columns */
+    .table tbody td:nth-child(4),
+    .table tbody td:nth-child(5),
+    .table tbody td:nth-child(6),
+    .table tbody td:nth-child(7) {
+      text-align: right;
+    }
+
+    /* Themed scrollbar for the Realized Events table */
+    .table-scroll::-webkit-scrollbar {
+      width: 8px;
+    }
+    .table-scroll::-webkit-scrollbar-track {
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      border-radius: 999px;
+    }
+    /* Light + Dark theme compatible scrollbar */
+    .table-scroll::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--text-soft) 35%, var(--surface) 65%);
+      border-radius: 999px;
+    }
+    .table-scroll::-webkit-scrollbar-track {
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      border-radius: 999px;
+    }
+    .table-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--text-soft) 35%, var(--surface) 65%)
+                      color-mix(in srgb, var(--surface) 92%, transparent);
+    }
+
+    @media (max-width: 980px) {
+      .context-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .country-notes-card {
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 97%, transparent);
+      box-shadow: var(--shadow);
+      padding: 18px 18px 16px;
+    }
+
+    .country-notes-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .country-notes-header img {
+      width: 24px;
+      height: 24px;
+      filter: drop-shadow(0 0 6px rgba(12,230,200,.7));
+    }
+
+    .country-notes-card h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+    .country-notes-card small {
+      display: block;
+      margin-top: 2px;
+      font-size: 11px;
+    }
+
+    .country-notes-card ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      font-size: 13px;
+    }
+
+    .investor-card {
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 97%, transparent);
+      box-shadow: var(--shadow);
+      padding: 14px 14px 16px;
+      font-size: 13px;
+    }
+
+    .investor-card h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+
+    .investor-card ul {
+      margin: 6px 0 0;
+      padding-left: 16px;
+    }
+
+    .investor-card li {
+      margin-bottom: 4px;
+    }
+
+    /* --- Premium styling for Explain card --- */
+    .explain-card {
+      border: 1px solid color-mix(in srgb, var(--brand) 60%, var(--border));
+      background:
+        linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--surface) 95%, var(--brand) 8%) 0%,
+          color-mix(in srgb, var(--surface) 98%, transparent) 35%
+        );
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+    }
+
+    .explain-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .explain-title-block h3 {
+      margin: 0 0 2px;
+      font-size: 15px;
+    }
+
+    .explain-subtitle {
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    /* --- Premium Explain chip (jurisdiction badge) --- */
+    .explain-chip {
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid color-mix(in srgb, var(--brand) 65%, var(--border));
+      background: color-mix(in srgb, var(--surface) 96%, var(--brand) 10%);
+      white-space: nowrap;
+      font-weight: 600;
+
+      /* Default = DARK THEME (bright, readable) */
+      color: #e6f5ff; /* soft white with slight blue tint */
+    }
+
+    /* Light theme override — darker readable text */
+    html[data-theme="light"] .explain-chip {
+      color: #00315a; /* deep blue for readability on light theme */
+      background: color-mix(in srgb, var(--surface) 96%, var(--brand) 12%);
+    }
+
+    /* ---- Stage indicator + toast (bottom helpers) ---- */
+    .stage-indicator {
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      z-index: 80;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      backdrop-filter: blur(10px);
+    }
+
+    /* Small "bump" animation when the stage changes to make progress feel tangible */
+    .stage-indicator.is-bump {
+      animation: stageBump 0.26s var(--ease);
+    }
+
+    @keyframes stageBump {
+      0% {
+        transform: translateY(0) scale(1);
+      }
+      40% {
+        transform: translateY(-2px) scale(1.02);
+      }
+      100% {
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 90;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      transition: opacity .2s var(--ease), transform .2s var(--ease);
+    }
+    .toast.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    /* Support JS using .show instead of .is-visible */
+    .toast.show {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+
+    /* ---- Mini charts row (asset / month / tax split) ---- */
+    .charts-row {
+      max-width: 1080px;
+      margin: 0 auto; /* margin-top is controlled by .charts-row--has-data */
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transform: translateY(8px);
+      transition:
+        max-height .25s var(--ease),
+        opacity .25s var(--ease),
+        transform .25s var(--ease),
+        margin-top .25s var(--ease);
+    }
+
+    .charts-row.charts-row--has-data {
+      margin-top: 14px;
+      max-height: 600px; /* enough to show all three cards */
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 980px) {
+      .charts-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ---- Insight actions strip (under charts) ---- */
+    .insight-actions {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: none; /* hidden until we have a run */
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition:
+        opacity .25s var(--ease),
+        transform .25s var(--ease),
+        margin-top .25s var(--ease);
+    }
+
+    .insight-actions.insight-actions--visible {
+      display: flex;
+      opacity: 1;
+      pointer-events: auto;
+      margin-top: 10px;
+      transform: translateY(0);
+    }
+
+    .insight-actions-text {
+      flex: 1 1 220px;
+      min-width: 0;
+    }
+
+    .insight-actions-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .btn-mini {
+      padding: 4px 10px;
+      font-size: 11px;
+      border-radius: 999px;
+    }
+
+    @media (max-width: 768px) {
+      .insight-actions {
+        align-items: flex-start;
+      }
+      .insight-actions-buttons {
+        justify-content: flex-start;
+      }
+    }
+
+    .chart-card {
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      box-shadow: 0 10px 24px rgba(0,0,0,.16);
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 160px;
+    }
+
+    .chart-card h3 {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .chart-card .chart-subtitle {
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .chart-card canvas {
+      width: 100%;
+      height: 140px;
+    }
+
+
+    .chart-card {
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      box-shadow: 0 10px 24px rgba(0,0,0,.16);
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 160px;
+    }
+
+    .chart-card h3 {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .chart-card .chart-subtitle {
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .chart-card canvas {
+      width: 100%;
+      height: 140px;
+    }
+
+    /* ========================= */
+    /* SCENARIO COMPARISON DRAWER */
+    /* ========================= */
+
+    .compare-drawer {
+      position: fixed;
+      top: 0;
+      right: -420px;  /* fully hidden by default */
+      width: 420px;
+      height: 100vh;
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      border-left: 1px solid var(--border);
+      box-shadow: -8px 0 28px rgba(0,0,0,.28);
+      z-index: 200;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      backdrop-filter: blur(16px);
+      transition: right .35s var(--ease);
+    }
+
+    .compare-drawer.is-open {
+      right: 0;
+    }
+
+    .compare-drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .compare-drawer h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .compare-close-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-soft);
+      font-size: 22px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 8px;
+      transition: background .16s;
+    }
+    .compare-close-btn:hover {
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+    }
+
+    .compare-drawer-subtitle {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .compare-drawer-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .compare-scenario-block {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px;
+      background: color-mix(in srgb, var(--surface) 98%, transparent);
+      box-shadow: 0 8px 18px rgba(0,0,0,.12);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .compare-scenario-title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .compare-scenario-meta {
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .compare-kpi-list {
+      list-style: none;
+      margin: 4px 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .compare-kpi-list li {
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+      padding-bottom: 2px;
+    }
+
+    .compare-drawer-footer {
+      font-size: 12px;
+      padding: 10px 0 4px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Highlighting deltas */
+    .delta-positive { color: #3be27e; }
+    .delta-negative { color: #ff6b6b; }
+    .delta-neutral { color: var(--text-soft); }
+
+
+    /* ---- Responsive tweaks ---- */
+    @media (max-width: 768px) {
+      .demo-hero {
+        flex-direction: column;
+        align-items: flex-start;
+        border-radius: 22px;
+        padding: 18px 18px 16px;
+      }
+      .demo-hero-meta {
+        align-items: flex-start;
+        text-align: left;
+      }
+      .workflow-shell,
+      .status-shell {
+        padding: 16px 14px 16px;
+      }
+      .workflow-steps-col {
+        width: 140px;
+      }
+    }
+    /* Dashboard: hard override all theme animated backgrounds */
+    html[data-demo-dashboard] body::before,
+    html[data-demo-dashboard] body::after {
+      animation: none !important;
+      background: none !important;
+      opacity: 0 !important;
+      transform: none !important;
+      filter: none !important;
+    }
+
+    html[data-demo-dashboard] body {
+      background: var(--bg) !important;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <!-- Slim build-status strip -->
+  <div class="demo-strip">
+    <div class="demo-strip-inner">
+      <img id="statusMark" src="/logo/icon?theme=dark" alt="" width="18" height="18" />
+      <div>
+        <span>Demo build:</span>
+        <span id="demo-build">n/a</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- HERO -->
+    <section class="demo-hero reveal">
+      <div class="demo-hero-main">
+        <div class="badge">Demo mode • local only</div>
+        <h1>Investor Demo Dashboard</h1>
+        <p class="demo-hero-tagline">
+          Import → Calculate → Export — with your data staying on this machine and every step auditable.
+        </p>
+      </div>
+      <div class="demo-hero-meta">
+        <div class="badge" id="buildInfo">
+          Version: dev • Commit: local • Build: n/a
+        </div>
+        <div style="font-size:12px; color:var(--muted); max-width:260px;">
+          Designed for <strong>clear tax outcomes</strong> — not trading noise.
+        </div>
+      </div>
+    </section>
+
+    <!-- FX / Last Run / Warnings -->
+    <section class="status-chips" aria-label="Run context">
+      <span class="status-pill">
+        FX: <strong id="fx-rate">–</strong>
+        <span>(Batch <strong id="fx-batch">–</strong>)</span>
+      </span>
+      <span class="status-pill">
+        Last Run: <strong id="kRun">–</strong>
+      </span>
+      <span
+        class="status-pill status-pill-warn"
+        title="Warnings flag missing FX data or edge conditions that may need review. They do not always mean errors."
+      >
+        Warnings: <strong id="kWarn">0</strong>
+      </span>
+    </section>
+
+    <!-- SUMMARY + CHARTS INSIGHT ZONE -->
+    <section class="insights-section snap-section">
+      <!-- RESULT SUMMARY STRIP -->
+      <section class="result-strip" aria-label="Tax summary">
+        <div class="result-card result-card--taxable">
+          <div class="label">Taxable gain</div>
+          <div class="value" id="kTaxable">–</div>
+          <div class="hint">
+            Portion of realised gain currently taxable in the selected jurisdiction.
+          </div>
+        </div>
+        <div class="result-card result-card--exempt">
+          <div class="label">Exempt gain</div>
+          <div class="value" id="kExempt">–</div>
+          <div class="hint">
+            Long-term / threshold-exempt portion (where applicable).
+          </div>
+        </div>
+        <div class="result-card result-card--total">
+          <div class="label">Total realised gain</div>
+          <div class="value" id="kGain">–</div>
+          <div class="hint">
+            Sum of taxable and exempt realised gains shown in this demo run.
+          </div>
+        </div>
+      </section>
+
+      <!-- MINI CHARTS: by asset / by month / tax split -->
+      <section class="charts-row" aria-label="Tax charts">
+        <div class="chart-card">
+          <h3>Gain by asset</h3>
+          <p class="chart-subtitle">Which assets contributed most to realised gain.</p>
+          <canvas id="chartAsset"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Realised gain by month</h3>
+          <p class="chart-subtitle">Timeline of realised gain in the selected dataset.</p>
+          <canvas id="chartMonth"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Taxable vs exempt</h3>
+          <p class="chart-subtitle">Split of total gain for the current jurisdiction.</p>
+          <canvas id="chartTaxSplit"></canvas>
+        </div>
+      </section>
+
+      <!-- NEXT STEPS / ACTION STRIP -->
+      <section class="insight-actions" aria-label="Next steps">
+        <span class="insight-actions-text">
+          Next steps • Review this run, then adjust or export it as needed.
+        </span>
+        <div class="insight-actions-buttons">
+          <button
+            type="button"
+            class="btn btn-outline btn-mini"
+            id="btnScrollToWorkflow"
+          >
+            Adjust inputs
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline btn-mini"
+            id="btnQuickExport"
+          >
+            Export summary
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline btn-mini"
+            id="btnScrollToEvents"
+          >
+            Inspect events
+          </button>
+        </div>
+      </section>
+    </section>
+
+    <!-- MAIN DASHBOARD GRID -->
+    <section class="dashboard-main snap-section reveal">
+      <!-- Tabs: Workflow / Status -->
+      <div class="dashboard-tabs" role="tablist" aria-label="Demo views">
+        <button
+          type="button"
+          class="dashboard-tab is-active"
+          id="tabWorkflow"
+          role="tab"
+          aria-selected="true"
+          aria-controls="panelWorkflow"
+        >
+          <span>Workflow</span>
+        </button>
+        <button
+          type="button"
+          class="dashboard-tab"
+          id="tabStatus"
+          role="tab"
+          aria-selected="false"
+          aria-controls="panelStatus"
+        >
+          <span>Status</span>
+        </button>
+      </div>
+
+      <div class="dashboard-tab-panels">
+        <!-- PANEL: Workflow -->
+        <div
+          id="panelWorkflow"
+          class="tab-panel is-active"
+          role="tabpanel"
+          aria-labelledby="tabWorkflow"
+          aria-hidden="false"
+        >
+          <!-- Guided Workflow wizard -->
+          <section class="workflow-shell" aria-label="Workflow">
+            <!-- Steps / jurisdiction column -->
+            <div class="workflow-steps-col">
+              <div class="workflow-head">
+                <h2>Workflow</h2>
+                <div class="pipeline-steps" aria-label="Demo pipeline">
+                  <button type="button" class="pipeline-step is-active" id="stageStep1">
+                    <span>1. Data</span>
+                  </button>
+                  <button type="button" class="pipeline-step" id="stageStep2">
+                    <span>2. Calculate</span>
+                  </button>
+                  <button type="button" class="pipeline-step" id="stageStep3">
+                    <span>3. Export</span>
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                id="btnStageBack"
+                class="stage-back"
+                style="display:none;"
+              >
+                <img
+                  src="/static/img/icons/stage_back.png"
+                  alt=""
+                  aria-hidden="true"
+                  class="stage-back-icon stage-back-icon-dark"
+                />
+                <img
+                  src="/static/img/icons/stage_back_black.png"
+                  alt=""
+                  aria-hidden="true"
+                  class="stage-back-icon stage-back-icon-light"
+                />
+                <span>Back</span>
+              </button>
+
+              <!-- hidden input used by JS for /calculate/v2 -->
+              <input type="hidden" id="jurisdiction" value="HR" />
+            </div>
+
+            <!-- Stage panels / main column -->
+            <div class="workflow-main-col">
+              <!-- Stage 1: Data -->
+              <div id="stage1Panel" class="workflow-stage is-active">
+                <p class="stage-caption">
+                  Step 1 • Pick your data source: demo dataset or your own CSVs.
+                </p>
+                <div class="stage-grid">
+                  <div class="workflow-panel-card" id="cardLoadDemo">
+                    <strong>Load Demo Dataset</strong>
+                    <p class="muted">Reset and seed a clean demo DB.</p>
+                    <div class="row">
+                      <button id="btnReset" class="btn btn-ghost">
+                        Reset Demo Environment
+                      </button>
+                    </div>
+                    <div class="row" style="margin-top:8px;">
+                      <button id="btnSkipToCalc" class="btn btn-primary">
+                        Next: use current demo data
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="workflow-panel-card" id="cardFxUpload">
+                    <strong>FX rates (optional)</strong>
+                    <p class="muted">
+                      Import a CSV of daily EUR/USD rates to replace the demo 1.0 FX.
+                    </p>
+                    <div class="row">
+                      <input
+                        id="fxFile"
+                        type="file"
+                        class="input"
+                        accept=".csv,text/csv"
+                      />
+                      <button id="btnUploadFx" class="btn btn-outline">Import FX</button>
+                    </div>
+                    <p class="safety-note">
+                      Expected columns: <code>date</code> and <code>usd_per_eur</code> (one row per day).
+                    </p>
+                  </div>
+
+                  <div class="workflow-panel-card" id="cardUploadCsv">
+                    <strong>Upload CSVs</strong>
+                    <p class="muted">
+                      Multiple files supported (Binance, Coinbase, etc.).
+                    </p>
+                    <div class="row">
+                      <input
+                        id="csvFiles"
+                        type="file"
+                        class="input"
+                        multiple
+                        accept=".csv,text/csv"
+                      />
+                      <button id="btnUpload" class="btn btn-outline">Upload</button>
+                    </div>
+                    <p class="safety-note">
+                      Files stay on this machine. No trading data is sent to a server in this demo.
+                    </p>
+                  </div>
+                </div>
+                <p class="next-step-hint">
+                  When you’re ready, continue to <strong>Stage 2 • Calculate</strong> to see a tax summary.
+                </p>
+              </div>
+
+              <!-- Stage 2: Calculate -->
+              <div id="stage2Panel" class="workflow-stage">
+                <p class="stage-caption">
+                  Step 2 • Run the calculation for this jurisdiction and review the preview.
+                </p>
+                <p class="next-step-hint">
+                  Once the summary and charts look good, continue to
+                  <strong>Stage 3 • Export</strong> to generate reports.
+                </p>
+              </div>
+
+              <!-- Stage 3: Export -->
+              <div id="stage3Panel" class="workflow-stage">
+                <p class="stage-caption">
+                  Step 3 • Choose what should appear in your exported summary.
+                </p>
+                <p class="next-step-hint">
+                  You can always go back to <strong>Stage 2 • Calculate</strong> to re-run a scenario;
+                  exports will always use your latest run.
+                </p>
+
+                <div class="workflow-panel-card" id="cardReportOptions">
+                  <strong>Report Options</strong>
+                  <p class="muted">
+                    Optional clarity sections for the exported summary.
+                    They only change wording in exports — calculations stay the same and this is
+                    <strong>not tax advice</strong>.
+                  </p>
+
+                  <div class="row switch-row">
+                    <label class="switch">
+                      <input type="checkbox" id="chkTaxHelpers" checked />
+                      <span class="switch-track">
+                        <span class="switch-thumb"></span>
+                      </span>
+                      <span>Add jurisdiction-specific helper notes</span>
+                    </label>
+                  </div>
+
+                  <div class="row switch-row">
+                    <label class="switch">
+                      <input type="checkbox" id="chkAuditAppendix" checked />
+                      <span class="switch-track">
+                        <span class="switch-thumb"></span>
+                      </span>
+                      <span>Add audit-style transparency appendix</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Run Calculation card: shared by stages 2 & 3 -->
+              <div
+                class="workflow-panel-card run-card"
+                id="cardRunCalc"
+                style="margin-top:6px;"
+              >
+                <!-- Jurisdiction label updated from JS when pills change -->
+                <p class="muted" id="jurisLabel">
+                  Current jurisdiction: <strong>Croatia (HR)</strong>.
+                </p>
+
+                <!-- Jurisdiction selector (used at calculation time) -->
+                <div class="row" id="rowJurisdiction" style="margin-top:4px;">
+                  <span class="muted" style="font-size:12px;">Jurisdiction:</span>
+                  <div class="juris-switch" role="radiogroup" aria-label="Jurisdiction">
+                    <button type="button" class="seg-pill is-active" data-value="HR">
+                      Croatia (HR)
+                    </button>
+                    <button type="button" class="seg-pill" data-value="IT">
+                      Italy (IT)
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Short explanation with correct behavior -->
+                <p class="muted">
+                  FIFO with FX normalization. The jurisdiction (HR vs IT) changes how
+                  taxable vs exempt gains are computed; report options only change how
+                  the summary explains those results.
+                </p>
+
+                <!-- FX mode pills (Stage 2 only) -->
+                <div class="fx-mode-row" id="fxModeRow">
+                  <span class="muted" style="font-size:12px;">FX mode:</span>
+                  <button
+                    type="button"
+                    class="fx-pill is-active"
+                    data-mode="demo"
+                    title="Allow FX fallback to 1.0 when rates are missing (safer for demos)."
+                  >
+                    Demo-safe
+                  </button>
+                  <button
+                    type="button"
+                    class="fx-pill"
+                    data-mode="strict"
+                    title="Require real FX data; fail if rates are missing."
+                  >
+                    Strict (no fallback)
+                  </button>
+                </div>
+
+                <p class="safety-note" id="calcSafetyNote">
+                  This demo is here to guide you, but it’s not tax advice.
+                  Your actual obligations depend on your full portfolio and local rules.
+                </p>
+
+                <div class="row" id="rowCalcActions" style="margin-top:8px;">
+                  <button id="btnCalculate" class="btn btn-primary">
+                    Calculate
+                  </button>
+                </div>
+
+                <div class="row" id="rowExportActions" style="margin-top:10px;">
+                  <span class="muted" style="font-size:12px;">Export:</span>
+
+                  <button
+                    id="btnExplain"
+                    class="btn btn-ghost"
+                    type="button"
+                    title="Explain how the report is computed"
+                  >
+                    Explain
+                  </button>
+
+                  <button
+                    id="btnCompare"
+                    class="btn btn-outline"
+                    type="button"
+                    title="Compare this run to another scenario"
+                  >
+                    Compare
+                  </button>
+
+                  <button id="btnExport" class="btn btn-outline">
+                    Summary (PDF/CSV)
+                  </button>
+
+                  <button id="btnDiag" class="btn btn-outline">
+                    Diagnostics bundle
+                  </button>
+                </div>
+
+                <p id="runConfigSummary" class="muted" style="margin-top:4px;">
+                  No calculation yet. Run a calculation in <strong>Stage&nbsp;2 •&nbsp;Calculate</strong>, then return here to export your summary.
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- PANEL: Status -->
+        <div
+          id="panelStatus"
+          class="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tabStatus"
+          aria-hidden="true"
+        >
+          <!-- Engine Status + Activity -->
+          <section class="status-shell" aria-label="Engine status">
+            <div>
+              <h2>Status</h2>
+              <p class="status-subtitle">
+                Engine health and audit trail readiness for this demo.
+              </p>
+            </div>
+
+            <div class="status-kpis">
+              <div class="kpi">
+                <div class="k">Database</div>
+                <div id="kDb" class="v">–</div>
+              </div>
+              <div
+                class="kpi"
+                data-tip="In this demo, calculations run locally on this machine. Trading data is not sent to a remote server."
+              >
+                <div class="k">Demo Mode</div>
+                <div id="kDemo" class="v">–</div>
+              </div>
+              <div class="kpi">
+                <div class="k">Last Run</div>
+                <div id="kRunKpi" class="v">–</div>
+              </div>
+              <div class="kpi">
+                <div class="k">Build</div>
+                <div id="kBuild" class="v">–</div>
+              </div>
+            </div>
+
+            <div class="status-divider"></div>
+
+            <h3 style="margin:0 0 4px;">Activity</h3>
+            <div class="activity-wrapper">
+              <div class="activity-summary" id="activitySummary">
+                Ready.
+              </div>
+              <details class="log-details">
+                <summary>Technical log (for engineers)</summary>
+                <pre id="log"></pre>
+              </details>
+            </div>
+
+            <div class="status-divider"></div>
+
+            <h3 style="margin:0 0 4px;">Recent runs</h3>
+            <div class="activity-wrapper" id="recentRunsWrapper">
+              <div id="recentRunsEmpty" class="muted">
+                No runs yet. Once you calculate, recent runs will appear here.
+              </div>
+              <ul id="recentRunsList" class="runs-list"></ul>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- REALIZED EVENTS (results table) -->
+    <section
+      id="realizedEventsSection"
+      class="snap-section reveal"
+      aria-labelledby="realizedEventsHeading"
+      style="margin-top:32px;"
+    >
+      <div class="section-title" style="max-width:1080px;margin:0 auto 4px;">
+        <h2 id="realizedEventsHeading" style="margin:0 0 2px;">Realized Events</h2>
+        <span class="muted" id="realizedEventsMeta">
+          Run a calculation to see realized events.
+        </span>
+      </div>
+
+      <div class="table-shell" style="max-width:1080px;margin:8px auto 0;">
+        <div class="table-scroll">
+          <table class="table" aria-describedby="realizedEventsMeta">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Asset</th>
+                <th>Side</th>
+                <th>Qty</th>
+                <th>Proceeds</th>
+                <th>Cost</th>
+                <th>Gain / Loss</th>
+              </tr>
+            </thead>
+            <tbody id="realizedEventsBody">
+              <tr>
+                <td colspan="7" class="muted">
+                  No data yet. Run a calculation to preview realized events.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTEXT / INVESTOR NOTES -->
+    <section class="context-section snap-section reveal">
+      <div class="context-grid">
+        <!-- Left: Country notes -->
+        <section class="country-notes-card" id="country-notes-card">
+          <header class="country-notes-header">
+            <img
+              src="/static/img/icons/flag_hr.png"
+              alt=""
+              aria-hidden="true"
+            />
+            <div>
+              <div id="country-notes-title">
+                Country Notes – Croatia (demo)
+              </div>
+              <small id="country-notes-subtitle" class="muted">
+                High-level, non-binding context only.
+              </small>
+            </div>
+          </header>
+
+          <ul id="country-notes-list">
+            <li>
+              This demo helps you understand how taxable gain/loss patterns for crypto trades could look.
+            </li>
+            <li>
+              It does not implement full Croatian tax rules or reflect your personal situation.
+            </li>
+            <li>
+              Real filings may depend on holding periods, local guidance and additional documentation.
+            </li>
+            <li>
+              Numbers shown here are for product testing only and must not be used for actual returns.
+            </li>
+          </ul>
+
+          <p
+            id="country-notes-disclaimer"
+            class="muted"
+            style="margin-top:10px; font-size:12px;"
+          >
+            This section is illustrative and for information only — not tax advice.
+            Your actual obligations depend on your country, thresholds and personal circumstances.
+          </p>
+        </section>
+
+        <!-- Right: investor explainers -->
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <section class="investor-card">
+            <h3>What this demo shows</h3>
+            <ul>
+              <li>End-to-end pipeline: import → normalize → calculate → export.</li>
+              <li>FIFO lot matching with FX normalization applied at each taxable event.</li>
+              <li>Local-only demo: calculations run on this machine, not a remote server.</li>
+              <li>Auditability: every run is stored with a technical log and diagnostics bundle.</li>
+            </ul>
+          </section>
+
+          <section class="investor-card">
+            <h3>Scope &amp; safety</h3>
+            <ul>
+              <li>Uses synthetic demo data — not your real trades.</li>
+              <li>Behavior mirrors an internal engine prototype, but is <strong>not tax advice</strong>.</li>
+              <li>Any real deployment would be jurisdiction-specific and reviewed with tax professionals.</li>
+              <li>Designed to illustrate <strong>capabilities &amp; UX</strong>, not to file a return.</li>
+            </ul>
+          </section>
+
+          <section class="investor-card explain-card" id="explainPanel" style="display:none;">
+            <header class="explain-header">
+              <div class="explain-title-block">
+                <h3 id="explainTitle">Explain this run</h3>
+                <small class="muted explain-subtitle">
+                  High-level, non-binding explanation of the latest run.
+                </small>
+              </div>
+              <span id="explainJurChip" class="explain-chip">HR</span>
+            </header>
+            <ul id="explainList">
+              <!-- JS will inject explanation bullets here after each calculation -->
+            </ul>
+          </section>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="stageIndicator" class="stage-indicator" aria-live="polite">
+    Stage 1: Data
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- SCENARIO COMPARISON DRAWER -->
+  <div id="compareDrawer" class="compare-drawer" aria-hidden="true">
+    <div class="compare-drawer-header">
+      <h3>Scenario Comparison</h3>
+      <button id="compareDrawerClose" class="compare-close-btn" aria-label="Close comparison drawer">×</button>
+    </div>
+
+    <p class="compare-drawer-subtitle muted">
+      Compare this run with another scenario to see how taxable, exempt, and total gains differ.
+    </p>
+
+    <div class="compare-drawer-body">
+      <!-- LEFT Scenario -->
+      <div class="compare-scenario-block">
+        <div class="compare-scenario-title">Scenario A</div>
+        <div class="compare-scenario-meta" id="scenarioA_meta">None selected.</div>
+        <button class="btn btn-outline btn-mini" id="btnPickScenarioA">Choose run</button>
+
+        <ul class="compare-kpi-list" id="scenarioA_kpis">
+          <!-- JS fills KPIs -->
+        </ul>
+      </div>
+
+      <!-- RIGHT Scenario -->
+      <div class="compare-scenario-block">
+        <div class="compare-scenario-title">Scenario B</div>
+        <div class="compare-scenario-meta" id="scenarioB_meta">None selected.</div>
+        <button class="btn btn-outline btn-mini" id="btnPickScenarioB">Choose run</button>
+
+        <ul class="compare-kpi-list" id="scenarioB_kpis">
+          <!-- JS fills KPIs -->
+        </ul>
+      </div>
+    </div>
+
+    <div class="compare-drawer-footer">
+      <div id="compareDeltaSummary" class="compare-delta-summary muted">
+        Select two scenarios to view differences.
+      </div>
+    </div>
+  </div>
+
+{% endblock %}
+
+
+{% block scripts %}
+
+  <!-- Lightweight chart library for the mini dashboards -->
+  <script>
+    (function() {
+      function load(src) {
+        return new Promise(function(resolve, reject) {
+          var s = document.createElement('script');
+          s.src = src;
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      // Local-first for offline demo; CDN fallback for dev environments.
+      window.__ctcChartReady = load('/static/vendor/chartjs/chart.umd.min.js')
+        .catch(function() { return load('https://cdn.jsdelivr.net/npm/chart.js'); })
+        .catch(function() { return null; });
+    })();
+  </script>
+
+  <script>
+    (function() {
+      const ready = window.__ctcChartReady || Promise.resolve();
+      ready.finally(function() {
+        (function() {
+        const toastEl = document.getElementById('toast');
+        const logEl = document.getElementById('log');
+        const realizedBody = document.getElementById('realizedEventsBody');
+        const realizedMeta = document.getElementById('realizedEventsMeta');
+        const activitySummary = document.getElementById('activitySummary');
+        const fxRateEl  = document.getElementById('fx-rate');
+        const fxBatchEl = document.getElementById('fx-batch');
+
+        const recentRunsWrapper = document.getElementById('recentRunsWrapper');
+        const recentRunsList = document.getElementById('recentRunsList');
+        const recentRunsEmpty = document.getElementById('recentRunsEmpty');
+
+        const jurisLabel = document.getElementById('jurisLabel');
+
+
+        // Top-strip + KPI elements we want to hydrate from the backend
+        const demoBuildEl = document.getElementById('demo-build');
+        const buildInfoEl = document.getElementById('buildInfo');
+
+        const kDbEl    = document.getElementById('kDb');
+        const kDemoEl  = document.getElementById('kDemo');
+        const kRunEl   = document.getElementById('kRun');
+        const kRunKpiEl = document.getElementById('kRunKpi');
+        const kBuildEl = document.getElementById('kBuild');
+
+        const kTaxableEl = document.getElementById('kTaxable');
+        const kExemptEl  = document.getElementById('kExempt');
+        const kGainEl    = document.getElementById('kGain');
+
+        // Chart canvases
+        const chartAssetEl = document.getElementById('chartAsset');
+        const chartMonthEl = document.getElementById('chartMonth');
+        const chartTaxSplitEl = document.getElementById('chartTaxSplit');
+        const chartsRowEl = document.querySelector('.charts-row');
+
+        const explainPanelEl = document.getElementById('explainPanel');
+        const explainListEl = document.getElementById('explainList');
+        const explainTitleEl = document.getElementById('explainTitle');
+
+        // Scenario comparison drawer elements
+        const compareDrawer = document.getElementById('compareDrawer');
+        const compareDeltaSummary = document.getElementById('compareDeltaSummary');
+        const scenarioAMetaEl = document.getElementById('scenarioA_meta');
+        const scenarioBMeteEl = document.getElementById('scenarioB_meta');
+        const scenarioAKpisEl = document.getElementById('scenarioA_kpis');
+        const scenarioBKpisEl = document.getElementById('scenarioB_kpis');
+        const btnPickScenarioA = document.getElementById('btnPickScenarioA');
+        const btnPickScenarioB = document.getElementById('btnPickScenarioB');
+
+        const resultStripEl = document.querySelector('.result-strip');
+        const eventsSectionEl = document.getElementById('realizedEventsSection');
+
+        const insightsSectionEl = document.querySelector('.insights-section');
+
+        // Chart.js instances
+        let chartByAsset = null;
+        let chartByMonth = null;
+        let chartTaxSplit = null;
+
+
+        // Dashboard tabs: Workflow / Status
+        const tabWorkflow   = document.getElementById('tabWorkflow');
+        const tabStatus     = document.getElementById('tabStatus');
+        const panelWorkflow = document.getElementById('panelWorkflow');
+        const panelStatus   = document.getElementById('panelStatus');
+
+        function setDashboardTab(which) {
+          const isWorkflow = (which === 'workflow');
+
+          if (tabWorkflow && tabStatus) {
+            tabWorkflow.classList.toggle('is-active', isWorkflow);
+            tabStatus.classList.toggle('is-active', !isWorkflow);
+
+            tabWorkflow.setAttribute('aria-selected', isWorkflow ? 'true' : 'false');
+            tabStatus.setAttribute('aria-selected', isWorkflow ? 'false' : 'true');
+          }
+
+          if (panelWorkflow && panelStatus) {
+            panelWorkflow.classList.toggle('is-active', isWorkflow);
+            panelStatus.classList.toggle('is-active', !isWorkflow);
+
+            panelWorkflow.setAttribute('aria-hidden', isWorkflow ? 'false' : 'true');
+            panelStatus.setAttribute('aria-hidden', isWorkflow ? 'true' : 'false');
+          }
+        }
+
+        // Soft flip animation when KPI values change
+        function updateKpi(el, value) {
+          if (!el) return;
+          const newText = String(value);
+          if (el.textContent === newText) return;
+
+          el.textContent = newText;
+          el.classList.remove('kpi-flip');
+          // force reflow so animation retriggers
+          void el.offsetWidth;
+          el.classList.add('kpi-flip');
+          setTimeout(() => el.classList.remove('kpi-flip'), 450);
+        }
+
+
+        function fmtEur(value) {
+          if (value === null || value === undefined) return '–';
+          const num = Number(String(value).replace(/\s/g, '').replace(',', '.'));
+          if (!Number.isFinite(num)) return String(value);
+          // For dashboard: 2 decimals + € sign
+          return num.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }) + ' €';
+        }
+
+        function parseScenarioNum(raw) {
+          if (raw === null || raw === undefined) return 0;
+          const num = Number(String(raw).replace(/\s/g, '').replace(',', '.'));
+          return Number.isFinite(num) ? num : 0;
+        }
+
+        function refreshRunConfigSummary() {
+          if (!runConfigSummary) return;
+
+          // Only update if we're in Stage 3 (export); Stage 1/2 hide this line
+          if (pipelineStage !== 3) return;
+
+          const jurCode = (juris && juris.value) ? juris.value : 'HR';
+          const helpersOn = !chkTaxHelpers || chkTaxHelpers.checked;
+          const auditOn = !chkAuditAppendix || chkAuditAppendix.checked;
+
+          if (!lastRunLabel) {
+            runConfigSummary.innerHTML =
+              'No calculation yet. Run a calculation in <strong>Stage&nbsp;2 •&nbsp;Calculate</strong>, then return here to export your summary.';
+            return;
+          }
+
+          const helpersLabel = helpersOn ? 'ON' : 'OFF';
+          const auditLabel = auditOn ? 'ON' : 'OFF';
+
+          runConfigSummary.textContent =
+            `Last run: ${jurCode} • helper notes ${helpersLabel} • transparency appendix ${auditLabel} (affects summary exports only).`;
+        }
+
+
+        function updateChartsFromRun(events, totals, jurisdiction) {
+          if (typeof Chart === 'undefined') return;
+
+          if (!Array.isArray(events) || events.length === 0) {
+            // No events → hide charts and clear any existing instances
+            if (chartByAsset) { chartByAsset.destroy(); chartByAsset = null; }
+            if (chartByMonth) { chartByMonth.destroy(); chartByMonth = null; }
+            if (chartTaxSplit) { chartTaxSplit.destroy(); chartTaxSplit = null; }
+            if (chartsRowEl) {
+              chartsRowEl.classList.remove('charts-row--has-data');
+            }
+            return;
+          }
+
+          // At least one event → show the charts container
+          if (chartsRowEl) {
+            chartsRowEl.classList.add('charts-row--has-data');
+          }
+
+          // ----- 1) Gain by asset (pie/donut) -----
+          const byAsset = {};
+          events.forEach(ev => {
+            const asset = (ev.asset || ev.symbol || '').toUpperCase();
+            const gainRaw = ev.gain || ev.pnl || ev.gain_eur || null;
+            if (!asset || gainRaw == null) return;
+            const num = Number(String(gainRaw).replace(/\s/g, '').replace(',', '.'));
+            if (!Number.isFinite(num)) return;
+            byAsset[asset] = (byAsset[asset] || 0) + num;
+          });
+
+          const assetLabels = Object.keys(byAsset);
+          const assetData = assetLabels.map(a => byAsset[a]);
+
+          if (chartByAsset) chartByAsset.destroy();
+          if (chartAssetEl && assetLabels.length) {
+            chartByAsset = new Chart(chartAssetEl.getContext('2d'), {
+              type: 'doughnut',
+              data: {
+                labels: assetLabels,
+                datasets: [{
+                  data: assetData,
+                }],
+              },
+              options: {
+                plugins: {
+                  legend: { display: true, position: 'bottom' },
+                },
+                cutout: '60%',
+              },
+            });
+          }
+
+          // ----- 2) Gain by month (bar) -----
+          const byMonth = {};
+          events.forEach(ev => {
+            const ts = ev.timestamp || ev.time || '';
+            if (!ts) return;
+            const d = new Date(ts);
+            if (Number.isNaN(d.getTime())) return;
+            const key = d.getFullYear().toString().padStart(4, '0') + '-' +
+                        String(d.getMonth() + 1).padStart(2, '0');
+            const gainRaw = ev.gain || ev.pnl || ev.gain_eur || null;
+            if (gainRaw == null) return;
+            const num = Number(String(gainRaw).replace(/\s/g, '').replace(',', '.'));
+            if (!Number.isFinite(num)) return;
+            byMonth[key] = (byMonth[key] || 0) + num;
+          });
+
+          const monthLabels = Object.keys(byMonth).sort();
+          const monthData = monthLabels.map(m => byMonth[m]);
+
+          if (chartByMonth) chartByMonth.destroy();
+          if (chartMonthEl && monthLabels.length) {
+            chartByMonth = new Chart(chartMonthEl.getContext('2d'), {
+              type: 'bar',
+              data: {
+                labels: monthLabels,
+                datasets: [{
+                  data: monthData,
+                }],
+              },
+              options: {
+                plugins: {
+                  legend: { display: false },
+                },
+                scales: {
+                  x: { ticks: { autoSkip: true, maxTicksLimit: 6 } },
+                  y: { ticks: { callback: v => v } },
+                },
+              },
+            });
+          }
+
+          // ----- 3) Taxable vs exempt (donut) -----
+          const taxableRaw = totals
+            ? (totals.taxable_gain_eur ?? totals.taxable_gain ?? 0)
+            : 0;
+          const exemptRaw = totals
+            ? (totals.exempt_gain_eur ?? totals.exempt_gain ?? 0)
+            : 0;
+
+          const taxableNum = Number(String(taxableRaw).replace(/\s/g, '').replace(',', '.')) || 0;
+          const exemptNum  = Number(String(exemptRaw).replace(/\s/g, '').replace(',', '.')) || 0;
+
+          if (chartTaxSplit) chartTaxSplit.destroy();
+          if (chartTaxSplitEl && (taxableNum !== 0 || exemptNum !== 0)) {
+            chartTaxSplit = new Chart(chartTaxSplitEl.getContext('2d'), {
+              type: 'doughnut',
+              data: {
+                labels: ['Taxable', 'Exempt'],
+                datasets: [{
+                  data: [taxableNum, exemptNum],
+                }],
+              },
+              options: {
+                plugins: {
+                  legend: { display: true, position: 'bottom' },
+                },
+                cutout: '60%',
+              },
+            });
+          }
+        }
+
+        function scrollToSection(el, offset = 80, duration = 700) {
+          if (!el) return;
+          const startY = window.scrollY || window.pageYOffset;
+          const rect = el.getBoundingClientRect();
+          const targetY = rect.top + startY - offset;
+          const distance = targetY - startY;
+          if (Math.abs(distance) < 4) return;
+
+          const startTime = performance.now();
+          const easeInOutQuad = (t) =>
+            t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+          function step(now) {
+            const elapsed = now - startTime;
+            const t = Math.min(elapsed / duration, 1);
+            const eased = easeInOutQuad(t);
+            window.scrollTo(0, startY + distance * eased);
+            if (t < 1) {
+              requestAnimationFrame(step);
+            }
+          }
+
+          requestAnimationFrame(step);
+        }
+
+        function focusRecentRuns() {
+          if (!recentRunsWrapper) {
+            setDashboardTab('status');
+            return;
+          }
+
+          // 1. Switch tab first
+          setDashboardTab('status');
+
+          // 2. Wait for panel animation + layout stabilization
+          const doScroll = () => {
+            scrollToSection(recentRunsWrapper, 140, 700);
+
+            // subtle guiding highlight
+            recentRunsWrapper.classList.remove('runs-highlight');
+            void recentRunsWrapper.offsetWidth;
+            recentRunsWrapper.classList.add('runs-highlight');
+            setTimeout(() => recentRunsWrapper.classList.remove('runs-highlight'), 2000);
+          };
+
+          // Delay more aggressively to guarantee correct layout
+          setTimeout(() => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(doScroll);
+            });
+          }, 350); // 300–350ms matches your tab panel animation time
+        }
+
+        function resetUiForNewDataset() {
+          // Mark backend last_run_id as irrelevant until next successful calculation
+          suppressBackendLastRun = true;
+
+          // Reset pipeline stages + go back to Workflow / Stage 1
+          pipelineStage = 1;
+          maxUnlockedStage = 1;
+          setDashboardTab('workflow');
+          setStage(1, { skipScroll: true });
+
+          // Clear KPI strip
+          const clearKpi = (el) => { if (el) el.textContent = '—'; };
+          clearKpi(kTaxableEl);
+          clearKpi(kExemptEl);
+          clearKpi(kGainEl);
+          if (kRunEl)    updateKpi(kRunEl,    '–');
+          if (kRunKpiEl) updateKpi(kRunKpiEl, '–');
+
+          // Reset internal "last run" state
+          lastRunLabel = '';
+          lastTotals = null;
+          lastWarnings = [];
+
+          // Hide summary strip & next-steps strip
+          if (resultStripEl) {
+            resultStripEl.classList.remove('result-strip--has-data');
+          }
+          if (insightActionsEl) {
+            insightActionsEl.classList.remove('insight-actions--visible');
+          }
+
+          // Hide Explain panel
+          if (explainPanelEl) {
+            explainPanelEl.style.display = 'none';
+            if (explainListEl) explainListEl.innerHTML = '';
+          }
+
+          // Reset charts and realised events
+          updateChartsFromRun([], { gain_eur: 0, taxable_gain_eur: 0, exempt_gain_eur: 0 }, lastJurisdiction || 'HR');
+          renderRealized([], 'Run a calculation to preview realized events.');
+          if (eventsSectionEl) {
+            eventsSectionEl.classList.remove('events-section--has-data');
+          }
+
+          // Reset Compare scenarios
+          scenarioA = null;
+          scenarioB = null;
+          if (scenarioAMetaEl) scenarioAMetaEl.textContent = 'None selected.';
+          if (scenarioBMeteEl) scenarioBMeteEl.textContent = 'None selected.';
+          if (scenarioAKpisEl) scenarioAKpisEl.innerHTML = '';
+          if (scenarioBKpisEl) scenarioBKpisEl.innerHTML = '';
+          updateScenarioDeltaSummary();
+
+          // IMPORTANT:
+          // Do NOT clear recentRunsCache or the UI list here.
+          // Historical runs remain visible for scenario comparison,
+          // but suppressBackendLastRun prevents them from being treated as the current run.
+
+          // Refresh DB / demo health only (without restoring last run label)
+          hydrateStatusCards();
+        }
+
+
+        // --- Hydrate build / version info from /demo/manifest ---
+        async function hydrateManifest() {
+          if (!demoBuildEl && !buildInfoEl && !kBuildEl) return;
+
+          try {
+            const resp = await fetch('/demo/manifest');
+            if (!resp.ok) throw new Error('manifest not available');
+            const m = await resp.json();
+
+            // Treat "n/a" as missing so we can show friendly local-dev labels
+            const normalize = (val, fallback) =>
+              (val && val !== 'n/a' && val !== 'N/A') ? val : fallback;
+
+            const version = normalize(m.version, 'dev');
+            const commit  = normalize(m.commit,  'local');
+            const build   = normalize(m.build || m.build_id, 'local');
+
+            // Top bar text
+            if (demoBuildEl) {
+              demoBuildEl.textContent = `${version} • ${commit} • ${build}`;
+            }
+
+            // Hero pill
+            if (buildInfoEl) {
+              buildInfoEl.textContent =
+                `Version: ${version} • Commit: ${commit} • Build: ${build}`;
+            }
+
+            // Status card "Build"
+            if (kBuildEl) {
+              updateKpi(kBuildEl, build);
+            }
+          } catch (e) {
+            console.warn('Demo manifest hydrate failed:', e);
+            if (demoBuildEl && !demoBuildEl.textContent) {
+              demoBuildEl.textContent = 'n/a';
+            }
+          }
+        }
+
+        // --- Hydrate status KPIs from /status ---
+        async function hydrateStatusCards() {
+          try {
+            const resp = await fetch('/status');
+            if (!resp.ok) return;
+            const s = await resp.json();
+
+            // Database health: investors scan this first → always show *something*
+            if (kDbEl) {
+              // Map noisy backend strings to a clean investor label
+              const raw = (s && s.database) || null;
+              let label = 'OK';
+
+              if (typeof raw === 'string' && raw.trim()) {
+                const lower = raw.trim().toLowerCase();
+                if (lower.startsWith('conn')) {
+                  // Long backend strings like "connected" → investor-friendly "OK"
+                  label = 'OK';
+                } else {
+                  label = raw.trim();
+                }
+              }
+
+              updateKpi(kDbEl, label);
+              if (raw && typeof raw === 'string') {
+                // Preserve the full backend message for hover/inspection
+                kDbEl.title = raw.trim();
+              }
+            }
+
+            // Demo mode ON/OFF – reduces uncertainty ("am I on my data?")
+            if (kDemoEl) {
+              updateKpi(kDemoEl, s.demo_mode ? 'On' : 'Off');
+            }
+
+            // Last run id, so a refresh still shows the previous calculation —
+            // but only if we have NOT actively reset the dataset.
+            if (!suppressBackendLastRun && s.last_run_id != null && (kRunEl || kRunKpiEl)) {
+              const label = '#' + s.last_run_id;
+              if (kRunEl)    updateKpi(kRunEl,    label);
+              if (kRunKpiEl) updateKpi(kRunKpiEl, label);
+              lastRunLabel = label;
+            } else if (suppressBackendLastRun) {
+              if (kRunEl)    updateKpi(kRunEl,    '–');
+              if (kRunKpiEl) updateKpi(kRunKpiEl, '–');
+              lastRunLabel = '';
+            }
+          } catch (e) {
+            console.warn('Status hydrate failed:', e);
+          }
+        }
+
+        function startScenarioPick(slot) {
+          scenarioPickerTarget = (slot === 'A' || slot === 'B') ? slot : 'B';
+          const label = scenarioPickerTarget;
+          toast(`Click a run in “Recent runs” to use as Scenario ${label}.`, true);
+          log(`Scenario picker activated for ${label}; click a run in Recent runs to assign.`);
+        }
+
+        function updateScenarioDeltaSummary() {
+          if (!compareDeltaSummary) return;
+
+          compareDeltaSummary.classList.remove('delta-positive', 'delta-negative', 'delta-neutral');
+
+          if (!scenarioA || !scenarioB) {
+            compareDeltaSummary.textContent = 'Select two scenarios to view differences.';
+            return;
+          }
+
+          const aTax = parseScenarioNum(scenarioA.taxable_gain_eur);
+          const bTax = parseScenarioNum(scenarioB.taxable_gain_eur);
+          const aGain = parseScenarioNum(scenarioA.gain_eur);
+          const bGain = parseScenarioNum(scenarioB.gain_eur);
+
+          const diffTax = bTax - aTax;
+          const diffGain = bGain - aGain;
+
+          const fmtDiff = (v) => {
+            if (!Number.isFinite(v) || v === 0) return '0,00 €';
+            return v.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }) + ' €';
+          };
+
+          let summary = '';
+
+          if (diffTax > 0.5) {
+            summary += `Scenario B has <b>higher taxable gain</b> than Scenario A by about ${fmtDiff(diffTax)}. `;
+            compareDeltaSummary.classList.add('delta-negative');
+          } else if (diffTax < -0.5) {
+            summary += `Scenario B has <b>lower taxable gain</b> than Scenario A by about ${fmtDiff(-diffTax)}. `;
+            compareDeltaSummary.classList.add('delta-positive');
+          } else {
+            summary += `Taxable gain is roughly the same in both scenarios. `;
+            compareDeltaSummary.classList.add('delta-neutral');
+          }
+
+          if (diffGain > 0.5) {
+            summary += `Total realised gain is higher in Scenario B by about ${fmtDiff(diffGain)}.`;
+          } else if (diffGain < -0.5) {
+            summary += `Total realised gain is lower in Scenario B by about ${fmtDiff(-diffGain)}.`;
+          } else {
+            summary += ` Total realised gain is also similar between the two.`;
+          }
+
+          compareDeltaSummary.innerHTML = summary;
+        }
+
+        function setScenarioSlot(slot, run) {
+          if (!run) return;
+          // Normalize scenario object
+          const obj = {
+            id: run.id,
+            run_id: run.run_id,
+            jurisdiction: run.jurisdiction || 'HR',
+            tax_year: run.tax_year,
+            gain_eur: run.gain_eur,
+            taxable_gain_eur: run.taxable_gain_eur,
+            exempt_gain_eur: run.exempt_gain_eur,
+            warning_count: run.warning_count || 0,
+          };
+
+          const metaEl = (slot === 'A') ? scenarioAMetaEl : scenarioBMeteEl;
+          const kpisEl = (slot === 'A') ? scenarioAKpisEl : scenarioBKpisEl;
+
+          if (slot === 'A') scenarioA = obj;
+          if (slot === 'B') scenarioB = obj;
+
+          if (metaEl) {
+            const label = `#${obj.id} • ${obj.jurisdiction || '–'} ${obj.tax_year || ''}`;
+            const warnPart = obj.warning_count > 0
+              ? ` • ${obj.warning_count} warning${obj.warning_count !== 1 ? 's' : ''}`
+              : '';
+            metaEl.textContent = label + warnPart;
+          }
+
+          if (kpisEl) {
+            kpisEl.innerHTML = '';
+            const makeItem = (label, value) => {
+              const li = document.createElement('li');
+              const left = document.createElement('span');
+              const right = document.createElement('span');
+              left.textContent = label;
+              right.textContent = fmtEur(value);
+              li.appendChild(left);
+              li.appendChild(right);
+              return li;
+            };
+            kpisEl.appendChild(makeItem('Taxable gain', obj.taxable_gain_eur));
+            kpisEl.appendChild(makeItem('Exempt gain', obj.exempt_gain_eur));
+            kpisEl.appendChild(makeItem('Total gain', obj.gain_eur));
+          }
+
+          updateScenarioDeltaSummary();
+        }
+
+        
+
+
+        async function loadRunFromHistory(run) {
+          if (!run || run.id == null) return;
+          const runKey = String(run.run_id || run.id);
+          const label = `#${run.id}`;
+
+          try {
+            toast(`Loading run ${label} from history…`, true);
+            log(`Loading run ${label} from history.`);
+
+            // 1) Fetch tax summary for this run
+            const taxResp = await fetch(`/api/v1/runs/${encodeURIComponent(runKey)}/tax`);
+            if (!taxResp.ok) {
+              toast(`Failed to load summary for run ${label}`, false);
+              log(`History load failed: tax endpoint ${taxResp.status}`);
+              return;
+            }
+            const taxData = await taxResp.json();
+
+            // 2) Fetch realized events for this run
+            const evResp = await fetch(`/api/v1/runs/${encodeURIComponent(runKey)}/events?limit=100&offset=0`);
+            if (!evResp.ok) {
+              toast(`Failed to load events for run ${label}`, false);
+              log(`History load failed: events endpoint ${evResp.status}`);
+              return;
+            }
+            const evData = await evResp.json();
+            const items = Array.isArray(evData.items) ? evData.items : [];
+
+            // Build totals object compatible with the existing dashboard logic
+            const t = (taxData && taxData.totals) ? taxData.totals : {};
+            const totals = {
+              gain_eur: t.gain_eur ?? t.gain,
+              taxable_gain_eur: t.taxable_gain_eur ?? t.taxable_gain,
+              exempt_gain_eur: t.exempt_gain_eur ?? t.exempt_gain,
+            };
+
+            // 3) Update KPI strip
+            if (kTaxableEl) updateKpi(kTaxableEl, fmtEur(totals.taxable_gain_eur));
+            if (kExemptEl)  updateKpi(kExemptEl,  fmtEur(totals.exempt_gain_eur));
+            if (kGainEl)    updateKpi(kGainEl,    fmtEur(totals.gain_eur));
+
+            // Show the summary strip + next-steps strip
+            if (resultStripEl) {
+              resultStripEl.classList.add('result-strip--has-data');
+            }
+            if (insightActionsEl) {
+              insightActionsEl.classList.add('insight-actions--visible');
+            }
+
+            // 4) Update run label chips
+            lastRunLabel = label;
+            if (kRunEl)    updateKpi(kRunEl,    label);
+            if (kRunKpiEl) updateKpi(kRunKpiEl, label);
+
+            // 5) Update warnings pill from history meta
+            const warnCount = run.warning_count || 0;
+            const warnEl = document.getElementById('kWarn');
+            if (warnEl) {
+              warnEl.textContent = String(warnCount);
+              if (warnCount > 0) {
+                warnEl.classList.add('warn-pulse');
+              } else {
+                warnEl.classList.remove('warn-pulse');
+              }
+            }
+
+            // 6) Normalize events into the shape renderRealized/updateCharts expect
+            const events = items.map((r) => ({
+              timestamp: r.timestamp,
+              asset: r.asset,
+              side: 'SELL',
+              qty: r.qty_sold,
+              proceeds: r.proceeds,
+              cost: r.cost_basis,
+              gain: r.gain,
+              quote_asset: r.quote_asset,
+              fee_applied: r.fee_applied,
+            }));
+
+            // Meta label for Realized Events header
+            let metaLabel = '';
+            if (events.length > 0) {
+              const totalEvents = events.length;
+              const visibleEvents = Math.min(totalEvents, 100);
+              const juris = taxData && taxData.jurisdiction ? taxData.jurisdiction : (run.jurisdiction || '');
+              const countPart = (visibleEvents === totalEvents)
+                ? `${totalEvents} event${totalEvents !== 1 ? 's' : ''}`
+                : `Showing ${visibleEvents} of ${totalEvents} events`;
+
+              metaLabel = [label, juris ? `Jurisdiction: ${juris}` : '', countPart]
+                .filter(Boolean)
+                .join(' • ');
+            }
+
+            // 7) Update charts + realized events table
+            const juris = taxData && taxData.jurisdiction ? taxData.jurisdiction : (run.jurisdiction || 'HR');
+            updateChartsFromRun(events, totals, juris);
+            renderRealized(events, metaLabel);
+
+            // 8) Update Explain engine state
+            lastTotals = totals;
+            lastJurisdiction = juris;
+            lastWarnings = []; // we don't pull full warning texts for history runs
+
+            updateExplainJurChip(juris);
+            // Refresh Explain panel content if it is already visible
+            refreshExplainPanelIfOpen();
+
+            // 9) Scroll to insights zone so the user sees the recentered story
+            const insightTarget = insightsSectionEl || chartsRowEl || resultStripEl;
+            scrollToSection(insightTarget, 140, 800);
+
+            toast(`Loaded run ${label} from history.`, true);
+            log(`History run ${label} loaded into dashboard context.`);
+
+          } catch (err) {
+            console.error('Failed to load run from history', err);
+            toast('Failed to load run from history.', false);
+            log(String(err));
+          }
+        }
+
+
+        async function hydrateRecentRuns() {
+          if (!recentRunsList || !recentRunsWrapper) return;
+
+          try {
+            const resp = await fetch('/demo/runs/recent?limit=6');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const runs = Array.isArray(data.runs) ? data.runs : [];
+
+            recentRunsCache = runs; // cache for Compare drawer
+
+            recentRunsList.innerHTML = '';
+
+            if (!runs.length) {
+              if (recentRunsEmpty) {
+                recentRunsEmpty.style.display = '';
+              }
+              return;
+            }
+
+            if (recentRunsEmpty) {
+              recentRunsEmpty.style.display = 'none';
+            }
+
+            runs.forEach((run) => {
+              const li = document.createElement('li');
+              li.className = 'runs-item';
+              li.dataset.runId = String(run.id != null ? run.id : '');
+
+              const main = document.createElement('div');
+              main.className = 'runs-item-main';
+
+              const idLabel = document.createElement('span');
+              idLabel.innerHTML = `<b>#${run.id}</b> • ${run.jurisdiction || '–'} ${run.tax_year || ''}`;
+              main.appendChild(idLabel);
+
+              const gainText = document.createElement('span');
+              const gainRaw = run.gain_eur != null ? String(run.gain_eur) : '0';
+              const gainNum = Number(gainRaw);
+              const gainLabel = Number.isFinite(gainNum)
+                ? gainNum.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' €'
+                : gainRaw + ' €';
+              gainText.innerHTML = `Gain: <b>${gainLabel}</b>`;
+              main.appendChild(gainText);
+
+              const right = document.createElement('div');
+
+              const warnCount = run.warning_count || 0;
+              if (warnCount > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'runs-item-badge warn';
+                badge.textContent = `${warnCount} warning${warnCount !== 1 ? 's' : ''}`;
+                right.appendChild(badge);
+              }
+
+              li.appendChild(main);
+              li.appendChild(right);
+
+              li.addEventListener('click', () => {
+                if (compareDrawer && compareDrawer.classList.contains('is-open')) {
+                  // Comparison mode: clicking a run updates the targeted scenario slot
+                  const slot = (scenarioPickerTarget === 'A' || scenarioPickerTarget === 'B')
+                    ? scenarioPickerTarget
+                    : 'B'; // default to B if no explicit picker was used
+
+                  setScenarioSlot(slot, run);
+                  scenarioPickerTarget = null;
+                  toast(`Scenario ${slot} updated.`, true);
+                } else {
+                  // Normal mode: clicking a run loads it into the dashboard context
+                  loadRunFromHistory(run);
+                }
+              });
+
+              recentRunsList.appendChild(li);
+            });
+          } catch (err) {
+            console.warn('Failed to load recent runs', err);
+          }
+        }
+
+        // --- Country Notes loader (jurisdiction-aware, non-binding copy) ---
+        async function loadCountryNotes(jurisdiction) {
+          const card = document.getElementById('country-notes-card');
+          if (!card) return;
+
+          const j = jurisdiction || 'HR';
+
+          try {
+            const res = await fetch(`/demo/country_notes?jurisdiction=${encodeURIComponent(j)}`);
+            if (!res.ok) return;
+
+            const data = await res.json();
+
+            const titleEl = document.getElementById('country-notes-title');
+            const subEl   = document.getElementById('country-notes-subtitle');
+            const listEl  = document.getElementById('country-notes-list');
+            const discEl  = document.getElementById('country-notes-disclaimer');
+
+            if (titleEl) titleEl.textContent = data.title || 'Country Notes (demo)';
+            if (subEl)   subEl.textContent   = data.subtitle || '';
+            if (discEl)  discEl.textContent  = data.disclaimer || discEl.textContent;
+
+            if (listEl && Array.isArray(data.bullets)) {
+              listEl.innerHTML = '';
+              data.bullets.forEach((b) => {
+                const li = document.createElement('li');
+                li.textContent = b;
+                listEl.appendChild(li);
+              });
+            }
+
+            // Swap icon if backend ever changes it
+            const img = card.querySelector('img');
+            if (img && data.icon_url) {
+              img.src = data.icon_url;
+            }
+          } catch (err) {
+            console.error('Country notes load failed', err);
+          }
+        }
+
+
+        function toast(msg, ok = true) {
+          toastEl.textContent = msg;
+          toastEl.style.borderColor = ok ? 'transparent' : 'var(--warn)';
+          toastEl.classList.add('show');
+          setTimeout(() => toastEl.classList.remove('show'), 2200);
+        }
+
+        function log(msg) {
+          const t = new Date().toLocaleTimeString();
+          const line = "[" + t + "] " + msg;
+
+          // Full technical line (including JSON) → engineer log
+          if (logEl) {
+            logEl.textContent += "\n" + line;
+            logEl.scrollTop = logEl.scrollHeight;
+          }
+
+          // Investor-friendly short summary (strip JSON / long tail)
+          if (activitySummary) {
+            // remove everything after "Summary:" (including the word itself)
+            let short = msg.replace(/Summary:.+$/, "").trim();
+
+            // If we stripped everything, fall back to original message
+            if (!short) short = msg;
+
+            // Add time prefix for a bit of context
+            activitySummary.textContent = `[${t}] ${short}`;
+          }
+        }
+
+
+        // Render Realized Events preview table
+        function renderRealized(events, metaLabel) {
+          if (!realizedBody) return;
+
+          const hasEvents = Array.isArray(events) && events.length > 0;
+          if (eventsSectionEl) {
+            eventsSectionEl.classList.toggle('events-section--has-data', hasEvents);
+          }
+
+          realizedBody.innerHTML = '';
+
+          if (!Array.isArray(events) || events.length === 0) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 7;
+            cell.className = 'muted';
+            cell.textContent = 'No realized events in this run.';
+            row.appendChild(cell);
+            realizedBody.appendChild(row);
+            if (realizedMeta && metaLabel) realizedMeta.textContent = metaLabel;
+            return;
+          }
+
+          const limit = Math.min(events.length, 100);  // avoid flooding UI
+          for (let i = 0; i < limit; i++) {
+            const ev = events[i] || {};
+
+            const ts       = ev.timestamp || ev.time || ev.t || '';
+            const asset    = ev.asset || ev.symbol || ev.ticker || '';
+            const side     = ev.side || ev.action || ev.type || '';
+            const qty      = ev.qty || ev.quantity || ev.amount || '';
+            const proceeds = ev.proceeds || ev.proceeds_eur || ev.proceeds_fiat || '';
+            const cost     = ev.cost || ev.cost_basis || '';
+            const gainRaw  = ev.gain || ev.pnl || ev.gain_eur || '';
+
+            const tr = document.createElement('tr');
+
+            // Soft stagger so rows don't appear all at once
+            tr.style.animationDelay = (i * 40) + 'ms';
+
+            function addCell(text, alignRight) {
+              const td = document.createElement('td');
+              td.textContent = (text === undefined || text === null) ? '' : String(text);
+              if (alignRight) td.style.textAlign = 'right';
+              tr.appendChild(td);
+            }
+
+            // 1: Timestamp, 2: Asset, 3: Side
+            addCell(ts,    false);
+            addCell(asset, false);
+            addCell(side,  false);
+
+            // 4–6: numeric columns (Qty, Proceeds, Cost)
+            addCell(qty,      true);
+            addCell(proceeds, true);
+            addCell(cost,     true);
+
+            // 7: Gain / Loss with coloring + +/- sign
+            const tdGain = document.createElement('td');
+            tdGain.style.textAlign = 'right';
+
+            if (gainRaw !== undefined && gainRaw !== null && gainRaw !== '') {
+              const text = String(gainRaw);
+              tdGain.textContent = text;
+
+              const num = Number(text.replace(/\s/g, '').replace(',', '.'));
+              if (!Number.isNaN(num)) {
+                if (num > 0) {
+                  tdGain.dataset.gain = 'positive';
+                  tdGain.dataset.sign = '+';
+                } else if (num < 0) {
+                  tdGain.dataset.gain = 'negative';
+                  tdGain.dataset.sign = '−'; // real minus sign
+                } else {
+                  tdGain.dataset.gain = 'neutral';
+                  tdGain.dataset.sign = '';
+                }
+              }
+            } else {
+              tdGain.textContent = '';
+            }
+
+            tr.appendChild(tdGain);
+            realizedBody.appendChild(tr);
+          }
+
+          if (realizedMeta) {
+            const label = metaLabel || `Showing ${Math.min(events.length, 100)} of ${events.length} events`;
+            realizedMeta.textContent = label;
+          }
+        }
+
+        function buildExplanationBullets(totals, jurisdiction, warnings) {
+          const bullets = [];
+          if (!totals) return bullets;
+
+          const fmtShort = (value) => {
+            if (value === null || value === undefined) return '0,00 €';
+            const num = Number(String(value).replace(/\s/g, '').replace(',', '.'));
+            if (!Number.isFinite(num)) return String(value);
+            return num.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }) + ' €';
+          };
+
+          const parseNum = (value) => {
+            if (value === null || value === undefined) return 0;
+            const num = Number(String(value).replace(/\s/g, '').replace(',', '.'));
+            return Number.isFinite(num) ? num : 0;
+          };
+
+          const gain = totals.gain_eur ?? totals.gain ?? null;
+          const taxable = totals.taxable_gain_eur ?? totals.taxable_gain ?? null;
+          const exempt = totals.exempt_gain_eur ?? totals.exempt_gain ?? null;
+
+          const gainNum = parseNum(gain);
+          const taxableNum = parseNum(taxable);
+          const exemptNum = parseNum(exempt);
+          const absGain = Math.abs(gainNum);
+          const totalForRatio = Math.max(absGain, taxableNum + exemptNum) || 1;
+
+          // 1) Headline: what happened overall?
+          if (gain !== null && gain !== undefined) {
+            let dir = 'break-even result';
+            if (gainNum > 0) dir = 'net gain';
+            else if (gainNum < 0) dir = 'net loss';
+
+            let magnitude = '';
+            if (absGain > 100_000) magnitude = ' large';
+            else if (absGain > 10_000) magnitude = ' meaningful';
+
+            bullets.push(
+              `This run shows a${magnitude} <b>${dir}</b> of approximately <b>${fmtShort(gain)}</b> in EUR.`
+            );
+          }
+
+          // 2) How much of that is taxable vs exempt?
+          const taxableShare = taxableNum / totalForRatio;
+          const exemptShare = exemptNum / totalForRatio;
+
+          if (taxable !== null || exempt !== null) {
+            const taxStr = fmtShort(taxable);
+            const exStr = fmtShort(exempt);
+
+            if (taxableShare >= 0.9) {
+              bullets.push(
+                `Almost the entire result is currently treated as <b>taxable</b> income (about ${taxStr}).`
+              );
+            } else if (exemptShare >= 0.9) {
+              bullets.push(
+                `Most of the result is currently treated as <b>exempt</b> (about ${exStr}), with only a small taxable portion (around ${taxStr}).`
+              );
+            } else {
+              bullets.push(
+                `Of this, around <b>${taxStr}</b> is currently treated as taxable and <b>${exStr}</b> as exempt under the configured rules.`
+              );
+            }
+          }
+
+          // 3) Jurisdiction-specific commentary
+          const j = (jurisdiction || 'HR').toUpperCase();
+          if (j === 'HR') {
+            if (exemptNum > 0 && taxableNum > 0) {
+              bullets.push(
+                'For Croatia (HR), disposals held for 2+ years can be exempt. In this run, part of the gain is treated as exempt, reflecting the simplified holding-period rule used by the demo. Real filings must follow official Porezna uprava guidance and your full trade history.'
+              );
+            } else if (exemptNum === 0 && taxableNum > 0) {
+              bullets.push(
+                'For Croatia (HR), this demo run does not identify any exempt disposals, so the entire result is treated as taxable under the simplified rules. Real filings may still adjust this depending on your actual holding periods.'
+              );
+            } else if (gainNum <= 0) {
+              bullets.push(
+                'For Croatia (HR), a flat capital-gains regime applies only when there is a positive realised gain. In this run the result is not positive, so the demo shows no taxable base.'
+              );
+            } else {
+              bullets.push(
+                'For Croatia (HR), disposals held for 2+ years can be exempt. This demo uses a simplified approach to illustrate that behaviour; real returns must follow official Porezna uprava rules and your own records.'
+              );
+            }
+          } else if (j === 'IT') {
+            if (gainNum > 0 && taxableNum > 0) {
+              bullets.push(
+                'For Italy (IT), crypto is often treated as a financial asset subject to around <b>26%</b> tax on taxable gains. Thresholds, historic balances and the exact Quadro RT/RW treatment are not fully modeled here and should be reviewed with a commercialista.'
+              );
+            } else if (gainNum <= 0) {
+              bullets.push(
+                'For Italy (IT), this run does not show a positive realised gain in EUR, so the demo does not estimate any taxable base. Real filings may still require reporting positions and foreign-asset holdings.'
+              );
+            } else {
+              bullets.push(
+                'For Italy (IT), this demo focuses on realised gains in EUR and does not fully implement all local thresholds or historic balance rules. Any real use would require a jurisdiction-specific configuration and review.'
+              );
+            }
+          } else {
+            bullets.push(
+              'Actual tax rules depend on your country and may include thresholds, holding periods and special treatments that are not modeled in this demo. The split shown here is purely illustrative.'
+            );
+          }
+
+          // 4) Heuristic "tax red flags" – conditions worth an extra look
+          const redFlags = [];
+
+          // Large absolute gain or taxable base
+          if (absGain > 100_000 || taxableNum > 50_000) {
+            redFlags.push(
+              'Realised gains in this run are relatively large. Expect closer review and keep detailed trade and FX records available.'
+            );
+          }
+
+          // Almost everything taxable and nothing exempt
+          if (taxableShare >= 0.9 && taxableNum > 0 && exemptNum === 0) {
+            redFlags.push(
+              'Almost all of the result is treated as taxable and none as exempt. That can be correct, but it is worth confirming that holding-period rules and any thresholds were applied as you expect.'
+            );
+          }
+
+          // Many technical warnings
+          if (Array.isArray(warnings) && warnings.length >= 3) {
+            redFlags.push(
+              'Several technical warnings were generated for this run. Treat this scenario as “needs review” before relying on it.'
+            );
+          }
+
+          // Jurisdiction-specific heuristic hints
+          if (j === 'IT' && taxableNum > 0) {
+            redFlags.push(
+              'Italian reporting may require Quadro RT/RW and additional disclosures when thresholds are exceeded. Check with your advisor whether these figures would trigger reporting.'
+            );
+          }
+
+          if (redFlags.length > 0) {
+            redFlags.forEach((msg) => bullets.push(`⚠️ ${msg}`));
+          }
+
+          // 5) Data quality insights based on warning contents
+          if (Array.isArray(warnings) && warnings.length > 0) {
+            const lowerWarnings = warnings.map((w) => String(w).toLowerCase());
+            const dqInsights = [];
+
+            if (lowerWarnings.some((w) => w.includes('duplicate'))) {
+              dqInsights.push(
+                'Some events look like potential duplicates. Double-check that you have not imported the same CSV or trade history twice.'
+              );
+            }
+
+            if (lowerWarnings.some((w) => w.includes('negative proceeds'))) {
+              dqInsights.push(
+                'There are trades with negative proceeds. These may represent refunds or corrections and are worth a closer look.'
+              );
+            }
+
+            if (lowerWarnings.some((w) => w.includes('zero fee') || w.includes('no recorded fee'))) {
+              dqInsights.push(
+                'Some disposals have non-zero proceeds but no recorded fee. That can be valid, but for larger trades you may want to confirm that fees were captured correctly.'
+              );
+            }
+
+            if (lowerWarnings.some((w) => w.includes('missing fx') || w.includes('no fx rate'))) {
+              dqInsights.push(
+                'Some FX rates were missing and required fallback behaviour. Final results may move slightly once full FX data is available.'
+              );
+            }
+
+            dqInsights.forEach((msg) => bullets.push(`🔍 ${msg}`));
+          }
+
+          // 6) Warnings & data-quality context (keep explicit mention)
+          if (Array.isArray(warnings) && warnings.length > 0) {
+            const count = warnings.length;
+            bullets.push(
+              `This run includes <b>${count}</b> warning${count !== 1 ? 's' : ''}. Review them in the warnings panel before using these figures in any serious context.`
+            );
+          }
+
+          // 7) Strong closing disclaimer
+          bullets.push(
+            'This explanation is informational only and does not replace personalised tax advice or official tax forms. Use these numbers as a starting point for discussions with a qualified advisor, not as filing-ready data.'
+          );
+
+          return bullets;
+        }
+
+        function updateExplainJurChip(jur) {
+          const chip = document.getElementById('explainJurChip');
+          if (!chip) return;
+          const j = (jur || 'HR').toUpperCase();
+          if (j === 'IT') {
+            chip.textContent = 'Italy (IT)';
+          } else if (j === 'HR') {
+            chip.textContent = 'Croatia (HR)';
+          } else {
+            chip.textContent = j;
+          }
+        }
+
+        function updateExplainPanel(scrollIntoView) {
+          if (!lastTotals) return;
+          const bullets = buildExplanationBullets(lastTotals, lastJurisdiction, lastWarnings);
+          if (!bullets.length) {
+            toast('No explanation available for this run.', false);
+            return;
+          }
+
+          updateExplainJurChip(lastJurisdiction);
+
+          if (explainListEl) {
+            explainListEl.innerHTML = '';
+            bullets.forEach((html) => {
+              const li = document.createElement('li');
+              li.innerHTML = html;
+              explainListEl.appendChild(li);
+            });
+          }
+
+          if (explainPanelEl) {
+            explainPanelEl.style.display = '';
+
+            if (scrollIntoView) {
+              scrollToSection(explainPanelEl, 140, 700);
+            }
+          }
+        }
+
+        function refreshExplainPanelIfOpen() {
+          if (!explainPanelEl) return;
+          if (explainPanelEl.style.display === 'none') return; // panel closed → do nothing
+          if (!lastTotals) return;
+
+          // Refresh explanation content only
+          const bullets = buildExplanationBullets(lastTotals, lastJurisdiction, lastWarnings);
+          if (bullets.length && explainListEl) {
+            explainListEl.innerHTML = '';
+            bullets.forEach((html) => {
+              const li = document.createElement('li');
+              li.innerHTML = html;
+              explainListEl.appendChild(li);
+            });
+          }
+
+          // Jurisdiction chip
+          updateExplainJurChip(lastJurisdiction);
+        }
+
+
+        // Buttons & actions
+        const btnReset = document.getElementById('btnReset');
+        const btnSkipToCalc = document.getElementById('btnSkipToCalc');
+        const btnUpload = document.getElementById('btnUpload');
+        const btnCalculate = document.getElementById('btnCalculate');
+        const btnExport = document.getElementById('btnExport');
+        const btnDiag = document.getElementById('btnDiag');
+        const btnExplain = document.getElementById('btnExplain');
+        const btnCompare = document.getElementById('btnCompare');
+
+        const fxFile = document.getElementById('fxFile');
+        const btnUploadFx = document.getElementById('btnUploadFx');
+
+        if (btnExplain) {
+          // Hidden until we have a run and are in Stage 3
+          btnExplain.style.display = 'none';
+        }
+
+        const btnScrollToWorkflow = document.getElementById('btnScrollToWorkflow');
+        const btnQuickExport = document.getElementById('btnQuickExport');
+        const btnScrollToEvents = document.getElementById('btnScrollToEvents');
+
+        // Compare drawer controls
+        const compareDrawerClose = document.getElementById('compareDrawerClose');
+
+        if (btnCompare && compareDrawer) {
+          btnCompare.addEventListener('click', () => {
+            if (!lastRunLabel) {
+              toast('Run a calculation first, then open Compare.', false);
+              return;
+            }
+
+            if (!Array.isArray(recentRunsCache) || recentRunsCache.length === 0) {
+              toast('No recent runs available to compare yet.', false);
+              return;
+            }
+
+            // Scenario A = latest run
+            setScenarioSlot('A', recentRunsCache[0]);
+
+            // Scenario B = previous run (if available)
+            if (recentRunsCache.length > 1) {
+              setScenarioSlot('B', recentRunsCache[1]);
+            } else {
+              // If there is only one run, clear Scenario B
+              scenarioB = null;
+              if (scenarioBMeteEl) {
+                scenarioBMeteEl.textContent = 'None selected.';
+              }
+              if (scenarioBKpisEl) {
+                scenarioBKpisEl.innerHTML = '';
+              }
+              updateScenarioDeltaSummary();
+            }
+
+            compareDrawer.classList.add('is-open');
+            if (!scenarioB) {
+              toast('Comparing latest run. Click another run in “Recent runs” to set Scenario B.', true);
+            }
+          });
+        }
+
+        if (compareDrawerClose && compareDrawer) {
+          compareDrawerClose.addEventListener('click', () => {
+            compareDrawer.classList.remove('is-open');
+          });
+        }
+
+        if (btnPickScenarioA && compareDrawer) {
+          btnPickScenarioA.addEventListener('click', () => {
+            startScenarioPick('A');
+            compareDrawer.classList.add('is-open');
+            focusRecentRuns();
+          });
+        }
+
+        if (btnPickScenarioB && compareDrawer) {
+          btnPickScenarioB.addEventListener('click', () => {
+            startScenarioPick('B');
+            compareDrawer.classList.add('is-open');
+            focusRecentRuns();
+          });
+        }
+
+        const realizedSection = document.querySelector('section[aria-labelledby="realizedEventsHeading"]');
+        const insightActionsEl = document.querySelector('.insight-actions');
+
+        const csvFiles = document.getElementById('csvFiles');
+        const juris = document.getElementById('jurisdiction');
+        const chkTaxHelpers = document.getElementById('chkTaxHelpers');
+        const chkAuditAppendix = document.getElementById('chkAuditAppendix');
+        const runConfigSummary = document.getElementById('runConfigSummary');
+
+        // Jurisdiction segmented control: HR / IT
+        const segPills = Array.from(document.querySelectorAll('.seg-pill'));
+        if (segPills.length && juris) {
+          segPills.forEach((btn) => {
+            btn.addEventListener('click', () => {
+              // Visual selection
+              segPills.forEach(b => b.classList.remove('is-active'));
+              btn.classList.add('is-active');
+
+              // Hidden field used by backend
+              juris.value = btn.dataset.value || 'HR';
+              const currentJur = juris.value || 'HR';
+
+              // Update Country Notes + Explain chip + label near Calculate
+              loadCountryNotes(currentJur);
+              updateExplainJurChip(currentJur);
+
+              if (jurisLabel) {
+                if (currentJur === 'IT') {
+                  jurisLabel.innerHTML = 'Current jurisdiction: <strong>Italy (IT)</strong>.';
+                } else {
+                  jurisLabel.innerHTML = 'Current jurisdiction: <strong>Croatia (HR)</strong>.';
+                }
+              }
+
+              // Reset last jurisdiction for Explain engine
+              lastJurisdiction = currentJur;
+
+              // If Explain panel is already visible and we have totals, refresh it without extra scroll
+              refreshExplainPanelIfOpen();
+            });
+          });
+        }
+
+        if (chkTaxHelpers) {
+          chkTaxHelpers.addEventListener('change', () => {
+            refreshRunConfigSummary();
+          });
+        }
+        if (chkAuditAppendix) {
+          chkAuditAppendix.addEventListener('change', () => {
+            refreshRunConfigSummary();
+          });
+        }
+
+        // FX mode toggle (Demo-safe vs Strict)
+        let strictFx = false;
+        const fxPills = Array.from(document.querySelectorAll('.fx-pill'));
+        if (fxPills.length) {
+          fxPills.forEach(btn => {
+            btn.addEventListener('click', () => {
+              fxPills.forEach(b => b.classList.remove('is-active'));
+              btn.classList.add('is-active');
+              const mode = btn.dataset.mode || 'demo';
+              strictFx = (mode === 'strict');
+            });
+          });
+        }
+
+        // Pipeline stages: 1 = data, 2 = calculate, 3 = export
+        let pipelineStage = 1;
+        // Highest stage the user has unlocked (controls wizard navigation)
+        let maxUnlockedStage = 1;
+        // Last run label (e.g. "#18") for microcopy
+        let lastRunLabel = '';
+        // When true, ignore backend last_run_id and treat UI as having no active run
+        let suppressBackendLastRun = false;
+
+        // Explanation engine state
+        let lastTotals = null;
+        let lastJurisdiction = 'HR';
+        let lastWarnings = [];
+
+        // Scenario comparison state
+        let scenarioA = null; // { id, run_id, jurisdiction, tax_year, gain_eur, taxable_gain_eur, exempt_gain_eur, warning_count }
+        let scenarioB = null;
+        let recentRunsCache = []; // latest runs from /demo/runs/recent
+        let scenarioPickerTarget = null; // 'A' or 'B' while choosing from Recent runs
+
+
+        const cardReportOptions = document.getElementById('cardReportOptions');
+        const cardLoadDemo = document.getElementById('cardLoadDemo');
+        const cardUploadCsv = document.getElementById('cardUploadCsv');
+        const cardRunCalc = document.getElementById('cardRunCalc');
+        const stageStep1 = document.getElementById('stageStep1');
+        const stageStep2 = document.getElementById('stageStep2');
+        const stageStep3 = document.getElementById('stageStep3');
+        const btnStageBack = document.getElementById('btnStageBack');
+        if (btnStageBack) {
+          btnStageBack.addEventListener('click', () => {
+            if (pipelineStage > 1) {
+              const newStage = pipelineStage - 1;
+              // Lock future stages BEFORE updating the UI so checkmarks update correctly
+              maxUnlockedStage = newStage;
+              setStage(newStage);
+            }
+          });
+        }
+        const jurisSwitch = document.querySelector('.juris-switch');
+        const stageIndicator = document.getElementById('stageIndicator');
+
+        const stage1Panel = document.getElementById('stage1Panel');
+        const stage2Panel = document.getElementById('stage2Panel');
+        const stage3Panel = document.getElementById('stage3Panel');
+
+        const workflowShell = document.querySelector('.workflow-shell');
+
+        const rowJurisdiction = document.getElementById('rowJurisdiction');
+        const fxModeRow = document.getElementById('fxModeRow');
+        const calcSafetyNote = document.getElementById('calcSafetyNote');
+
+        function setStage(stage, options) {
+          options = options || {};
+          const skipScroll = !!options.skipScroll;
+
+          if (stage < 1) stage = 1;
+          if (stage > 3) stage = 3;
+
+          pipelineStage = stage;
+
+          // Whenever we legitimately move forward, extend the unlocked range
+          if (stage > maxUnlockedStage) {
+            maxUnlockedStage = stage;
+          }
+
+          // Stage panels: only one visible at a time
+          const panels = [stage1Panel, stage2Panel, stage3Panel];
+          panels.forEach((p, idx) => {
+            if (!p) return;
+            const active = (idx + 1) === stage;
+            p.classList.toggle('is-active', active);
+          });
+
+          // Run Calculation card is shown for stages 2 and 3 only
+          if (cardRunCalc) {
+            cardRunCalc.style.display = stage === 1 ? 'none' : '';
+          }
+
+          // Stage indicator: short sentence, not just a label
+          if (stageIndicator) {
+            let label;
+            if (stage === 1) {
+              label = 'Stage 1: Data — load demo or upload CSVs.';
+            } else if (stage === 2) {
+              label = 'Stage 2: Calculate' + (lastRunLabel ? ' — last run ' + lastRunLabel : '');
+            } else {
+              label = 'Stage 3: Export' + (lastRunLabel ? ' — using latest run ' + lastRunLabel : '');
+            }
+            stageIndicator.textContent = label;
+
+            // Small motion “tick” so users feel the flow progressing
+            stageIndicator.classList.remove('is-bump');
+            // force reflow so the animation retriggers
+            void stageIndicator.offsetHeight;
+            stageIndicator.classList.add('is-bump');
+            setTimeout(() => {
+              stageIndicator.classList.remove('is-bump');
+            }, 260);
+          }
+
+          // Update left-side pipeline pills (active + completed)
+          const stepPills = [stageStep1, stageStep2, stageStep3];
+          stepPills.forEach((pill, idx) => {
+            if (!pill) return;
+            const thisStage = idx + 1;
+            const isActive = thisStage === stage;
+            const isComplete = thisStage < maxUnlockedStage;
+            pill.classList.toggle('is-active', isActive);
+            pill.classList.toggle('is-complete', isComplete);
+          });
+
+          if (btnStageBack) {
+            btnStageBack.style.display = stage > 1 ? 'inline-flex' : 'none';
+          }
+
+          // Jurisdiction can be chosen in Stage 1 (before data) and Stage 2 (before running/exporting).
+          // In Stage 3 we freeze it so exports match the last run.
+          if (jurisSwitch) {
+            const canChangeJur = (stage === 1 || stage === 2);
+            jurisSwitch.style.opacity = canChangeJur ? '1' : '0.5';
+            jurisSwitch.style.pointerEvents = canChangeJur ? 'auto' : 'none';
+          }
+
+          // Stage-specific visibility inside the Run card
+          const isStage2 = stage === 2;
+          const isStage3 = stage === 3;
+
+          if (rowJurisdiction) {
+            rowJurisdiction.style.display = isStage2 ? '' : 'none';
+          }
+          if (fxModeRow) {
+            fxModeRow.style.display = isStage2 ? '' : 'none';
+          }
+          if (calcSafetyNote) {
+            calcSafetyNote.style.display = isStage2 ? '' : 'none';
+          }
+          if (rowCalcActions) {
+            rowCalcActions.style.display = isStage2 ? 'flex' : 'none';
+          }
+          if (rowExportActions) {
+            // Export row only visible in Stage 3
+            rowExportActions.style.display = isStage3 ? 'flex' : 'none';
+          }
+
+          // Export buttons only active in Stage 3
+          if (btnExport) {
+            btnExport.style.display = isStage3 ? '' : 'none';
+          }
+          if (btnDiag) {
+            btnDiag.style.display = isStage3 ? '' : 'none';
+          }
+          if (btnCompare) {
+            btnCompare.style.display = (isStage3 && lastRunLabel) ? '' : 'none';
+          }
+          
+
+          // Calculate is only active in Stage 2
+          if (btnCalculate) {
+            const disableCalc = !isStage2;
+            btnCalculate.disabled = disableCalc;
+            btnCalculate.classList.toggle('btn-disabled', disableCalc);
+          }
+
+          // Explain is available in Stage 3 once we have a completed run
+          if (btnExplain) {
+            btnExplain.style.display = (isStage3 && lastRunLabel) ? '' : 'none';
+          }
+
+          // Export summary line is only relevant in Stage 3
+          if (runConfigSummary) {
+            runConfigSummary.style.display = isStage3 ? '' : 'none';
+          }
+
+          // When we switch stages from the left pipeline, gently scroll to the relevant area
+          if (!skipScroll) {
+            if (pipelineStage === 1 && workflowShell) {
+              if (window.scrollY > 200) {
+                // Slightly lower framing for the workflow block
+                scrollToSection(workflowShell, 140, 700);
+              }
+            } else if (pipelineStage === 2 && workflowShell) {
+              scrollToSection(workflowShell, 140, 700);
+            } else if (pipelineStage === 3) {
+              const exportTarget = document.getElementById('cardReportOptions') || cardRunCalc;
+              scrollToSection(exportTarget, 140, 700);
+            }
+          }
+          // If we're in Stage 3, ensure the export summary line is up to date
+          if (pipelineStage === 3) {
+            refreshRunConfigSummary();
+          }
+        }
+
+        // Initial stage on first load
+        setStage(1);
+
+        // Insight strip: navigation helpers
+        if (btnScrollToWorkflow && workflowShell) {
+          btnScrollToWorkflow.addEventListener('click', () => {
+            // Always bring user back to the Workflow tab first
+            setDashboardTab('workflow');
+            setStage(2);
+            // Use the same framing as setStage(2)
+            scrollToSection(workflowShell, 140, 700);
+          });
+        }
+
+        if (btnQuickExport) {
+          btnQuickExport.addEventListener('click', () => {
+            // Bring user back to the Workflow tab first
+            setDashboardTab('workflow');
+            setStage(3);
+            const target = document.getElementById('cardReportOptions') || cardRunCalc;
+            // Same framing as setStage(3)
+            scrollToSection(target, 140, 700);
+          });
+        }
+
+        if (btnScrollToEvents && realizedSection) {
+          btnScrollToEvents.addEventListener('click', () => {
+            scrollToSection(realizedSection);
+          });
+        }
+
+        // Initial tab view → show Workflow, hide Status
+        setDashboardTab('workflow');
+        if (tabWorkflow) {
+          tabWorkflow.addEventListener('click', () => setDashboardTab('workflow'));
+        }
+        if (tabStatus) {
+          tabStatus.addEventListener('click', () => setDashboardTab('status'));
+        }
+
+        // Allow clicking the pipeline steps, but only up to the unlocked stage
+        const pipelinePills = [stageStep1, stageStep2, stageStep3];
+        pipelinePills.forEach((pill, idx) => {
+          if (!pill) return;
+          const targetStage = idx + 1;
+          pill.addEventListener('click', () => {
+            if (targetStage < pipelineStage) {
+              // Treat clicking a previous step as a “back” that locks future stages
+              maxUnlockedStage = targetStage;
+              setStage(targetStage);
+              return;
+            }
+            if (targetStage <= maxUnlockedStage) {
+              setStage(targetStage);
+            } else {
+              toast('Complete the previous step first.', false);
+            }
+          });
+        });
+
+
+        // Initial data hydration on page load
+        hydrateManifest();
+        hydrateStatusCards();
+        hydrateRecentRuns();
+
+        // Initial Country Notes load based on current jurisdiction
+        const jurisElForNotes = document.getElementById('jurisdiction');
+        const initialJur = jurisElForNotes ? (jurisElForNotes.value || 'HR') : 'HR';
+        loadCountryNotes(initialJur);
+        updateExplainJurChip(initialJur);
+
+        if (btnReset) btnReset.addEventListener('click', async () => {
+          try {
+            log('Resetting demo environment (full reset)...');
+            const r = await fetch('/demo/reset', { method: 'POST' });
+            if (!r.ok) throw new Error('Reset failed: ' + r.status);
+
+            toast('Demo environment fully reset');
+            log('Demo environment fully reset.');
+
+            // 1) Reset pipeline + current run state
+            resetUiForNewDataset();
+
+            // 2) Hard-clear recent runs + scenario comparison cache
+            recentRunsCache = [];
+            if (recentRunsList) {
+              recentRunsList.innerHTML = '';
+            }
+            if (recentRunsEmpty) {
+              recentRunsEmpty.style.display = '';
+            }
+
+            // 3) Refresh status + recent runs (will now be empty)
+            hydrateStatusCards();
+            hydrateRecentRuns();
+
+            if (window.glow) glow.burst('#btnReset');
+          } catch (e) {
+            toast('Reset failed', false);
+            log(String(e));
+          }
+        });
+
+        if (btnSkipToCalc) btnSkipToCalc.addEventListener('click', async () => {
+          try {
+            log('Loading clean demo dataset (history preserved) and moving to Stage 2.');
+            const r = await fetch('/demo/load', { method: 'POST' });
+            if (!r.ok) throw new Error('Demo load failed: ' + r.status);
+
+            toast('Demo dataset loaded.', true);
+            log('Demo dataset loaded for Stage 2.');
+            
+            resetUiForNewDataset();
+            setStage(2);
+          } catch (e) {
+            toast('Demo load failed', false);
+            log(String(e));
+          }
+      });
+
+        if (btnUpload) btnUpload.addEventListener('click', async () => {
+          if (!csvFiles.files || csvFiles.files.length === 0) {
+            toast('Select at least one CSV', false);
+            return;
+          }
+
+          const originalLabel = btnUpload.textContent;
+          btnUpload.disabled = true;
+          btnUpload.classList.add('btn-disabled');
+          btnUpload.textContent = 'Uploading…';
+
+          const fd = new FormData();
+          for (const f of csvFiles.files) fd.append('files', f, f.name);
+
+          try {
+            log('Uploading CSVs...');
+            const r = await fetch('/import/multiple', { method:'POST', body: fd });
+            if (!r.ok) throw new Error('Upload failed: ' + r.status);
+            const j = await r.json().catch(()=>null);
+            toast('Upload OK');
+            log('Upload OK' + (j ? (': ' + JSON.stringify(j)) : ''));
+            if (window.glow) glow.sparkle('#btnUpload');
+
+            // New dataset from CSV → reset UI and move into Stage 2
+            resetUiForNewDataset();
+            setStage(2);
+          } catch (e) {
+            toast('Upload failed', false);
+            log(String(e));
+          } finally {
+            btnUpload.disabled = false;
+            btnUpload.classList.remove('btn-disabled');
+            btnUpload.textContent = originalLabel;
+          }
+        });
+
+        if (btnUploadFx) btnUploadFx.addEventListener('click', async () => {
+          if (!fxFile || !fxFile.files || fxFile.files.length === 0) {
+            toast('Select an FX CSV file', false);
+            return;
+          }
+
+          const file = fxFile.files[0];
+          const originalLabel = btnUploadFx.textContent;
+          btnUploadFx.disabled = true;
+          btnUploadFx.classList.add('btn-disabled');
+          btnUploadFx.textContent = 'Importing…';
+
+          const fd = new FormData();
+          fd.append('file', file, file.name);
+
+          try {
+            log('Uploading FX rates...');
+            const r = await fetch('/fx/upload', { method: 'POST', body: fd });
+            if (!r.ok) {
+              const errText = await r.text().catch(() => '');
+              throw new Error('FX upload failed: ' + r.status + (errText ? ' ' + errText : ''));
+            }
+            const j = await r.json().catch(() => null);
+            const batchIdLabel = j && j.batch_id != null ? ('#' + j.batch_id) : 'new';
+            toast('FX rates imported (' + batchIdLabel + ')');
+            log('FX upload OK' + (j ? (': ' + JSON.stringify(j)) : ''));
+
+            // Optional immediate visual feedback on FX chip
+            if (fxBatchEl && j && j.batch_id != null) {
+              fxBatchEl.textContent = '#' + j.batch_id;
+            }
+          } catch (e) {
+            toast('FX upload failed', false);
+            log(String(e));
+          } finally {
+            btnUploadFx.disabled = false;
+            btnUploadFx.classList.remove('btn-disabled');
+            btnUploadFx.textContent = originalLabel;
+          }
+        });
+
+        if (btnCalculate) btnCalculate.addEventListener('click', async () => {
+          const j = (juris && juris.value) || 'HR';
+          const includeHelpers = !chkTaxHelpers || chkTaxHelpers.checked;
+          const includeAudit = !chkAuditAppendix || chkAuditAppendix.checked;
+          const originalLabel = btnCalculate.textContent;
+
+          const url = '/calculate/v2?debug=1';
+          const body = {
+            jurisdiction: j,
+            include_tax_helpers: includeHelpers,
+            include_audit_appendix: includeAudit,
+            strict_fx: strictFx,  // NEW: tie FX mode pills to backend strict_fx
+          };
+
+          try {
+            btnCalculate.disabled = true;
+            btnCalculate.classList.add('btn-disabled');
+            btnCalculate.textContent = 'Calculating…';
+
+            log(
+              'Running calculation (' + j + ') … helpers=' +
+              (includeHelpers ? 'on' : 'off') +
+              ', audit appendix=' + (includeAudit ? 'on' : 'off') + '.'
+            );
+            const t0 = performance.now();
+            const r = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            const t1 = performance.now();
+            if (!r.ok) throw new Error('Calculate failed: ' + r.status);
+
+            const data = await r.json();
+            const dbg = (data && data.summary && data.summary["__debug"]) ? data.summary["__debug"] : {};
+            const warnings = Array.isArray(dbg.warnings) ? dbg.warnings : [];
+
+            // --- Populate Result Summary strip (taxable / exempt / total gain) ---
+            const totals = (data && data.summary && data.summary.totals) ? data.summary.totals : null;
+            if (totals) {
+              // Mark the summary strip as active
+              if (resultStripEl) {
+                resultStripEl.classList.add('result-strip--has-data');
+              }
+
+              // Reveal the "Next steps" strip once we have a successful run
+              if (insightActionsEl) {
+                insightActionsEl.classList.add('insight-actions--visible');
+              }
+
+              const taxable = totals.taxable_gain_eur ?? totals.taxable_gain ?? null;
+              const exempt  = totals.exempt_gain_eur  ?? totals.exempt_gain  ?? null;
+              const gain    = totals.gain_eur        ?? totals.gain         ?? null;
+
+              if (kTaxableEl) updateKpi(kTaxableEl, fmtEur(taxable));
+              if (kExemptEl)  updateKpi(kExemptEl,  fmtEur(exempt));
+              if (kGainEl)    updateKpi(kGainEl,    fmtEur(gain));
+            }
+
+            // Remember for Explain engine
+            lastTotals = totals;
+            lastJurisdiction = j;
+            lastWarnings = warnings;
+
+            // If Explain is already open, refresh its content for the new run
+            refreshExplainPanelIfOpen();
+
+            // After a successful run, bring the user to the insights zone (summary + charts)
+            const insightTarget = insightsSectionEl || chartsRowEl || resultStripEl;
+            // Use a slightly larger offset + slower duration so the header stays visible
+            scrollToSection(insightTarget, 140, 800);
+
+            // Update FX status pill from summary.fx_context / debug context if available
+            if (fxRateEl || fxBatchEl) {
+              // Prefer the explicit fx_context attached by the backend
+              const fxContext = (data && data.summary && data.summary.fx_context)
+                ? data.summary.fx_context
+                : null;
+
+              let fxRate = null;
+              let fxBatch = null;
+
+              if (fxContext) {
+                if (fxContext.fx_rate_used != null) {
+                  fxRate = fxContext.fx_rate_used;
+                }
+                if (fxContext.fx_batch_id != null) {
+                  fxBatch = fxContext.fx_batch_id;
+                }
+              }
+
+              // Fallback to legacy debug fields if present
+              if (fxRate == null || fxBatch == null) {
+                const dbgRate  = dbg.fx_rate_used ?? dbg.fx_rate ?? null;
+                const dbgBatch = dbg.fx_batch_id  ?? dbg.fx_batch ?? null;
+                if (fxRate == null && dbgRate != null) fxRate = dbgRate;
+                if (fxBatch == null && dbgBatch != null) fxBatch = dbgBatch;
+              }
+
+              const hasMissingFxWarning = Array.isArray(warnings)
+                && warnings.some((w) => String(w).toLowerCase().includes('no fx rate'));
+
+              // If we still don't have a rate but FX data likely exists,
+              // ask /fx/status for the latest snapshot.
+              if (fxRate == null && !hasMissingFxWarning) {
+                try {
+                  const fxResp = await fetch('/fx/status');
+                  if (fxResp.ok) {
+                    const fxInfo = await fxResp.json();
+                    if (fxInfo && fxInfo.latest_rate != null) {
+                      fxRate = fxInfo.latest_rate;
+                    }
+                    if (fxBatch == null && fxInfo && fxInfo.latest_batch_id != null) {
+                      fxBatch = fxInfo.latest_batch_id;
+                    }
+                  }
+                } catch (err) {
+                  console.warn('FX status fetch failed', err);
+                }
+              }
+
+              if (fxRateEl) {
+                if (fxRate != null) {
+                  const num = Number(fxRate);
+                  // Show a clean numeric rate (e.g. 1.0753)
+                  fxRateEl.textContent = Number.isFinite(num)
+                    ? num.toFixed(4)
+                    : String(fxRate);
+                } else if (hasMissingFxWarning) {
+                  // Only show the demo fallback label when we actually fell back to 1.0
+                  fxRateEl.textContent = '1.0 (demo)';
+                } else {
+                  // Last-resort fallback if we truly have no usable rate
+                  fxRateEl.textContent = '–';
+                }
+              }
+
+              if (fxBatchEl) {
+                if (fxBatch != null) {
+                  fxBatchEl.textContent = '#' + fxBatch;
+                } else if (hasMissingFxWarning) {
+                  fxBatchEl.textContent = 'demo';
+                } else {
+                  fxBatchEl.textContent = 'FX';
+                }
+              }
+            }
+
+            const kWarn = document.getElementById('kWarn');
+
+            if (warnings.length > 0) {
+              log(`Warnings (${warnings.length}):`);
+              for (const w of warnings) log(' - ' + w);
+              if (kWarn) {
+                kWarn.textContent = String(warnings.length);
+                kWarn.classList.add('warn-pulse');
+              }
+              toast(`Calculation finished with ${warnings.length} warning(s)`, false);
+            } else {
+              if (kWarn) {
+                kWarn.textContent = '0';
+                kWarn.classList.remove('warn-pulse');
+              }
+            }
+
+            toast('Calculation done');
+            log(
+              'Calculation complete in ' +
+              ((t1 - t0) / 1000).toFixed(2) +
+              's. Summary: ' + JSON.stringify(data.summary || data)
+            );
+            if (window.glow) glow.burst('#btnCalculate');
+
+            // run_id is top-level (v2 returns an integer run.id)
+            const runId = (data && data.run_id != null) ? data.run_id : null;
+            const runLabel = runId != null ? ('#' + runId) : 'OK';
+            lastRunLabel = runLabel;
+            suppressBackendLastRun = false; // backend /status now reflects this dataset's last run
+            const elRun = document.getElementById('kRun');
+            const elRunKpi = document.getElementById('kRunKpi');
+            updateKpi(elRun, runLabel);
+            updateKpi(elRunKpi, runLabel);
+
+            // We just ran a new calculation; if we're in Stage 3, update the export summary line
+            refreshRunConfigSummary();
+
+            // Reveal the insight action strip now that we have a calculation
+            if (insightActionsEl) {
+              insightActionsEl.classList.add('insight-actions--visible');
+            }
+
+
+            // Realized Events: try DB endpoint first, then legacy inline data
+            let events = [];
+
+            if (runId != null) {
+              try {
+                const evResp = await fetch(`/calc/run/${encodeURIComponent(runId)}/events`);
+                if (evResp.ok) {
+                  const evJson = await evResp.json();
+                  if (evJson && Array.isArray(evJson.events)) {
+                    events = evJson.events;
+                  }
+                }
+              } catch (err) {
+                console.warn("Could not load realized events for run", runId, err);
+              }
+            }
+
+            if (events.length === 0 && data && Array.isArray(data.events)) {
+              events = data.events;
+            }
+
+            // Build investor-friendly summary for the Realized Events header
+            let metaLabel = '';
+            if (Array.isArray(events) && events.length > 0) {
+              const totalEvents = events.length;
+              const visibleEvents = Math.min(totalEvents, 100);
+              const warningsCount = warnings.length;
+
+              let totalGain = 0;
+              for (const ev of events) {
+                const gainRaw = (ev && (ev.gain || ev.pnl || ev.gain_eur)) ?? null;
+                if (gainRaw !== null && gainRaw !== undefined && gainRaw !== '') {
+                  const num = Number(String(gainRaw).replace(/\s/g, '').replace(',', '.'));
+                  if (!Number.isNaN(num)) totalGain += num;
+                }
+              }
+
+              const runPart = runLabel ? `Run ${runLabel}` : '';
+              const jurisPart = j ? `Jurisdiction: ${j}` : '';
+              const countPart = (visibleEvents === totalEvents)
+                ? `${totalEvents} event${totalEvents !== 1 ? 's' : ''}`
+                : `Showing ${visibleEvents} of ${totalEvents} events`;
+
+              let totalGainPart = '';
+              if (totalEvents > 0 && Number.isFinite(totalGain) && totalGain !== 0) {
+                const sign = totalGain > 0 ? '+' : '';
+                totalGainPart = `Total gain: ${sign}${totalGain.toFixed(2)}€`;
+              }
+
+              const warnPart = warningsCount > 0
+                ? `${warningsCount} warning${warningsCount !== 1 ? 's' : ''}`
+                : '';
+
+              metaLabel = [runPart, jurisPart, countPart, totalGainPart, warnPart]
+                .filter(Boolean)
+                .join(' • ');
+            }
+
+            // Update mini charts from this run
+            updateChartsFromRun(events, totals, j);
+
+            renderRealized(events, metaLabel);
+
+            if (btnExplain) {
+              btnExplain.onclick = () => {
+                if (!lastTotals) {
+                  toast('Run a calculation first to explain the results.', false);
+                  return;
+                }
+                updateExplainPanel(true);
+              };
+            }
+            if (btnCalculate) {
+              btnCalculate.textContent = originalLabel;
+            }
+            // Refresh status KPIs and recent runs now that a new run exists
+            hydrateStatusCards();
+            hydrateRecentRuns();
+            setStage(3, { skipScroll: true });
+          } catch (e) {
+            if (btnCalculate) {
+              btnCalculate.disabled = false;
+              btnCalculate.classList.remove('btn-disabled');
+              btnCalculate.textContent = originalLabel;
+            }
+            toast('Calculation error', false);
+            log(String(e));
+          }
+        });
+
+
+        if (btnExport) btnExport.addEventListener('click', async () => {
+          // Reuse the same safe defaults as calculation
+          const includeTaxHelpers = !chkTaxHelpers || chkTaxHelpers.checked;
+          const includeAuditAppendix = !chkAuditAppendix || chkAuditAppendix.checked;
+
+          const qp = new URLSearchParams();
+          qp.set('include_tax_helpers', includeTaxHelpers ? '1' : '0');
+          qp.set('include_audit_appendix', includeAuditAppendix ? '1' : '0');
+
+          const pdfUrl = '/export/summary.pdf?' + qp.toString();
+          const csvUrl = '/export/summary.csv?' + qp.toString(); // CSV ignores them but harmless
+
+          try {
+            log('Exporting summary (PDF/CSV)...');
+            window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+            window.open(csvUrl, '_blank', 'noopener,noreferrer');
+            if (window.glow) glow.sparkle('#btnExport');
+            toast('Exports opened');
+          } catch (e) {
+            toast('Export failed', false);
+            log(String(e));
+          }
+        });
+
+        if (btnDiag) btnDiag.addEventListener('click', async () => {
+          try {
+            log('Exporting diagnostics bundle...');
+            window.open('/demo/diagnostics/export', '_blank', 'noopener,noreferrer');
+            toast('Diagnostics exporting...');
+          } catch (e) {
+            toast('Diagnostics failed', false);
+            log(String(e));
+          }
+        });
+
+        // Reveal-on-scroll for sections that start with a soft blur
+        const revealEls = Array.from(document.querySelectorAll('.reveal'));
+        if (revealEls.length) {
+          if ('IntersectionObserver' in window) {
+            const io = new IntersectionObserver((entries) => {
+              entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                  entry.target.classList.add('is-visible');
+                  io.unobserve(entry.target);
+                }
+              });
+            }, {
+              root: null,
+              threshold: 0.18
+            });
+
+            revealEls.forEach((el) => io.observe(el));
+          } else {
+            // Fallback: if IO is not supported, just show everything
+            revealEls.forEach((el) => el.classList.add('is-visible'));
+          }
+        }
+        
+        })();
+      });
+    })();
+  </script>
+{% endblock %}

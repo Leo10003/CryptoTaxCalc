@@ -1,7 +1,8 @@
 # utils_files.py
-import hashlib, os, datetime
+import hashlib, os
 from pathlib import Path
 from fastapi import UploadFile
+from datetime import datetime, timezone
 
 STORAGE_DIR = Path("storage_raw")
 STORAGE_DIR.mkdir(exist_ok=True)
@@ -17,7 +18,7 @@ def persist_uploaded_file(file: UploadFile, content: bytes) -> tuple[str, str]:
     Safe to call multiple times; it won't overwrite if the same hash exists.
     """
     digest = sha256_bytes(content)
-    datedir = STORAGE_DIR / datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    datedir = STORAGE_DIR / datetime.now().strftime("%Y-%m-%d")
     datedir.mkdir(parents=True, exist_ok=True)
     ext = "".join(Path(file.filename).suffixes) or ""
     path = datedir / f"{digest}{ext}"

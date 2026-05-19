@@ -1,224 +1,452 @@
-# fifo_engine.py
+# fifo_engine.py – Optimized FIFO Engine
 """
-Deterministic FIFO cost-basis calculator.
-
-Goal (MVP):
-- Track lots per asset using FIFO (first-in, first-out).
-- Produce realized gain/loss events when an asset is SOLD (via a 'trade').
-- Ignore 'transfer' for tax purposes (no gain).
-- Treat 'income' as a new lot with ZERO cost basis (MVP simplification).
-  NOTE: In real tax law, income is taxed at receipt and becomes basis; we don't
-  have fair-value-at-receipt yet, so we set basis=0 and emit a warning.
-
-Assumptions (MVP to keep logic clean and auditable):
-- A row with type == "trade" means you're SELLING `base_asset` for `quote_asset`.
-  Proceeds are denominated in the quote_asset.
-- Fees reduce proceeds only when fee_asset == quote_asset (simple & conservative).
-- If you sell more than your available lots (short position), we assume zero basis
-  for the missing portion and emit a warning.
-
-Design:
-- This file is *pure logic* (no DB calls). Give it a list[Transaction]; get back
-  (events, summary, warnings). That makes it easy to test and evolve.
+Deterministic FIFO cost-basis calculator with audit logging.
+Pure function: given transactions → realized events, summary, warnings.
 """
 
-from __future__ import annotations
-from dataclasses import dataclass, field
-from decimal import Decimal, getcontext
-from typing import List, Dict, Any, Tuple
-from .schemas import Transaction
+from dataclasses import dataclass, field, asdict
+from decimal import Decimal, getcontext, InvalidOperation
+from typing import List, Dict, Any, Tuple, Deque
+from collections import deque
+from pathlib import Path
+from datetime import datetime
+import json
 
-# Use sufficient precision for money math (increase if you need sub-satoshi granularity).
+from cryptotaxcalc.schemas import Transaction
+from cryptotaxcalc.logging_setup import get_logger, _atomic_write_json, _now_iso_z
+
+# Precision: 28 digits to avoid rounding issues
 getcontext().prec = 28
 
+logger = get_logger("fifo")
+
+# ===========================
+# Data Classes
+# ===========================
 
 @dataclass
 class Lot:
-    """
-    Represents an acquisition lot for an asset.
-    - qty_remaining: how much is still available to be sold
-    - cost_per_unit: basis per unit in the quote currency of future proceeds
-                     (MVP note: we don't convert currencies here; we keep basis
-                     in the same currency as when created; for income it's 0).
-    """
     qty_remaining: Decimal
-    cost_per_unit: Decimal  # basis/unit in *proceeds currency terms*, MVP=0 for income
+    cost_per_unit: Decimal
+    # Optional: when this lot was originally acquired
+    acquired_at: "datetime | None" = None
 
 
 @dataclass
 class Match:
-    """
-    How a sell matched against a specific lot.
-    """
-    from_qty: Decimal      # quantity taken from that lot
+    from_qty: Decimal
     lot_cost_per_unit: Decimal
     lot_cost_total: Decimal
+    # When the matched lot was originally acquired (for holding-period rules)
+    acquired_at: "datetime | None" = None
 
 
 @dataclass
 class Realization:
-    """
-    A realized gain/loss event produced by selling an asset (type='trade').
-    """
     timestamp: str
     asset: str
     qty_sold: Decimal
-    proceeds: Decimal            # in quote asset units
-    cost_basis: Decimal          # same currency as proceeds
+    proceeds: Decimal
+    cost_basis: Decimal
     gain: Decimal
     quote_asset: str
-    fee_applied: Decimal         # fee deducted from proceeds (when fee_asset == quote_asset)
+    fee_applied: Decimal
     matches: List[Match] = field(default_factory=list)
 
 
-def _is_stable(symbol: str | None) -> bool:
-    """Simple helper, used only for warnings/messages."""
-    return symbol is not None and symbol.upper() in {"USDT", "USDC", "EUR", "USD", "EURT"}
+# ===========================
+# Core Functions
+# ===========================
 
-
-def compute_fifo(transactions: List[Transaction]) -> Tuple[List[Realization], Dict[str, Any], List[str]]:
+def compute_fifo(
+    transactions: List[Transaction],
+    *,
+    enable_diagnostics: bool = False,
+) -> Tuple[List[Realization], Dict[str, Any], List[str]]:
     """
-    Core FIFO engine (enhanced):
-      - BUY: create lot with non-zero basis from quote fields.
-      - TRADE (sell): consume lots FIFO; proceeds = quote_amount - fee(if fee in quote).
-      - INCOME: create lot; if quote_amount given, use it as fair value for basis; else basis=0 (warn).
-      - TRANSFER: ignored for tax events.
-
-    Limitations (MVP):
-      - No FX conversion. Proceeds/basis/gain are in the quote asset’s units.
-      - Fees only reduce proceeds when fee_asset == quote_asset.
+    Deterministic FIFO engine:
+      - BUY: creates a cost lot
+      - TRADE: consumes lots FIFO and emits realized events
+      - INCOME: adds zero-basis or FV-based lots
+      - TRANSFER: ignored
+    Emits audit logs and returns (events, summary, warnings).
     """
+    start_ts = _now_iso_z()
+    logger.info(f"FIFO run started at {start_ts}, transactions={len(transactions)}")
+
     txs = sorted(transactions, key=lambda t: t.timestamp)
-    lots: Dict[str, List[Lot]] = {}
+    lots: Dict[str, Deque[Lot]] = {}
     events: List[Realization] = []
     warnings: List[str] = []
+    
+    # Data-quality tracking:
+    # - Fees in quote_asset are applied directly (already supported).
+    # - Fees in base_asset are applied by adjusting lot quantity (BUY) or disposal quantity (TRADE).
+    # - Fees in third assets (neither base nor quote) are recorded and surfaced as warnings (valuation requires pricing data).
+    fee_base_count = 0
+    fee_base_assets: Dict[str, int] = {}
+    fee_third_count = 0
+    fee_third_assets: Dict[str, int] = {}
+    
+    # Canonical transaction types (normalize common CSV/export labels)
+    BUY_TYPES = {
+        "buy",
+        "purchase",
+        "spot_buy",
+        "spot_purchase",
+        "market_buy",
+    }
 
-    def add_lot(asset: str, qty: Decimal, cost_per_unit: Decimal) -> None:
+    # Disposals / swaps / conversions (treated as TRADE: consume lots + emit realization)
+    DISPOSAL_TYPES = {
+        "trade",
+        "sell",
+        "spot_sell",
+        "spot_trade",
+        "swap",
+        "spot_swap",
+        "convert",
+        "conversion",
+        "exchange",
+        "spend",
+        "payment",
+    }
+
+    # Income-like events (adds lots, basis via quote_amount/base_amount or fair_value)
+    INCOME_TYPES = {
+        "income",
+        "reward",
+        "rewards",
+        "staking",
+        "staking_reward",
+        "interest",
+        "airdrop",
+        "mining",
+        "bonus",
+    }
+
+    # Transfers (ignored in pooled FIFO)
+    TRANSFER_TYPES = {
+        "transfer",
+        "transfer_in",
+        "transfer_out",
+        "deposit",
+        "withdraw",
+        "withdrawal",
+        "send",
+        "receive",
+    }
+
+    def _dec(v) -> Decimal:
+        try:
+            return Decimal(str(v or "0"))
+        except InvalidOperation:
+            return Decimal("0")
+
+    def add_lot(
+        asset: str,
+        qty: Decimal,
+        cost_per_unit: Decimal,
+        acquired_at: "datetime | None" = None,
+    ) -> None:
         if qty <= 0:
             return
-        lots.setdefault(asset, []).append(Lot(qty_remaining=qty, cost_per_unit=cost_per_unit))
+        lots.setdefault(asset, deque()).append(
+            Lot(qty_remaining=qty, cost_per_unit=cost_per_unit, acquired_at=acquired_at)
+        )
+        logger.debug(
+            "Added lot %s: qty=%s, cost_per_unit=%s, acquired_at=%s",
+            asset,
+            qty,
+            cost_per_unit,
+            acquired_at,
+        )
 
     def consume_lots(asset: str, qty_to_sell: Decimal) -> Tuple[Decimal, List[Match], List[str]]:
         cost_total = Decimal("0")
         matches: List[Match] = []
         local_warnings: List[str] = []
-        remaining = qty_to_sell
-        asset_lots = lots.get(asset, [])
 
-        i = 0
-        while remaining > 0 and i < len(asset_lots):
-            lot = asset_lots[i]
+        remaining = qty_to_sell
+        asset_lots = lots.get(asset)
+        if asset_lots is None:
+            asset_lots = deque()
+            lots[asset] = asset_lots
+
+        while remaining > 0 and len(asset_lots) > 0:
+            lot = asset_lots[0]
             take = min(lot.qty_remaining, remaining)
+
             if take > 0:
                 lot_cost = lot.cost_per_unit * take
-                matches.append(Match(from_qty=take, lot_cost_per_unit=lot.cost_per_unit, lot_cost_total=lot_cost))
+                matches.append(
+                    Match(
+                        from_qty=take,
+                        lot_cost_per_unit=lot.cost_per_unit,
+                        lot_cost_total=lot_cost,
+                        acquired_at=getattr(lot, "acquired_at", None),
+                    )
+                )
                 cost_total += lot_cost
                 lot.qty_remaining -= take
                 remaining -= take
+
             if lot.qty_remaining == 0:
-                i += 1
+                asset_lots.popleft()
 
         if remaining > 0:
             local_warnings.append(
-                f"Selling {qty_to_sell} {asset} but only {qty_to_sell - remaining} available in lots. "
-                f"Assuming zero basis for {remaining} {asset}."
+                f"Selling {qty_to_sell} {asset} but only {qty_to_sell - remaining} available. Zero basis for {remaining}."
             )
-            matches.append(Match(from_qty=remaining, lot_cost_per_unit=Decimal("0"), lot_cost_total=Decimal("0")))
-
-        lots[asset] = [l for l in asset_lots if l.qty_remaining > 0]
-        return cost_total, matches, local_warnings
-
-    for t in txs:
-        ttype = t.type.strip().lower()
-        asset = t.base_asset.upper()
-
-        # Normalize common synonyms so CSVs are flexible
-        if ttype == "sell":
-            ttype = "trade"
-
-        elif ttype in {"purchase", "spot_buy"}:
-            ttype = "buy"
-
-
-        if ttype == "transfer":
-            continue
-
-        elif t.type.lower() == "income":
-            # INCOME increases inventory with a cost basis.
-            # Priority:
-            # 1) If total quote_amount is provided, derive unit basis = quote_amount / base_amount.
-            # 2) Else if fair_value (unit) provided, use it directly.
-            # 3) Else no fair value -> basis = 0 (with a warning).
-            unit_cost = Decimal("0")
-            if t.quote_amount is not None and t.base_amount > 0:
-                try:
-                   unit_cost = (t.quote_amount / t.base_amount)
-                except Exception:
-                    unit_cost = Decimal("0")
-                    warnings.append(f"Income at {t.timestamp.isoformat()}: invalid quote_amount/base_amount; using basis=0.")
-            elif getattr(t, "fair_value", None) is not None:
-                unit_cost = t.fair_value
-            else:
-                warnings.append(f"Income at {t.timestamp.isoformat()}: no fair value provided; using basis=0.")
-
-            add_lot(t.base_asset, t.base_amount, unit_cost)
-            continue
-
-        elif ttype == "buy":
-            # BUY: acquire base_asset using quote_asset. Create lot with non-zero basis.
-            if t.quote_asset is None or t.quote_amount is None:
-                warnings.append(f"Buy at {t.timestamp.isoformat()} missing quote fields; skipping.")
-                continue
-            fee_in_quote = Decimal("0")
-            if t.fee_asset and t.fee_amount and t.fee_asset.upper() == t.quote_asset.upper():
-                fee_in_quote = t.fee_amount
-            effective_cost = t.quote_amount + fee_in_quote  # total cost in quote units
-            if t.base_amount <= 0:
-                warnings.append(f"Buy at {t.timestamp.isoformat()} has non-positive base_amount; skipping.")
-                continue
-            unit_cost = effective_cost / t.base_amount
-            add_lot(asset, t.base_amount, unit_cost)
-            continue
-
-        elif ttype == "trade":
-            # SELL base_asset for quote_asset
-            if t.quote_asset is None or t.quote_amount is None:
-                warnings.append(f"Trade at {t.timestamp.isoformat()} missing quote fields; skipping.")
-                continue
-
-            quote = t.quote_asset.upper()
-            qty_sold = t.base_amount
-
-            fee = Decimal("0")
-            if t.fee_asset and t.fee_amount and t.fee_asset.upper() == quote:
-                fee = t.fee_amount
-
-            proceeds = t.quote_amount - fee
-            if proceeds < 0:
-                warnings.append(f"Trade at {t.timestamp.isoformat()} has fee > proceeds; clamping to 0.")
-                proceeds = Decimal("0")
-
-            cost_total, matches, local_w = consume_lots(asset, qty_sold)
-            warnings.extend(local_w)
-            gain = proceeds - cost_total
-
-            events.append(
-                Realization(
-                    timestamp=t.timestamp.isoformat(),
-                    asset=asset,
-                    qty_sold=qty_sold,
-                    proceeds=proceeds,
-                    cost_basis=cost_total,
-                    gain=gain,
-                    quote_asset=quote,
-                    fee_applied=fee,
-                    matches=matches,
+            matches.append(
+                Match(
+                    from_qty=remaining,
+                    lot_cost_per_unit=Decimal("0"),
+                    lot_cost_total=Decimal("0"),
+                    acquired_at=None,
                 )
             )
 
-        else:
-            warnings.append(f"Unknown transaction type '{t.type}' at {t.timestamp.isoformat()}; skipping.")
+        return cost_total, matches, local_warnings
 
+    def _serialize_match(m: Match) -> dict:
+        """
+        Convert a Match dataclass to a JSON-safe dict.
+        Ensures acquired_at is an ISO string (or None).
+        """
+        d = asdict(m)
+        if d.get("acquired_at") is not None:
+            try:
+                d["acquired_at"] = d["acquired_at"].isoformat()
+            except Exception:
+                # Fallback to string if something unexpected happens
+                d["acquired_at"] = str(d["acquired_at"])
+        return d
+
+    def _serialize_event(e: Realization) -> dict:
+        """
+        Convert a Realization dataclass (including matches) to JSON-safe dict.
+        """
+        d = asdict(e)
+
+        # Matches: normalize acquired_at using the original dataclass objects
+        d["matches"] = [_serialize_match(m) for m in (getattr(e, "matches", []) or [])]
+
+        return d
+
+    # Core processing loop
+    for t in txs:
+        try:
+            raw_type = (t.type or "").strip().lower()
+            ttype = raw_type.replace(" ", "_").replace("-", "_")
+            asset = (t.base_asset or "").upper()
+
+            if not asset:
+                warnings.append(f"Transaction {t.timestamp}: missing base_asset; skipped.")
+                continue
+
+            if ttype in BUY_TYPES:
+                ttype = "buy"
+            elif ttype in DISPOSAL_TYPES:
+                ttype = "trade"
+            elif ttype in INCOME_TYPES:
+                ttype = "income"
+            elif ttype in TRANSFER_TYPES:
+                ttype = "transfer"
+
+            if ttype == "transfer":
+                continue
+
+            if ttype == "income":
+                base_qty = t.base_amount
+                if base_qty is None or base_qty == 0:
+                    warnings.append(f"Income {t.timestamp}: missing/zero base_amount; skipped.")
+                    continue
+                if base_qty < 0:
+                    warnings.append(f"Income {t.timestamp}: negative base_amount; using absolute value.")
+                    base_qty = abs(base_qty)
+
+                unit_cost = Decimal("0")
+
+                if t.quote_amount is not None and base_qty > 0:
+                    quote_amt = t.quote_amount
+                    if quote_amt < 0:
+                        warnings.append(f"Income {t.timestamp}: negative quote_amount; using absolute value.")
+                        quote_amt = abs(quote_amt)
+                    try:
+                        unit_cost = quote_amt / base_qty
+                    except Exception:
+                        warnings.append(f"Income {t.timestamp}: invalid division; basis=0.")
+                elif getattr(t, "fair_value", None) is not None:
+                    fv = _dec(getattr(t, "fair_value", None))
+                    if fv < 0:
+                        warnings.append(f"Income {t.timestamp}: negative fair_value; clamped to 0.")
+                        fv = Decimal("0")
+                    unit_cost = fv
+                else:
+                    warnings.append(f"Income {t.timestamp}: no fair value; basis=0.")
+
+                add_lot(asset, base_qty, unit_cost, acquired_at=t.timestamp)
+                continue
+
+            if ttype == "buy":
+                if not t.quote_asset or t.quote_amount is None:
+                    warnings.append(f"Buy {t.timestamp}: missing quote fields.")
+                    continue
+
+                base_qty = t.base_amount
+                if base_qty is None or base_qty == 0:
+                    warnings.append(f"Buy {t.timestamp}: missing/zero base_amount.")
+                    continue
+                if base_qty < 0:
+                    warnings.append(f"Buy {t.timestamp}: negative base_amount; using absolute value.")
+                    base_qty = abs(base_qty)
+
+                quote = t.quote_asset.upper()
+                quote_amt = t.quote_amount
+                if quote_amt < 0:
+                    warnings.append(f"Buy {t.timestamp}: negative quote_amount; using absolute value.")
+                    quote_amt = abs(quote_amt)
+
+                fee_in_quote = Decimal("0")
+                fee_in_base = Decimal("0")
+
+                if t.fee_asset and t.fee_amount is not None and t.fee_amount != 0:
+                    fa = t.fee_asset.upper()
+                    fee_amt = t.fee_amount
+                    if fee_amt < 0:
+                        warnings.append(f"Buy {t.timestamp}: negative fee_amount; using absolute value.")
+                        fee_amt = abs(fee_amt)
+
+                    if fa == quote:
+                        fee_in_quote = fee_amt
+                    elif fa == asset:
+                        fee_in_base = fee_amt
+                        fee_base_count += 1
+                        fee_base_assets[fa] = fee_base_assets.get(fa, 0) + 1
+                    else:
+                        fee_third_count += 1
+                        fee_third_assets[fa] = fee_third_assets.get(fa, 0) + 1
+
+                # Fee in base asset reduces the credited quantity (net received).
+                net_base_qty = base_qty - fee_in_base
+                if net_base_qty <= 0:
+                    warnings.append(f"Buy {t.timestamp}: base fee >= base_amount; skipped.")
+                    continue
+
+                effective_cost = quote_amt + fee_in_quote
+                try:
+                    unit_cost = effective_cost / net_base_qty
+                except Exception:
+                    warnings.append(f"Buy {t.timestamp}: invalid division; skipped.")
+                    continue
+
+                add_lot(asset, net_base_qty, unit_cost, acquired_at=t.timestamp)
+                continue
+
+            if ttype == "trade":
+                if not t.quote_asset or t.quote_amount is None:
+                    warnings.append(f"Trade {t.timestamp}: missing quote fields.")
+                    continue
+
+                qty_sold = t.base_amount
+                if qty_sold is None or qty_sold == 0:
+                    warnings.append(f"Trade {t.timestamp}: missing/zero base_amount.")
+                    continue
+                if qty_sold < 0:
+                    warnings.append(f"Trade {t.timestamp}: negative base_amount; using absolute value.")
+                    qty_sold = abs(qty_sold)
+
+                quote = t.quote_asset.upper()
+                proceeds_raw = t.quote_amount
+                if proceeds_raw < 0:
+                    warnings.append(f"Trade {t.timestamp}: negative quote_amount; using absolute value.")
+                    proceeds_raw = abs(proceeds_raw)
+
+                fee_in_quote = Decimal("0")
+                fee_in_base = Decimal("0")
+
+                if t.fee_asset and t.fee_amount is not None and t.fee_amount != 0:
+                    fa = t.fee_asset.upper()
+                    fee_amt = t.fee_amount
+                    if fee_amt < 0:
+                        warnings.append(f"Trade {t.timestamp}: negative fee_amount; using absolute value.")
+                        fee_amt = abs(fee_amt)
+
+                    if fa == quote:
+                        fee_in_quote = fee_amt
+                    elif fa == asset:
+                        fee_in_base = fee_amt
+                        fee_base_count += 1
+                        fee_base_assets[fa] = fee_base_assets.get(fa, 0) + 1
+                    else:
+                        fee_third_count += 1
+                        fee_third_assets[fa] = fee_third_assets.get(fa, 0) + 1
+
+                proceeds = proceeds_raw - fee_in_quote
+                if proceeds < 0:
+                    proceeds = Decimal("0")
+                    warnings.append(f"Trade {t.timestamp}: fee > proceeds; clamped.")
+
+                # Base-asset fee is modeled as additional disposed quantity with zero proceeds.
+                qty_disposed = qty_sold + fee_in_base
+
+                cost_total, matches, local_w = consume_lots(asset, qty_disposed)
+                warnings.extend(local_w)
+                gain = proceeds - cost_total
+
+                # Reporting convenience: approximate total fees in quote terms.
+                fee_quote_equiv = fee_in_quote
+                if fee_in_base > 0 and qty_sold > 0:
+                    try:
+                        exec_price = proceeds_raw / qty_sold
+                        fee_quote_equiv = fee_in_quote + (fee_in_base * exec_price)
+                    except Exception:
+                        fee_quote_equiv = fee_in_quote
+
+                events.append(
+                    Realization(
+                        timestamp=t.timestamp.isoformat(),
+                        asset=asset,
+                        qty_sold=qty_disposed,
+                        proceeds=proceeds,
+                        cost_basis=cost_total,
+                        gain=gain,
+                        quote_asset=quote,
+                        fee_applied=fee_quote_equiv,
+                        matches=matches,
+                    )
+                )
+                continue
+
+            warnings.append(f"Unknown type '{t.type}' at {t.timestamp}.")
+
+        except Exception as e:
+            msg = f"FIFO error at transaction {getattr(t, 'timestamp', '?')}: {e}"
+            warnings.append(msg)
+            logger.warning(msg)
+
+    # Data-quality surface: quote/base fees are applied; third-asset fees require external pricing.
+    # Aggregate into a small number of warnings (avoid per-row spam).
+    if fee_base_count > 0:
+        top_assets = sorted(fee_base_assets.items(), key=lambda kv: kv[1], reverse=True)[:3]
+        top_str = ", ".join([f"{a}×{n}" for a, n in top_assets if a])
+        detail = f" (top: {top_str})" if top_str else ""
+        warnings.append(
+            f"Fee handling: applied base-asset fees for {fee_base_count} transactions{detail}. "
+            "BUY lots were reduced by the base-asset fee; TRADE disposals include the base-asset fee as extra disposed quantity."
+        )
+
+    if fee_third_count > 0:
+        top_assets = sorted(fee_third_assets.items(), key=lambda kv: kv[1], reverse=True)[:3]
+        top_str = ", ".join([f"{a}×{n}" for a, n in top_assets if a])
+        detail = f" (top: {top_str})" if top_str else ""
+        warnings.append(
+            f"Fee handling: {fee_third_count} transactions have fees paid in third assets (neither base nor quote){detail}. "
+            "These fees are recorded but not valued/applied because price data was unavailable. Load daily prices (base=<ASSET>, quote=EUR) and re-run."
+        )
+
+    # Build summary
     summary_by_quote: Dict[str, Dict[str, Decimal]] = {}
     for ev in events:
         q = ev.quote_asset
@@ -228,12 +456,29 @@ def compute_fifo(transactions: List[Transaction]) -> Tuple[List[Realization], Di
         agg["gain"] += ev.gain
 
     summary_clean = {
-        "by_quote_asset": {q: {k: str(v) for k, v in agg.items()} for q, agg in summary_by_quote.items()},
+        "by_quote_asset": {
+            q: {k: str(v.quantize(Decimal('0.00000001'))) for k, v in agg.items()} for q, agg in summary_by_quote.items()
+        },
         "totals": {
             "proceeds": str(sum((a["proceeds"] for a in summary_by_quote.values()), Decimal("0"))),
             "cost_basis": str(sum((a["cost_basis"] for a in summary_by_quote.values()), Decimal("0"))),
             "gain": str(sum((a["gain"] for a in summary_by_quote.values()), Decimal("0"))),
         },
     }
-    return events, summary_clean, warnings
 
+    # Diagnostics & audit output
+    try:
+        out_dir = Path("logs/fifo")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "timestamp": start_ts,
+            "events_count": len(events),
+            "warnings_count": len(warnings),
+            "summary": summary_clean,
+        }
+        _atomic_write_json(out_dir / "last_run.json", payload)
+    except Exception as e:
+        logger.warning(f"Could not write FIFO diagnostics: {e}")
+
+    logger.info(f"FIFO completed: {len(events)} events, {len(warnings)} warnings.")
+    return events, summary_clean, warnings

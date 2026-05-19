@@ -1,0 +1,76 @@
+name: Release bundle (root templates/static)
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "release-*"
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project (dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests (excluding smoke)
+        run: |
+          pytest -q -m "not smoke"
+
+      - name: Build release bundle zip (keeps templates/static at repo root)
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          TAG="${GITHUB_REF_NAME}"
+          BUNDLE="CryptoTaxCalc_${TAG}_bundle.zip"
+
+          INCLUDE=(src templates static)
+          for f in pyproject.toml requirements.txt README.md LICENSE; do
+            if [ -f "$f" ]; then
+              INCLUDE+=("$f")
+            fi
+          done
+
+          zip -r "dist/${BUNDLE}" "${INCLUDE[@]}" \
+            -x "**/__pycache__/*" \
+               "*.pyc" "*.pyo" "*.pyd" \
+               ".pytest_cache/*" ".ruff_cache/*" ".mypy_cache/*" \
+               ".venv/*" "artifacts/*" ".git/*"
+
+          sha256sum "dist/${BUNDLE}" | tee "dist/${BUNDLE}.sha256"
+          echo "bundle_name=${BUNDLE}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cryptotaxcalc-bundle
+          path: |
+            dist/${{ steps.bundle.outputs.bundle_name }}
+            dist/${{ steps.bundle.outputs.bundle_name }}.sha256
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ steps.bundle.outputs.bundle_name }}
+            dist/${{ steps.bundle.outputs.bundle_name }}.sha256
+          generate_release_notes: true

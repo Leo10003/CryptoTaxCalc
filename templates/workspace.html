@@ -1,0 +1,5190 @@
+{% extends "base.html" %}
+
+{% block title %}CryptoTaxCalc — Workspace{% endblock %}
+
+{% block head_extra %}
+<style>
+  :root {
+    --ws-max-width: 840px;
+    --ws-nav-accent: #4B9BFF; /* sidebar accent: vertical line + rings */
+  }
+
+  .ws-shell {
+    position: relative;
+    min-height: auto;   /* let content define height; no forced scroll */
+    background: transparent;
+  }
+
+  /* =========================================================
+     BACKGROUND (ONLY PART THAT CHANGED)
+     ========================================================= */
+
+  /* Dark theme: deep navy with top and bottom-right glow (reference look) */
+  html[data-theme="dark"],
+  html[data-theme="dark"] body {
+    background:
+      /* top glow */
+      radial-gradient(circle at 22% 0%, #1a2338 0%, transparent 55%),
+      /* bottom-right glow */
+      radial-gradient(circle at 80% 100%, #0a2840 0%, transparent 58%),
+      /* base vertical gradient */
+      linear-gradient(180deg, #050814 0%, #02040b 100%);
+  }
+
+  /* Light theme: soft blue with top glow and bottom-right glow */
+  html[data-theme="light"],
+  html[data-theme="light"] body {
+    background:
+      /* top glow */
+      radial-gradient(circle at 0% -8%, rgba(224, 235, 255, 0.80) 0%, transparent 60%),
+      /* bottom-right glow */
+      radial-gradient(circle at 85% 110%, rgba(210, 242, 255, 0.85) 0%, transparent 62%),
+      /* base soft wash */
+      linear-gradient(180deg, #eef3ff 0%, #e3f3ff 100%);
+  }
+
+  /* Let the page background show everywhere */
+  #main,
+  main {
+    background: transparent !important;
+  }
+
+  /* No footer on the intro page */
+  footer {
+    display: none !important;
+  }
+
+  /* No global overlays or video on workspace */
+  body::before,
+  body::after,
+  .bg-video-wrap {
+    display: none !important;
+  }
+
+  /* =========================================================
+     SIDEBAR (unchanged)
+     ========================================================= */
+
+  .ws-sidebar {
+    position: fixed;
+    top: 0;                      /* extend over header to the very top */
+    bottom: 0;
+    left: 0;
+    width: 210px;
+    clip-path: inset(0 0 0 0);
+    border-right: 1px solid var(--border);
+    border-radius: 18px 0 0 0;   /* rounded top-left, sharp other corners */
+    background: var(--surface);  /* solid, no transparency */
+    padding: 8px 12px 18px 12px; /* more room for labels + badge */
+    display: flex;
+    flex-direction: column;
+    z-index: 30;                 /* above header */
+    transition: clip-path 0.22s var(--ease);
+    overflow: hidden;         /* clip inner; prevents reflow artifacts */
+    contain: layout paint;    /* isolate layout/paint work */
+    will-change: clip-path;
+    box-shadow: 8px 0 24px rgba(15, 23, 42, 0.20);
+  }
+
+  html[data-theme="light"] .ws-sidebar {
+    box-shadow: 8px 0 20px rgba(15, 23, 42, 0.08);
+  }
+
+  .ws-shell.is-collapsed .ws-sidebar {
+    clip-path: inset(0 calc(210px - 72px) 0 0); /* show only left 72px */
+  }
+
+  .ws-sidebar-inner {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-top: 8px;
+    width: 100%;              /* match the sidebar content box (prevents right-side clipping) */
+  }
+
+  .ws-sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    padding-left: 8px;
+  }
+
+  /* Sidebar toggle — compact, flat, and consistent with nav accent */
+  .ws-sidebar-logo-mark {
+    box-sizing: border-box;
+    width: 30px;
+    aspect-ratio: 1 / 1;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 30%, var(--border));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 600;
+    color: var(--ws-nav-accent);
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
+    cursor: pointer;
+    transition:
+      background-color 0.16s var(--ease),
+      border-color 0.16s var(--ease),
+      box-shadow 0.16s var(--ease),
+      transform 0.08s var(--ease),
+      color 0.16s var(--ease);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.20);
+  }
+
+  /* Light theme: calmer toggle on white sidebar */
+  html[data-theme="light"] .ws-sidebar-logo-mark {
+    background: #ffffff;
+    border-color: #D6E0F5;
+    color: var(--ws-nav-accent);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.10);
+  }
+
+  .ws-sidebar-logo-mark:hover {
+    background-color: color-mix(in srgb, var(--surface) 90%, var(--ws-nav-accent) 6%);
+    border-color: var(--ws-nav-accent);
+    color: var(--ws-nav-accent);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.24);
+    transform: translateY(-1px) scale(1.03);
+  }
+
+  .ws-sidebar-logo-mark:active {
+    transform: translateY(0.5px) scale(0.99);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+  }
+
+  /* When collapsed, add a subtle ring to invite expansion */
+  .ws-shell.is-collapsed .ws-sidebar-logo-mark {
+    border-color: var(--ws-nav-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ws-nav-accent) 20%, transparent);
+  }
+
+  /* Light theme: even softer ring when collapsed */
+  html[data-theme="light"] .ws-shell.is-collapsed .ws-sidebar-logo-mark {
+    background: #ffffff;
+    border-color: var(--ws-nav-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ws-nav-accent) 14%, transparent);
+  }
+
+  .ws-sidebar-logo-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      transform 0.28s cubic-bezier(0.19, 1, 0.22, 1),
+      opacity   0.28s cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+  .ws-sidebar-logo-title {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.05;
+    color: var(--text);
+  }
+
+  .ws-sidebar-logo-sub {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.05;
+    color: var(--muted);
+    opacity: 0.95;
+  }
+
+  .ws-shell.is-collapsed .ws-sidebar-logo-text {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  .ws-sidebar-section-label {
+    font-size: 10px;
+    line-height: 12px;
+    height: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 12px;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      transform 0.28s cubic-bezier(0.19, 1, 0.22, 1),
+      opacity   0.28s cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+  .ws-shell.is-collapsed .ws-sidebar-section-label {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  .ws-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .ws-nav-item {
+    position: relative;               /* anchors the badge dot in collapsed mode */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 8px 8px 12px;
+    height: 52px;               /* fixed row height prevents vertical jitter */
+    box-sizing: border-box;
+    border-radius: 12px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: none;
+    text-decoration: none;
+  }
+
+  .ws-nav-item:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ws-nav-accent) 45%, transparent);
+    outline-offset: 2px;
+  }
+
+  /* Sidebar: remove browser link underlines/visited color (anchors) + keep buttons consistent */
+  .ws-sidebar .ws-nav-item {
+    text-decoration: none !important;
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+  }
+
+  .ws-sidebar a.ws-nav-item:visited {
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+  }
+
+  .ws-sidebar .ws-nav-item.is-active,
+  .ws-sidebar a.ws-nav-item.is-active:visited {
+    color: var(--text);
+  }
+
+  .ws-sidebar .ws-nav-item:hover {
+    text-decoration: none !important;
+  }
+
+  .ws-sidebar .ws-nav-item .label-text {
+    text-decoration: none !important;
+  }
+
+  .ws-sidebar-footer button.ws-nav-item {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: inherit;
+    font: inherit;
+  }
+
+  .ws-sidebar-footer button.ws-nav-item:active {
+    background: transparent !important;
+  }
+
+  .ws-nav-badge {
+    margin-left: auto;
+    flex-shrink: 0;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 28%, var(--border));
+    background: color-mix(in srgb, var(--ws-nav-accent) 8%, var(--surface));
+    color: color-mix(in srgb, var(--text) 78%, var(--muted));
+    box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+  }
+
+  .ws-nav-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ws-nav-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-nav-accent) 16%, transparent);
+    flex-shrink: 0;
+  }
+
+  /* Collapsed: hide the pill and show a notification dot on the icon corner */
+  .ws-shell.is-collapsed .ws-nav-badge {
+    display: none !important;
+  }
+
+  .ws-shell.is-collapsed #wsNavHistory.has-new .ws-nav-icon::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--ws-nav-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-nav-accent) 16%, transparent);
+  }
+
+  html[data-theme="light"] .ws-nav-badge {
+    border-color: #D6E0F5;
+    background: color-mix(in srgb, #DFE7FF 70%, #FFFFFF 30%);
+    box-shadow: 0 4px 14px rgba(15,23,42,0.08);
+  }
+
+  .ws-nav-item .label-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 1;
+    margin-left: 0;
+    transform: translateX(0);
+    transition:
+      transform 0.28s cubic-bezier(0.19, 1, 0.22, 1),
+      opacity   0.28s cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+  .ws-shell.is-collapsed .ws-nav-item .label-text {
+    opacity: 0;
+    transform: translateX(-20px);
+    width: 0;
+    margin-left: 0;
+    flex: 0 0 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .ws-shell.is-collapsed .ws-sidebar-nav .ws-nav-item,
+  .ws-shell.is-collapsed .ws-sidebar-footer .ws-nav-item {
+    justify-content: flex-start; /* don’t change layout during width animation */
+    padding-left: 12px;          /* keep identical to expanded */
+    padding-right: 8px;
+  }
+
+  /* In collapsed mode, do not override nav-icon transform (keeps centering stable) */
+  .ws-shell.is-collapsed .ws-nav-item.is-active .label-text,
+  .ws-shell.is-collapsed .ws-nav-item.is-active .ws-nav-badge {
+    transform: translateX(0);
+  }
+
+  /* Active nav item — only a slim blue line on the left */
+  .ws-nav-item.is-active {
+    background: transparent;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .ws-nav-item.is-active .ws-nav-icon {
+    border-radius: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ws-nav-item.is-active .label-text {
+    color: var(--text);
+  }
+
+  .ws-nav-item.is-active::before {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--ws-nav-accent);  /* the blue line */
+  }
+
+  /* Active state: keep rail without shifting (do not override icon transform) */
+  .ws-nav-item.is-active .label-text,
+  .ws-nav-item.is-active .ws-nav-badge {
+    transform: none;
+  }
+
+  /* Neutral, centred hover: highlight icon container only */
+  .ws-nav-item:hover:not(.is-active) {
+    color: var(--text);
+    transform: none; /* no horizontal shift */
+  }
+
+  .ws-nav-item:hover:not(.is-active) .ws-nav-icon {
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ws-nav-accent) 12%, var(--surface));
+    box-shadow: 0 3px 8px rgba(0,0,0,0.20);
+  }
+
+  .ws-shell.is-collapsed .ws-nav-item:hover:not(.is-active) .ws-nav-icon {
+    box-shadow: none;
+  }
+
+  .ws-nav-item:hover:not(.is-active) .label-text {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  #wsNavHistory.has-new .label-text {
+    color: color-mix(in srgb, var(--text) 86%, var(--ws-nav-accent));
+  }
+
+  .ws-nav-item:focus-visible .label-text {
+    color: var(--text);
+  }
+
+  /* Light theme: clearer soft-blue icon highlight */
+  html[data-theme="light"] .ws-nav-item:hover:not(.is-active) .ws-nav-icon {
+    background: color-mix(in srgb, #DFE7FF 55%, #FFFFFF 45%);
+    box-shadow: none;
+  }
+
+  .ws-sidebar-footer {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  @keyframes ws-nav-item-intro {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .ws-sidebar-nav .ws-nav-item,
+  .ws-sidebar-footer .ws-nav-item {
+    animation: ws-nav-item-intro 0.22s var(--ease) both;
+  }
+
+  .ws-sidebar-nav .ws-nav-item:nth-child(1) { animation-delay: 0.03s; }
+  .ws-sidebar-nav .ws-nav-item:nth-child(2) { animation-delay: 0.06s; }
+  .ws-sidebar-footer .ws-nav-item:nth-child(1) { animation-delay: 0.09s; }
+  .ws-sidebar-footer .ws-nav-item:nth-child(2) { animation-delay: 0.12s; }
+
+  .ws-nav-icon {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;             /* decouple from any text line metrics */
+    flex-shrink: 0;
+    position: relative;
+    transform: translateX(0);
+    will-change: transform;
+    transition: transform 0.22s var(--ease);
+  }
+
+  .ws-shell.is-collapsed .ws-nav-icon {
+    transform: translateX(-5px); /* centers icon in the 72px visible slice (accounts for sidebar padding) */
+  }
+
+  .ws-nav-icon img {
+    width: 34px;
+    height: 34px;
+    display: block;
+  }
+
+  .ws-nav-icon .icon-light { display: none; }
+  html[data-theme="light"] .ws-nav-icon .icon-dark { display: none; }
+  html[data-theme="light"] .ws-nav-icon .icon-light { display: block; }
+  html[data-theme="dark"] .ws-nav-icon .icon-dark { display: block; }
+  html[data-theme="dark"] .ws-nav-icon .icon-light { display: none; }
+
+  /* Sidebar: disable pseudo-element tooltips (they clip under clip-path). Use native title tooltips instead. */
+  .ws-sidebar [data-tip]::after {
+    content: none !important;
+  }
+
+
+  /* =========================================================
+     MAIN LAYOUT + HERO
+     ========================================================= */
+
+  .ws-main {
+    position: relative;
+    min-width: 0;
+    padding: 10px 20px 12px;
+    padding-left: 210px;               /* full space for expanded sidebar */
+    margin-left: 0;
+    transition: padding-left 0.22s var(--ease);
+  }
+
+  .ws-shell.is-collapsed .ws-main {
+    padding-left: 72px;                /* full space for collapsed sidebar */
+  }
+
+  .ws-main-inner {
+    position: relative;
+    z-index: 1;
+    max-width: var(--ws-max-width);
+    margin: 0 auto;
+    min-height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding-top: clamp(28px, 6vh, 56px);
+    padding-bottom: 0;
+  }
+
+  @keyframes ws-hero-intro {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ws-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    animation: ws-hero-intro 0.45s var(--ease) 0.12s both;
+  }
+
+  .ws-hero-title {
+    font-size: clamp(34px, 4.2vw, 44px);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .ws-hero-sub {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: var(--ws-max-width);
+  }
+
+  .ws-hero-cta {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  }
+
+  .ws-hero-primary {
+    width: min(340px, 100%);
+    min-width: 240px;
+    padding: 12px 36px;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 999px;
+    position: relative;
+    overflow: hidden;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+
+    background-size: 160% 160%;
+    background-position: 30% 50%;
+
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+    box-shadow:
+      0 14px 34px rgba(0,0,0,0.28),
+      inset 0 1px 0 color-mix(in srgb, #ffffff 18%, transparent);
+
+    transition:
+      transform 0.16s var(--ease),
+      box-shadow 0.16s var(--ease),
+      filter 0.16s var(--ease),
+      background-position 0.7s var(--ease);
+
+    transform: translateZ(0);
+  }
+
+  .ws-hero-primary::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: linear-gradient(
+      110deg,
+      transparent 0%,
+      rgba(255,255,255,0.20) 36%,
+      transparent 62%
+    );
+    transform: translateX(-60%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .ws-hero-primary:hover {
+    transform: translateY(-2px);
+    background-position: 70% 50%;
+    box-shadow:
+      0 18px 48px rgba(0,0,0,0.34),
+      inset 0 1px 0 color-mix(in srgb, #ffffff 22%, transparent);
+    filter: brightness(1.06) saturate(1.02);
+  }
+
+  .ws-hero-primary:hover::before {
+    opacity: 1;
+    animation: ws-btn-sheen 0.75s var(--ease) 1;
+  }
+
+  .ws-hero-primary:active {
+    transform: translateY(-0.5px);
+    box-shadow:
+      0 10px 28px rgba(0,0,0,0.28),
+      inset 0 1px 0 color-mix(in srgb, #ffffff 14%, transparent);
+    filter: brightness(1.02);
+  }
+
+  .ws-hero-primary:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--brand-violet) 44%, transparent);
+    outline-offset: 3px;
+    box-shadow:
+      0 14px 34px rgba(0,0,0,0.28),
+      0 0 0 6px color-mix(in srgb, var(--brand-violet) 16%, transparent);
+  }
+
+  html[data-theme="light"] .ws-hero-primary {
+    box-shadow:
+      0 16px 38px rgba(15, 23, 42, 0.18),
+      inset 0 1px 0 rgba(255,255,255,0.28);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.16);
+  }
+
+  @keyframes ws-btn-sheen {
+    from { transform: translateX(-60%); }
+    to   { transform: translateX(60%); }
+  }
+
+  .ws-hero-small-note {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* =========================================================
+     INTRO PAGE — FAST SCAN + TRUST (NEW)
+     ========================================================= */
+
+  .ws-hero-kicker {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .ws-hero-bullets {
+    list-style: none;
+    padding: 0;
+    margin: 8px auto 0;
+    max-width: 650px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .ws-hero-bullets li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.45;
+    color: color-mix(in srgb, var(--text) 70%, var(--muted));
+  }
+
+  .ws-hero-bullets li::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ws-nav-accent);
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+
+  .ws-trust-strip {
+    width: min(640px, 100%);
+    margin-left: auto;
+    margin-right: auto;
+    padding: 10px 12px;
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 18%, var(--border));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+  }
+
+  .ws-trust-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.1;
+
+    padding: 9px 10px;
+    border-radius: 0;
+
+    border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background: transparent;
+
+    color: color-mix(in srgb, var(--text) 78%, var(--muted));
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .ws-trust-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ws-nav-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-nav-accent) 18%, transparent);
+    flex-shrink: 0;
+  }
+
+  .ws-trust-badge:last-child {
+    border-right: none;
+  }
+
+  @media (max-width: 620px) {
+    .ws-trust-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ws-trust-badge {
+      border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    }
+
+    .ws-trust-badge:nth-child(2n) {
+      border-right: none;
+    }
+
+    .ws-trust-badge:nth-last-child(-n+2) {
+      border-bottom: none;
+    }
+  }
+
+  html[data-theme="light"] .ws-trust-strip {
+    background: #ffffff;
+    border-color: #D6E0F5;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  }
+
+  html[data-theme="light"] .ws-trust-badge {
+    border-right-color: #E4E9F6;
+    color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  }
+
+  .ws-cred-footer {
+    position: fixed;
+    left: calc((100vw + 210px) / 2); /* center within main area (sidebar = 210px) */
+    bottom: 14px;
+    transform: translateX(-50%);
+    z-index: 26;
+
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--muted);
+
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 12px 34px rgba(0,0,0,0.22);
+  }
+
+  .ws-shell.is-collapsed .ws-cred-footer {
+    left: calc((100vw + 72px) / 2); /* center within main area (collapsed sidebar = 72px) */
+  }
+
+  html[data-theme="light"] .ws-cred-footer {
+    background: rgba(255, 255, 255, 0.82);
+    border-color: #D6E0F5;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10);
+  }
+
+  .ws-cred-link {
+    border: none;
+    background: transparent;
+    padding: 2px 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: color-mix(in srgb, var(--text) 70%, var(--muted));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .ws-cred-link:hover {
+    color: var(--text);
+  }
+
+  .ws-cred-sep {
+    opacity: 0.6;
+  }
+
+  /* =========================================================
+     INFO MODAL (Privacy / Methodology / Disclaimer) — NEW
+     ========================================================= */
+
+  .ws-info-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.32);
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s var(--ease), visibility 0.2s var(--ease);
+    z-index: 48;
+  }
+
+  .ws-info-backdrop.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .ws-info-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s var(--ease), visibility 0.2s var(--ease);
+    z-index: 49;
+  }
+
+  .ws-info-modal.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .ws-info-dialog {
+    width: min(520px, 100% - 32px);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    box-shadow: 0 18px 58px rgba(0,0,0,0.26);
+    padding: 16px 16px 14px;
+  }
+
+  .ws-info-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .ws-info-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .ws-info-close {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 999px;
+  }
+
+  .ws-info-body {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+
+  .ws-info-body p {
+    margin: 0 0 8px;
+  }
+
+  .ws-info-body p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Short viewports: compress further to keep the intro above the fold */
+  @media (max-height: 860px) {
+    .ws-main-inner { padding-top: 34px; }
+    .ws-preview-card { padding: 12px 14px 10px; }
+    .ws-preview-icon,
+    .ws-preview-icon img { width: 34px; height: 34px; }
+    .ws-cred-footer { bottom: 10px; padding: 7px 10px; gap: 8px; }
+    .ws-hero-cta { margin-top: 10px; padding-top: 10px; }
+    .ws-trust-strip { padding: 8px 10px; }
+    .ws-trust-badge { padding: 8px 8px; font-size: 11px; }
+    .ws-hero-primary { width: min(320px, 100%); min-width: 220px; padding: 11px 30px; font-size: 15px; }
+  }
+
+  .ws-section-label {
+    max-width: var(--ws-max-width);
+    margin: 2px auto 6px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .ws-preview-row + .ws-section-label {
+    margin-top: 16px;
+  }
+
+  .ws-sidebar-footer::before {
+    content: "";
+    display: block;
+    height: 1px;
+    margin: 12px 0 8px;
+    background: color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  /* =========================================================
+     HERO FEATURE CARDS
+     ========================================================= */
+
+  .ws-preview-row {
+    margin-top: 10px;
+  }
+
+  .ws-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    max-width: var(--ws-max-width);
+    margin: 0 auto;
+  }
+
+  @media (max-width: 980px) {
+    .ws-preview-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 680px) {
+    .ws-preview-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .ws-preview-card {
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    border-radius: 18px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    padding: 14px 16px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      transform 0.18s var(--ease),
+      box-shadow 0.18s var(--ease),
+      border-color 0.18s var(--ease),
+      background 0.18s var(--ease);
+  }
+
+  .ws-preview-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.40);
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+  }
+
+  /* Light theme: premium grey-gradient panels for cards */
+  html[data-theme="light"] .ws-preview-card {
+    background:
+      linear-gradient(
+        180deg,
+        #f8f9fd 0%,
+        #f1f3f9 60%,
+        #eceff6 100%
+      );
+    border-color: #d4d9e6;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
+  }
+
+  html[data-theme="light"] .ws-preview-card:hover {
+    background:
+      linear-gradient(
+        180deg,
+        #f6f8fd 0%,
+        #eef1f8 70%,
+        #e9edf6 100%
+      );
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
+  }
+
+  .ws-preview-icon {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ws-preview-icon img {
+    width: 36px;
+    height: 36px;
+    display: block;
+  }
+
+  .ws-preview-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .ws-preview-card-sub {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+
+  .ws-preview-card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .ws-preview-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 auto;
+  }
+
+  /* card icon theme switch */
+  .ws-preview-icon .icon-light { display: none; }
+  html[data-theme="light"] .ws-preview-icon .icon-dark { display: none; }
+  html[data-theme="light"] .ws-preview-icon .icon-light { display: block; }
+  html[data-theme="dark"] .ws-preview-icon .icon-dark { display: block; }
+  html[data-theme="dark"] .ws-preview-icon .icon-light { display: none; }
+
+  /* =========================================================
+     3-STEP BAND UNDER CARDS
+     ========================================================= */
+
+  .ws-steps-row {
+    margin-top: 12px;
+    max-width: var(--ws-max-width);
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 12px;
+    color: color-mix(in srgb, var(--text) 75%, var(--muted));
+    display: flex;
+    justify-content: space-between;
+    gap: 0; /* must be 0 so the connector lines touch between steps */
+
+    --ws-step-dot: 24px;
+    --ws-step-line-h: 2px;
+    --ws-step-line-color: #4B9BFF;
+  }
+
+  /* Light theme: soften but visible */
+  html[data-theme="light"] .ws-steps-row {
+    --ws-step-line-color: color-mix(in srgb, #4B9BFF 75%, #ffffff 25%);
+  }
+
+  .ws-step {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+  }
+
+  /* Number + connecting line are on the SAME vertical level (timeline) */
+  .ws-step-head {
+    position: relative;
+    width: 100%;
+    height: var(--ws-step-dot);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ws-step-head::before,
+  .ws-step-head::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    height: var(--ws-step-line-h);
+    background: var(--ws-step-line-color);
+    border-radius: 999px;
+    transform: translateY(-50%);
+    opacity: 0.9;
+  }
+
+  /* left segment: from step start to left edge of the circle */
+  .ws-step-head::before {
+    left: 0;
+    right: calc(50% + (var(--ws-step-dot) / 2));
+  }
+
+  /* right segment: from right edge of the circle to step end */
+  .ws-step-head::after {
+    left: calc(50% + (var(--ws-step-dot) / 2));
+    right: 0;
+  }
+
+  /* No line before the first step / after the last step */
+  .ws-step:first-child .ws-step-head::before { display: none; }
+  .ws-step:last-child  .ws-step-head::after  { display: none; }
+
+  .ws-step-number {
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1; /* keep the circle above the line */
+    width: var(--ws-step-dot);
+    height: var(--ws-step-dot);
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
+    flex-shrink: 0;
+  }
+
+  .ws-step-text {
+    font-size: 12px;
+    line-height: 1.5;
+    max-width: 260px;
+    padding: 0 12px; /* spacing between text blocks without breaking the line */
+  }
+
+  /* =========================================================
+     SIMPLE WIZARD OVERLAY
+     ========================================================= */
+
+  .ws-wizard-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.38);
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s var(--ease), visibility 0.2s var(--ease);
+    z-index: 50;
+  }
+
+  .ws-wizard-backdrop.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .ws-wizard {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s var(--ease), visibility 0.2s var(--ease);
+    z-index: 51;
+  }
+
+  .ws-wizard.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  /* =========================================================
+     GLOBAL CSV DROP OVERLAY (drop anywhere)
+     ========================================================= */
+
+  .ws-csvdrop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 70; /* above wizard/backdrops */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: rgba(0,0,0,0.22);
+    backdrop-filter: blur(6px);
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    transition: opacity 0.16s var(--ease), visibility 0.16s var(--ease);
+  }
+
+  .ws-csvdrop-overlay.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .ws-csvdrop-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    margin: 0 auto 10px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    color: var(--ws-nav-accent);
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 40%, var(--border));
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    box-shadow: 0 16px 44px rgba(0,0,0,0.22);
+
+    transform: translateZ(0);
+  }
+
+  .ws-csvdrop-overlay.is-open .ws-csvdrop-icon {
+    animation: ws-csvdrop-float 1.8s ease-in-out infinite;
+  }
+
+  @keyframes ws-csvdrop-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-3px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ws-csvdrop-overlay.is-open .ws-csvdrop-icon { animation: none; }
+  }
+
+  .ws-csvdrop-card {
+    width: min(560px, calc(100% - 48px));
+    border-radius: 18px;
+    padding: 18px 18px 16px;
+    text-align: center;
+
+    border: 1px dashed color-mix(in srgb, var(--ws-nav-accent) 55%, var(--border));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+
+    box-shadow: 0 18px 60px rgba(0,0,0,0.28);
+  }
+
+  .ws-csvdrop-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .ws-csvdrop-sub {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  html[data-theme="light"] .ws-csvdrop-overlay {
+    background: rgba(15, 23, 42, 0.12);
+  }
+
+  html[data-theme="light"] .ws-csvdrop-card {
+    background: rgba(255,255,255,0.90);
+    border-color: color-mix(in srgb, var(--ws-nav-accent) 55%, #D6E0F5);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ws-csvdrop-overlay { transition: none; }
+  }
+
+  .ws-wizard-dialog {
+    width: min(520px, 100% - 32px);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    box-shadow: 0 18px 58px rgba(0,0,0,0.26);
+    padding: 18px 18px 16px;
+  }
+
+  .ws-wizard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .ws-wizard-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .ws-wizard-close {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 999px;
+  }
+
+  .ws-wizard-steps {
+    position: relative;
+    isolation: isolate;
+
+    --ws-wiz-dot: 18px;
+    --ws-wiz-line-h: 4px;
+    --ws-wiz-line-base: color-mix(in srgb, var(--ws-nav-accent) 10%, var(--border));
+    --ws-wiz-line-base-hi: color-mix(in srgb, var(--ws-nav-accent) 16%, var(--border));
+    --ws-wiz-line-fill: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ws-nav-accent) 72%, var(--surface)) 0%,
+      color-mix(in srgb, var(--ws-nav-accent) 86%, var(--surface)) 50%,
+      color-mix(in srgb, var(--ws-nav-accent) 72%, var(--surface)) 100%
+    );
+    --ws-wiz-progress-scale: 0;
+
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+
+  /* Track + animated fill behind the step dots */
+  .ws-wizard-steps::before,
+  .ws-wizard-steps::after {
+    content: "";
+    position: absolute;
+    top: calc(var(--ws-wiz-dot) / 2);
+    left: calc(100% / 6);
+    right: calc(100% / 6);
+    height: var(--ws-wiz-line-h);
+    border-radius: 999px;
+    transform: translateY(-50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .ws-wizard-steps::before {
+    background: linear-gradient(
+      90deg,
+      var(--ws-wiz-line-base) 0%,
+      var(--ws-wiz-line-base-hi) 50%,
+      var(--ws-wiz-line-base) 100%
+    );
+    opacity: 0.95;
+  }
+
+  .ws-wizard-steps::after {
+    background: var(--ws-wiz-line-fill);
+    transform: translateY(-50%) scaleX(var(--ws-wiz-progress-scale));
+    transform-origin: left center;
+    transition: transform 0.34s var(--ease);
+    will-change: transform;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--ws-nav-accent) 16%, transparent);
+    animation: none;
+  }
+
+  @keyframes ws-wiz-flow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+  }
+
+  .ws-wizard-step {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Step-level connector segments disabled (progress bar handled by .ws-wizard-steps) */
+  .ws-wizard-step::before,
+  .ws-wizard-step::after {
+    content: none;
+  }
+
+  .ws-wizard-step-dot {
+    width: var(--ws-wiz-dot);
+    height: var(--ws-wiz-dot);
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+
+    /* Opaque plate so the progress bar never crosses the number */
+    background: var(--surface);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+
+    position: relative;
+    z-index: 1; /* keep dot above the track */
+
+    /* Premium separation + masks any anti-alias bleed */
+    box-shadow:
+      0 0 0 3px var(--surface),
+      0 8px 18px rgba(0,0,0,0.22),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+
+  html[data-theme="light"] .ws-wizard-step-dot {
+    box-shadow:
+      0 0 0 3px var(--surface),
+      0 8px 18px rgba(15, 23, 42, 0.12),
+      inset 0 1px 0 rgba(255,255,255,0.40);
+  }
+
+  .ws-wizard-step.is-active .ws-wizard-step-dot,
+  .ws-wizard-step.is-complete .ws-wizard-step-dot {
+    border-color: var(--accent);
+
+    /* Opaque tint (no transparent mix) */
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface) 78%, var(--accent)) 0%,
+        color-mix(in srgb, var(--surface) 90%, var(--accent)) 100%
+      );
+
+    color: var(--accent);
+  }
+
+  .ws-wizard.is-open .ws-wizard-step.is-active .ws-wizard-step-dot {
+    animation: ws-wiz-dot-pulse 2.6s ease-in-out infinite;
+  }
+
+  @keyframes ws-wiz-dot-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+    50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ws-nav-accent) 16%, transparent); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ws-wizard.is-open .ws-wizard-steps::after { animation: none; transition: none; }
+    .ws-wizard.is-open .ws-wizard-step.is-active .ws-wizard-step-dot { animation: none; }
+  }
+
+  .ws-wizard.is-open .ws-wizard-steps::after {
+    animation: none;
+  }
+
+  .ws-wizard-step-labels {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    min-width: 0;
+    padding: 0 10px; /* label breathing room without breaking the connector */
+  }
+
+  .ws-wizard-step-count {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .ws-wizard-step-title {
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ws-wizard-step-status-text {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    text-align: right;
+  }
+
+  .ws-wizard-body {
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ws-wizard-field-label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .ws-wizard-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .ws-wizard-row > * {
+    flex: 1 1 0;
+  }
+
+  .ws-wizard-select,
+  .ws-wizard-input {
+    width: 100%;
+    padding: 6px 9px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    font-size: 12px;
+    color: var(--text);
+    -webkit-text-fill-color: var(--text);
+  }
+
+  .ws-wizard-select option {
+    color: var(--text);
+    background: var(--surface);
+  }
+
+  /* =========================================================
+     WIZARD UX UPGRADES (Upload UI, Validation, Review, Loading)
+     ========================================================= */
+
+  .ws-wizard-close:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  #wsWizardNext:disabled {
+    opacity: 0.60;
+    cursor: not-allowed;
+  }
+
+  .ws-wizard-action-hint {
+    margin-right: auto;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.35;
+    max-width: 260px;
+    display: none;
+  }
+
+  .ws-upload-dropzone:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ws-nav-accent) 45%, transparent);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--ws-nav-accent) 14%, transparent);
+  }
+
+  .ws-wizard-select:focus-visible,
+  .ws-wizard-input:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ws-nav-accent) 45%, transparent);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--ws-nav-accent) 12%, transparent);
+  }
+
+  .ws-field-error {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #d9534f;
+  }
+
+  .ws-undo-toast {
+    margin-top: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+
+    padding: 8px 10px;
+    border-radius: 12px;
+
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 18%, var(--border));
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    color: color-mix(in srgb, var(--text) 70%, var(--muted));
+    font-size: 11px;
+  }
+
+  .ws-undo-btn {
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: transparent;
+    color: var(--text);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color 0.16s var(--ease), background 0.16s var(--ease);
+  }
+
+  .ws-undo-btn:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+  }
+
+  .is-invalid {
+    border-color: #d9534f !important;
+    box-shadow: 0 0 0 4px rgba(217, 83, 79, 0.10);
+  }
+
+  /* Upload input: visually hidden but accessible */
+  .ws-upload-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .ws-upload-dropzone {
+    box-sizing: border-box;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    border: 1px dashed color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    padding: 14px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition:
+      border-color 0.16s var(--ease),
+      background 0.16s var(--ease),
+      box-shadow 0.16s var(--ease),
+      transform 0.10s var(--ease);
+  }
+
+  .ws-upload-dropzone * {
+    pointer-events: none;
+  }
+
+  .ws-upload-dropzone:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    box-shadow: 0 10px 26px rgba(0,0,0,0.18);
+  }
+
+  .ws-upload-dropzone.is-dragover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent-soft) 24%, var(--surface));
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  .ws-upload-dropzone.has-files {
+    padding: 10px 12px; /* smaller once selection exists */
+  }
+
+  .ws-upload-dropzone.has-files .ws-upload-title {
+    font-size: 12px;
+  }
+
+  .ws-upload-dropzone.has-files .ws-upload-sub {
+    font-size: 11px;
+  }
+
+  .ws-upload-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .ws-upload-sub {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-upload-summary {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .ws-upload-tools {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .ws-upload-searchwrap {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ws-upload-search {
+    width: 100%;
+    padding: 8px 30px 8px 10px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    font-size: 12px;
+    color: var(--text);
+    -webkit-text-fill-color: var(--text);
+  }
+
+  .ws-upload-search:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ws-nav-accent) 45%, transparent);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--ws-nav-accent) 12%, transparent);
+  }
+
+  .ws-upload-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 2px 6px;
+    border-radius: 999px;
+  }
+
+  .ws-upload-search-clear:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+  }
+
+  .ws-upload-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .ws-upload-empty {
+    padding: 12px 10px;
+    border-radius: 12px;
+    border: 1px dashed color-mix(in srgb, var(--border) 75%, transparent);
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .ws-upload-list {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+
+    /* Prevent wizard from becoming unusable with many files */
+    max-height: clamp(220px, 36vh, 420px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+    position: relative;
+    min-width: 0;
+
+    /* Hide scrollbar (still scrollable) */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .ws-upload-list::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /* Premium scroll fades */
+  .ws-upload-list::before,
+  .ws-upload-list::after {
+    content: "";
+    position: sticky;
+    left: 0;
+    right: 0;
+    height: 14px;
+    pointer-events: none;
+    z-index: 2;
+    display: block;
+  }
+
+  .ws-upload-list::before {
+    top: 0;
+    background: linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--surface) 92%, transparent),
+      transparent
+    );
+  }
+
+  .ws-upload-list::after {
+    bottom: 0;
+    background: linear-gradient(
+      to top,
+      color-mix(in srgb, var(--surface) 92%, transparent),
+      transparent
+    );
+  }
+
+  html[data-theme="light"] .ws-upload-list::before {
+    background: linear-gradient(to bottom, rgba(255,255,255,0.92), transparent);
+  }
+
+  html[data-theme="light"] .ws-upload-list::after {
+    background: linear-gradient(to top, rgba(255,255,255,0.92), transparent);
+  }
+
+  .ws-upload-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+  }
+
+  /* Dense mode for large file sets */
+  #wizardFileList.is-dense .ws-upload-item {
+    padding: 7px 10px;
+  }
+
+  #wizardFileList.is-dense .ws-upload-name {
+    font-size: 11px;
+  }
+
+  #wizardFileList.is-dense .ws-upload-meta {
+    font-size: 10px;
+  }
+
+  #wizardFileList.is-dense .ws-upload-status {
+    padding: 4px 9px;
+    font-size: 10px;
+  }
+
+  #wizardFileList.is-dense .ws-upload-remove {
+    padding: 4px 10px;
+    font-size: 10.5px;
+  }
+
+  .ws-upload-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ws-upload-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 330px;
+  }
+
+  .ws-upload-meta {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-upload-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .ws-upload-status {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    color: color-mix(in srgb, var(--text) 78%, var(--muted));
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .ws-upload-status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ws-nav-accent) 70%, #ffffff 0%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-nav-accent) 14%, transparent);
+    flex-shrink: 0;
+  }
+
+  .ws-upload-status--checking {
+    opacity: 0.9;
+  }
+
+  .ws-upload-status--supported {
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+    background: color-mix(in srgb, var(--accent-soft) 26%, var(--surface));
+    color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  }
+
+  .ws-upload-status--unsupported {
+    border-color: color-mix(in srgb, #d9534f 36%, var(--border));
+    background: color-mix(in srgb, #d9534f 10%, var(--surface));
+    color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  }
+
+  .ws-upload-status--supported::before {
+    background: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+
+  .ws-upload-status--unsupported::before {
+    background: #d9534f;
+    box-shadow: 0 0 0 3px rgba(217, 83, 79, 0.16);
+  }
+
+  .ws-upload-remove {
+    flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: transparent;
+    color: color-mix(in srgb, var(--text) 70%, var(--muted));
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color 0.16s var(--ease), color 0.16s var(--ease), background 0.16s var(--ease);
+  }
+
+  .ws-upload-remove:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    color: var(--text);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+  }
+
+  .ws-upload-actions {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+  }
+
+  .ws-link-btn {
+    border: none;
+    background: transparent;
+    padding: 2px 4px;
+    font-size: 11px;
+    cursor: pointer;
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .ws-link-btn:hover {
+    color: var(--text);
+  }
+
+  .ws-link-danger:hover {
+    color: #d9534f;
+  }
+
+  .ws-upload-dot {
+    opacity: 0.65;
+  }
+
+  /* Micro trust stack */
+  .ws-wizard-trust {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .ws-wizard-trust-item {
+    font-size: 11px;
+    line-height: 1.2;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 18%, var(--border));
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  /* =========================================================
+     Wizard: Unsupported CSV help panel (premium, calm)
+     ========================================================= */
+
+  .ws-unsup-panel {
+    margin-top: 10px;
+    padding: 12px 12px 10px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, #d9534f 34%, var(--border));
+    background: color-mix(in srgb, #d9534f 8%, var(--surface));
+    box-shadow: 0 10px 26px rgba(0,0,0,0.14);
+  }
+
+  html[data-theme="light"] .ws-unsup-panel {
+    background: color-mix(in srgb, #d9534f 6%, #ffffff);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .ws-unsup-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .ws-unsup-sub {
+    font-size: 11px;
+    color: color-mix(in srgb, var(--text) 70%, var(--muted));
+    line-height: 1.45;
+  }
+
+  .ws-unsup-files {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-unsup-actions {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ws-unsup-btn {
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.12s var(--ease), box-shadow 0.16s var(--ease), border-color 0.16s var(--ease);
+  }
+
+  .ws-unsup-btn:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+    box-shadow: 0 10px 22px rgba(0,0,0,0.14);
+  }
+
+  .ws-unsup-sep {
+    opacity: 0.7;
+  }
+
+  .ws-unsup-meta {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .ws-unsup-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-unsup-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 18%, var(--border));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .ws-unsup-chip::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ws-nav-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-nav-accent) 16%, transparent);
+  }
+
+  .ws-unsup-detail {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 10px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 18%, var(--border));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    color: color-mix(in srgb, var(--text) 70%, var(--muted));
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .ws-unsup-detail-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .ws-unsup-detail-row {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 6px 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .ws-unsup-detail-row:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .ws-unsup-detail-k {
+    color: var(--muted);
+    font-weight: 800;
+  }
+
+  .ws-unsup-detail-v {
+    min-width: 0;
+  }
+
+  .ws-unsup-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    margin: 0 6px 6px 0;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    color: color-mix(in srgb, var(--text) 75%, var(--muted));
+    white-space: nowrap;
+  }
+
+  /* Make chips clickable (we render them as buttons below) */
+  .ws-unsup-chip {
+    cursor: pointer;
+  }
+
+  .ws-unsup-chip.is-active {
+    border-color: color-mix(in srgb, var(--ws-nav-accent) 55%, var(--border));
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--ws-nav-accent) 12%, transparent);
+  }
+
+  /* Tax year column */
+  .ws-year-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ws-year-toggle {
+    align-self: flex-end;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 11px;
+    cursor: pointer;
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .ws-year-toggle:hover {
+    color: var(--text);
+  }
+
+  .ws-rule-version {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ws-rule-version::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ws-nav-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ws-nav-accent) 14%, transparent);
+  }
+
+  /* Review card */
+  .ws-review-card {
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    overflow: hidden;
+  }
+
+  .ws-review-row {
+    display: grid;
+    grid-template-columns: 110px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .ws-review-row:first-child {
+    border-top: none;
+  }
+
+  .ws-review-key {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-review-val {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ws-review-val-flex {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .ws-review-files-toggle {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    padding: 2px 4px;
+    font-size: 11px;
+    cursor: pointer;
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .ws-review-files-toggle:hover {
+    color: var(--text);
+  }
+
+  .ws-review-files-expand {
+    padding: 8px 12px 10px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .ws-review-files-expand ul {
+    margin: 0;
+    padding-left: 16px;
+    display: grid;
+    gap: 4px;
+  }
+
+  .ws-review-files-expand li {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ws-review-edit {
+    border: none;
+    background: transparent;
+    padding: 2px 4px;
+    font-size: 11px;
+    cursor: pointer;
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .ws-review-edit:hover {
+    color: var(--text);
+  }
+
+  .ws-review-next {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .ws-review-method {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* Premium loading indicator inside primary button */
+  .ws-btn-loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .ws-btn-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: rgba(255,255,255,0.95);
+    animation: ws-spin 0.9s linear infinite;
+  }
+
+  @keyframes ws-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ws-btn-spinner { animation: none; }
+  }
+
+  .ws-wizard-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .ws-wizard-error {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #d9534f;
+  }
+
+  .ws-wizard-step-pane {
+    animation-duration: 0.18s;
+    animation-fill-mode: both;
+  }
+
+  @keyframes ws-wizard-pane-enter {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ws-wizard-pane-enter {
+    animation-name: ws-wizard-pane-enter;
+  }
+
+  .ws-wizard-hint {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-wizard-success {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
+    border-radius: 10px;
+    padding: 6px 8px;
+    display: none;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .ws-wizard-success-icon {
+    font-size: 13px;
+    line-height: 1.1;
+  }
+
+  .ws-wizard-success-text {
+    flex: 1 1 auto;
+  }
+
+  /* =========================================================
+     WIZARD: RUNNING + COMPLETION PANELS
+     ========================================================= */
+
+  .ws-run-panel,
+  .ws-done-panel {
+    margin-top: 4px;
+  }
+
+  .ws-run-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+
+  .ws-run-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .ws-run-sub {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-run-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    overflow: hidden;
+    margin: 10px 0 12px;
+  }
+
+  .ws-run-bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: var(--grad-primary);
+    background-size: 220% 100%;
+    background-position: 0% 50%;
+    will-change: background-position;
+    transition: width 0.32s var(--ease);
+  }
+
+  .ws-run-bar-fill.is-animating {
+    animation: ws-run-flow 1.9s ease-in-out infinite;
+  }
+
+  @keyframes ws-run-flow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+  }
+
+  .ws-run-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+
+  .ws-run-item {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    gap: 10px;
+    align-items: center;
+
+    padding: 10px 10px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+  }
+
+  .ws-run-icon {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    box-sizing: border-box;
+    position: relative;
+  }
+
+  .ws-run-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--text) 88%, var(--muted));
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ws-run-state {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .ws-run-item.is-pending {
+    opacity: 0.75;
+  }
+
+  .ws-run-item.is-pending .ws-run-icon {
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+  }
+
+  .ws-run-item.is-active {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+    box-shadow: 0 10px 26px rgba(0,0,0,0.18);
+  }
+
+  .ws-run-item.is-active .ws-run-state {
+    color: color-mix(in srgb, var(--text) 72%, var(--muted));
+  }
+
+  .ws-run-item.is-active .ws-run-icon {
+    border: 2px solid rgba(255,255,255,0.20);
+    border-top-color: color-mix(in srgb, var(--accent) 92%, #ffffff 0%);
+    background: transparent;
+    animation: ws-spin 0.9s linear infinite;
+  }
+
+  .ws-run-item.is-done {
+    opacity: 1;
+  }
+
+  .ws-run-item.is-done .ws-run-icon {
+    background: color-mix(in srgb, var(--accent) 85%, #ffffff 0%);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .ws-run-item.is-done .ws-run-icon::after {
+    content: "✓";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: color-mix(in srgb, #0A0F1C 88%, transparent);
+  }
+
+  html[data-theme="light"] .ws-run-item.is-done .ws-run-icon::after {
+    color: #0D121D;
+  }
+
+  .ws-run-note {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .ws-done-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding-top: 6px;
+  }
+
+  .ws-done-top {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2px;
+  }
+
+  .ws-countdown-ring {
+    --ws-cd-pct: 100%;
+    width: 64px;
+    height: 64px;
+    border-radius: 999px;
+    background: conic-gradient(
+      var(--brand-teal) 0% var(--ws-cd-pct),
+      color-mix(in srgb, var(--border) 85%, transparent) var(--ws-cd-pct) 100%
+    );
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.22);
+  }
+
+  .ws-countdown-ring::after {
+    content: "";
+    position: absolute;
+    inset: 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .ws-countdown-number {
+    position: relative;
+    z-index: 1;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  .ws-done-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  .ws-done-sub,
+  .ws-done-note {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ws-run-item.is-active .ws-run-icon { animation: none; }
+    .ws-run-bar-fill { transition: none; }
+    .ws-run-bar-fill.is-animating { animation: none; }
+  }
+
+</style>
+{% endblock %}
+
+{% set workspace_name = user_display_name|default(None) %}
+
+{% block content %}
+<div class="ws-shell">
+  <!-- Sidebar (unchanged) -->
+  <aside class="ws-sidebar">
+    <div class="ws-sidebar-inner">
+      <div class="ws-sidebar-logo">
+        <button
+          id="btnSidebarToggle"
+          class="ws-sidebar-logo-mark"
+          type="button"
+          aria-label="Toggle sidebar"
+        >
+          ☰
+        </button>
+        <span class="ws-sidebar-logo-text">
+          <span class="ws-sidebar-logo-title">CryptoTaxCalc</span>
+          <span class="ws-sidebar-logo-sub">Workspace</span>
+        </span>
+      </div>
+
+      <div class="ws-sidebar-section-label">Navigation</div>
+
+      <nav class="ws-sidebar-nav" aria-label="Workspace navigation">
+        <a id="wsNavWorkspace" href="/workspace" class="ws-nav-item" data-tip="Workspace">
+          <span class="ws-nav-icon ws-nav-icon--workspace">
+            <img src="/static/img/icons/workspace_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/workspace_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">Workspace</span>
+        </a>
+        <a id="wsNavHistory" href="/history?format=html" class="ws-nav-item" data-tip="History">
+          <span class="ws-nav-icon ws-nav-icon--history">
+            <img src="/static/img/icons/recent_runs_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/recent_runs_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">History</span>
+          <span id="wsHistoryBadge" class="ws-nav-badge" style="display:none;" aria-label="New run available">
+            <span class="ws-nav-badge-dot" aria-hidden="true"></span>
+            <span class="ws-nav-badge-text">New</span>
+          </span>
+        </a>
+        <a id="wsNavCsvFormats" href="/csv/formats" class="ws-nav-item" data-tip="CSV Formats">
+          <span class="ws-nav-icon ws-nav-icon--help">
+            <img src="/static/img/icons/help_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/help_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">CSV Formats</span>
+        </a>
+      </nav>
+
+      <div class="ws-sidebar-footer">
+        <button type="button" class="ws-nav-item" data-tip="Settings">
+          <span class="ws-nav-icon ws-nav-icon--settings">
+            <img src="/static/img/icons/settings_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/settings_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">Settings</span>
+        </button>
+        <button type="button" class="ws-nav-item" data-tip="Help">
+          <span class="ws-nav-icon ws-nav-icon--help">
+            <img src="/static/img/icons/help_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/help_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">Help</span>
+        </button>
+      </div>
+
+      <div class="ws-sidebar-utils" aria-label="Utilities">
+        <div class="ws-sidebar-utils-left">
+          <button id="themeToggle"
+                  class="btn btn-outline theme-toggle"
+                  type="button"
+                  aria-label="Toggle theme"
+                  aria-pressed="false">
+            <span class="theme-toggle-icon theme-toggle-icon--dark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 14.5C19.6 15.4 18 16 16.3 16C11.7 16 8 12.3 8 7.7C8 6 8.6 4.4 9.5 3C6 4 3.5 7.2 3.5 11C3.5 15.1 6.9 18.5 11 18.5C14.8 18.5 18 16 19 12.5"
+                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="theme-toggle-icon theme-toggle-icon--light" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 18.5C15.5899 18.5 18.5 15.5899 18.5 12C18.5 8.41015 15.5899 5.5 12 5.5C8.41015 5.5 5.5 8.41015 5.5 12C5.5 15.5899 8.41015 18.5 12 18.5Z"
+                      stroke="currentColor" stroke-width="1.8"/>
+                <path d="M12 2.2V3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M12 20.2V21.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M2.2 12H3.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M20.2 12H21.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M4.1 4.1L5.2 5.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M18.8 18.8L19.9 19.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M4.1 19.9L5.2 18.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M18.8 5.2L19.9 4.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </span>
+          </button>
+          <span class="ws-sidebar-utils-text">Theme</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content: hero + cards -->
+  <div class="ws-main">
+    <div class="ws-main-inner">
+      <section class="ws-hero">
+        <div style="max-width:720px; width:100%;">
+          <div class="ws-hero-kicker">
+            {% if workspace_name %}
+              Welcome back, {{ workspace_name }}.
+            {% else %}
+              Welcome to your crypto tax workspace.
+            {% endif %}
+          </div>
+
+          <div class="ws-hero-title">Country-ready crypto tax summary</div>
+
+          <div class="ws-hero-sub">
+            CSV-only workflow for Croatia (HR) and Italy (IT). Clear results you can review before exporting.
+          </div>
+
+          <ul class="ws-hero-bullets" aria-label="Key assurances">
+            <li>No exchange API keys, no wallet access — you stay in control.</li>
+            <li>Country rules applied per event so taxable vs exempt is immediately clear.</li>
+            <li>After each run, we save it to History so you can re-open and export later.</li>
+          </ul>
+
+          <div class="ws-hero-cta" style="align-items:center;">
+            <button
+              id="btnStartFirstReport"
+              class="btn btn-primary ws-hero-primary"
+              type="button"
+            >
+              Start calculation
+            </button>
+
+            <div class="ws-trust-strip" aria-label="Workflow assurances">
+              <span class="ws-trust-badge">CSV-only</span>
+              <span class="ws-trust-badge">No API keys</span>
+              <span class="ws-trust-badge">Saved to History</span>
+              <span class="ws-trust-badge">Review before run</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="ws-section-label">
+        What you’ll get
+      </div>
+
+      <!-- Feature cards under hero -->
+      <section class="ws-preview-row">
+        <div class="ws-preview-grid">
+          <div class="ws-preview-card">
+            <div class="ws-preview-card-top">
+              <span class="ws-preview-icon">
+                <img src="/static/img/icons/gain&loses_icon_white.png" alt="" class="icon-dark">
+                <img src="/static/img/icons/gain&loses_icon_black.png" alt="" class="icon-light">
+              </span>
+              <div class="ws-preview-card-meta">
+                <div class="ws-preview-card-title">Gains &amp; Losses</div>
+                <div class="ws-preview-card-sub">
+                  Realised gains and losses grouped by asset and tax year.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ws-preview-card">
+            <div class="ws-preview-card-top">
+              <span class="ws-preview-icon">
+                <img src="/static/img/icons/country_rules_icon_white.png" alt="" class="icon-dark">
+                <img src="/static/img/icons/country_rules_icon_black.png" alt="" class="icon-light">
+              </span>
+              <div class="ws-preview-card-meta">
+                <div class="ws-preview-card-title">Country Rules</div>
+                <div class="ws-preview-card-sub">
+                  HR / IT rules applied to events so you can see what’s taxable vs exempt.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ws-preview-card">
+            <div class="ws-preview-card-top">
+              <span class="ws-preview-icon">
+                <img src="/static/img/icons/data_quality_icon_white.png" alt="" class="icon-dark">
+                <img src="/static/img/icons/data_quality_icon_black.png" alt="" class="icon-light">
+              </span>
+              <div class="ws-preview-card-meta">
+                <div class="ws-preview-card-title">Data Quality</div>
+                <div class="ws-preview-card-sub">
+                  Missing prices, duplicates, and odd timestamps flagged before you export.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="ws-section-label">
+        How it works
+      </div>
+
+      <section class="ws-steps-row" aria-label="How it works">
+        <div class="ws-step">
+          <div class="ws-step-head">
+            <span class="ws-step-number">1</span>
+          </div>
+          <div class="ws-step-text">
+            Upload your transaction CSV files.
+          </div>
+        </div>
+
+        <div class="ws-step">
+          <div class="ws-step-head">
+            <span class="ws-step-number">2</span>
+          </div>
+          <div class="ws-step-text">
+            Choose your jurisdiction and tax year.
+          </div>
+        </div>
+
+        <div class="ws-step">
+          <div class="ws-step-head">
+            <span class="ws-step-number">3</span>
+          </div>
+          <div class="ws-step-text">
+            We run the calculation and send you to your results page.
+          </div>
+        </div>
+      </section>
+      <div class="ws-cred-footer" aria-label="Product credibility links">
+        <button type="button" class="ws-cred-link" data-ws-info="privacy">Privacy &amp; Data</button>
+        <span class="ws-cred-sep">•</span>
+        <button type="button" class="ws-cred-link" data-ws-info="methodology">Methodology</button>
+        <span class="ws-cred-sep">•</span>
+        <button type="button" class="ws-cred-link" data-ws-info="disclaimer">Disclaimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Credibility / policy modal (local to intro page) -->
+  <div id="wsInfoBackdrop" class="ws-info-backdrop" aria-hidden="true"></div>
+  <div id="wsInfoModal" class="ws-info-modal" aria-hidden="true">
+    <div class="ws-info-dialog" role="dialog" aria-modal="true" aria-labelledby="wsInfoTitle">
+      <div class="ws-info-header">
+        <div id="wsInfoTitle" class="ws-info-title">Privacy &amp; Data</div>
+        <button id="wsInfoClose" class="ws-info-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <div id="wsInfoBody" class="ws-info-body"></div>
+    </div>
+  </div>
+
+  <!-- Simple 3-step wizard (no backend, just flow for now) -->
+  <div id="wsWizardBackdrop" class="ws-wizard-backdrop"></div>
+  <div id="wsWizard" class="ws-wizard" aria-hidden="true">
+    <div class="ws-wizard-dialog">
+      <div class="ws-wizard-header">
+        <div class="ws-wizard-title" id="wsWizardTitle">Upload files</div>
+        <button id="wsWizardClose" class="ws-wizard-close" type="button" aria-label="Close wizard">✕</button>
+      </div>
+
+      <div class="ws-wizard-steps">
+        <div class="ws-wizard-step is-active" data-step="1">
+          <div class="ws-wizard-step-dot">1</div>
+          <div class="ws-wizard-step-labels">
+            <span class="ws-wizard-step-count">Step 1</span>
+            <span class="ws-wizard-step-title">Upload CSVs</span>
+          </div>
+        </div>
+        <div class="ws-wizard-step" data-step="2">
+          <div class="ws-wizard-step-dot">2</div>
+          <div class="ws-wizard-step-labels">
+            <span class="ws-wizard-step-count">Step 2</span>
+            <span class="ws-wizard-step-title">Jurisdiction</span>
+          </div>
+        </div>
+        <div class="ws-wizard-step" data-step="3">
+          <div class="ws-wizard-step-dot">3</div>
+          <div class="ws-wizard-step-labels">
+            <span class="ws-wizard-step-count">Step 3</span>
+            <span class="ws-wizard-step-title">Review &amp; Run</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="wsWizardStepStatus" class="ws-wizard-step-status-text">
+        Step 1 of 3
+      </div>
+
+      <form id="wsWizardForm" class="ws-wizard-body">
+        <!-- STEP 1 -->
+        <div id="wsWizardStep1" class="ws-wizard-step-pane">
+          <div class="ws-wizard-field-label">Transaction CSV files</div>
+
+          <input
+            id="wizardFiles"
+            type="file"
+            accept=".csv"
+            multiple
+            class="ws-upload-input"
+            aria-describedby="wizardFilesSummary wizardFilesError"
+          >
+
+          <label id="wizardDropzone" class="ws-upload-dropzone" for="wizardFiles" tabindex="0" role="button" aria-label="Add CSV files">
+            <span id="wizardDropTitle" class="ws-upload-title">Drop your CSV files here</span>
+            <span id="wizardDropSub" class="ws-upload-sub">or click to browse (CSV only)</span>
+          </label>
+
+          <div id="wizardFilesSummary" class="ws-upload-summary">
+            No files selected yet.
+          </div>
+
+          <div id="wizardFileTools" class="ws-upload-tools" style="display:none;">
+            <div class="ws-upload-searchwrap">
+              <input id="wizardFileSearch"
+                     class="ws-upload-search"
+                     type="text"
+                     placeholder="Filter files…"
+                     autocomplete="off">
+              <button id="wizardFileSearchClear"
+                      type="button"
+                      class="ws-upload-search-clear"
+                      aria-label="Clear filter"
+                      style="display:none;">✕</button>
+            </div>
+            <div id="wizardFileCount" class="ws-upload-count">—</div>
+          </div>
+
+          <div id="wizardFileList" class="ws-upload-list" aria-live="polite"></div>
+
+          <div id="wizardUnsupportedPanel" class="ws-unsup-panel" style="display:none;" aria-live="polite">
+            <div class="ws-unsup-head">
+              <div class="ws-unsup-title">Unsupported CSV format detected</div>
+              <div class="ws-unsup-sub">
+                We saved the structure for implementation. To continue, remove the unsupported files or export using a supported format below.
+              </div>
+            </div>
+
+            <div id="wizardUnsupportedFiles" class="ws-unsup-files" style="display:none;"></div>
+
+            <div class="ws-unsup-actions">
+              <button id="wizardDownloadTemplate" type="button" class="ws-unsup-btn">
+                Download CryptoTaxCalc template CSV
+              </button>
+              <span class="ws-unsup-sep" aria-hidden="true">•</span>
+              <span class="ws-unsup-meta">Supported formats:</span>
+              <span id="wizardSupportedSources" class="ws-unsup-chips">Loading…</span>
+              <div id="wizardSupportedSourceDetails" class="ws-unsup-detail" style="display:none;"></div>
+            </div>
+          </div>
+
+          <div class="ws-upload-actions" aria-label="Upload actions">
+            <button id="wizardAddMore" type="button" class="ws-link-btn">Add more CSVs</button>
+            <span class="ws-upload-dot" aria-hidden="true">•</span>
+            <button id="wizardClearFiles" type="button" class="ws-link-btn ws-link-danger" style="display:none;">Clear</button>
+          </div>
+
+          <div id="wizardUndoToast" class="ws-undo-toast" style="display:none;" aria-live="polite">
+            <span id="wizardUndoText">Files cleared.</span>
+            <button id="wizardUndoBtn" type="button" class="ws-undo-btn">Undo</button>
+          </div>
+
+          <div id="wizardFilesError" class="ws-field-error" style="display:none;"></div>
+
+          <div class="ws-wizard-trust" aria-label="Upload assurances">
+            <span class="ws-wizard-trust-item">CSV-only import</span>
+            <span class="ws-wizard-trust-item">No API keys</span>
+            <span class="ws-wizard-trust-item">Typical setup: ~2 minutes</span>
+          </div>
+        </div>
+
+        <!-- STEP 2 -->
+        <div id="wsWizardStep2" class="ws-wizard-step-pane" style="display:none;">
+          <div class="ws-wizard-field-label">Jurisdiction &amp; Tax year</div>
+          <div class="ws-wizard-row">
+            <select id="wizardJurisdiction" class="ws-wizard-select">
+              <option value="HR">Croatia (HR)</option>
+              <option value="IT">Italy (IT)</option>
+            </select>
+
+            <div class="ws-year-wrap">
+              <select id="wizardTaxYearSelect" class="ws-wizard-select" aria-describedby="wizardTaxYearError"></select>
+              <input
+                id="wizardTaxYear"
+                type="number"
+                class="ws-wizard-input"
+                min="2016"
+                max="2100"
+                placeholder="Tax year"
+                style="display:none;"
+                aria-describedby="wizardTaxYearError"
+              >
+              <button id="wizardTaxYearToggle" type="button" class="ws-year-toggle">Enter manually</button>
+            </div>
+          </div>
+
+          <div id="wizardTaxYearError" class="ws-field-error" style="display:none;"></div>
+          <div id="wizardRuleVersion" class="ws-rule-version">Rule set: —</div>
+
+          <p class="ws-wizard-hint">
+            You can re-run later for different years or jurisdictions.
+          </p>
+        </div>
+
+        <!-- STEP 3 -->
+        <div id="wsWizardStep3" class="ws-wizard-step-pane" style="display:none;">
+          <div id="wizardReviewSection">
+            <div class="ws-wizard-field-label">Review</div>
+
+            <div class="ws-review-card" aria-label="Review details">
+              <div class="ws-review-row">
+                <div class="ws-review-key">CSV files</div>
+                <div class="ws-review-val ws-review-val-flex">
+                  <span id="wizardReviewFiles" class="ws-review-files-text">—</span>
+                  <button id="wizardReviewFilesToggle" type="button" class="ws-review-files-toggle" style="display:none;">View</button>
+                </div>
+                <button type="button" class="ws-review-edit" data-ws-edit-step="1">Edit</button>
+              </div>
+
+              <div id="wizardReviewFilesExpand" class="ws-review-files-expand" style="display:none;"></div>
+
+              <div class="ws-review-row">
+                <div class="ws-review-key">Jurisdiction</div>
+                <div id="wizardReviewJurisdiction" class="ws-review-val">—</div>
+                <button type="button" class="ws-review-edit" data-ws-edit-step="2">Edit</button>
+              </div>
+
+              <div class="ws-review-row">
+                <div class="ws-review-key">Tax year</div>
+                <div id="wizardReviewTaxYear" class="ws-review-val">—</div>
+                <button type="button" class="ws-review-edit" data-ws-edit-step="2">Edit</button>
+              </div>
+            </div>
+
+            <div id="wizardReviewMethod" class="ws-review-method">Rule set: — • Lot method: FIFO • FX source: —</div>
+
+            <div id="wizardReviewNext" class="ws-review-next">
+              Run → results page → saved to History.
+            </div>
+
+            <p class="ws-wizard-hint" style="margin-top:6px;">
+              You can edit any item above before running.
+            </p>
+          </div>
+
+          <div id="wizardRunningSection" class="ws-run-panel" style="display:none;" aria-live="polite">
+            <div class="ws-run-head">
+              <div class="ws-run-title">Running calculation</div>
+              <div id="wizardRunEta" class="ws-run-sub">This may take a few minutes for large CSV files.</div>
+              <div id="wizardRunElapsed" class="ws-run-sub">Elapsed: 00:00</div>
+            </div>
+
+            <div class="ws-run-bar" aria-hidden="true">
+              <div id="wizardRunBarFill" class="ws-run-bar-fill"></div>
+            </div>
+
+            <ol id="wizardRunList" class="ws-run-list" aria-label="Calculation steps">
+              <li class="ws-run-item is-active" data-run-step="0">
+                <span class="ws-run-icon" aria-hidden="true"></span>
+                <span class="ws-run-label">Upload CSV files</span>
+                <span class="ws-run-state" data-run-state>Working…</span>
+              </li>
+
+              <li class="ws-run-item is-pending" data-run-step="1">
+                <span class="ws-run-icon" aria-hidden="true"></span>
+                <span class="ws-run-label">Normalize transactions</span>
+                <span class="ws-run-state" data-run-state>Pending</span>
+              </li>
+
+              <li class="ws-run-item is-pending" data-run-step="2">
+                <span class="ws-run-icon" aria-hidden="true"></span>
+                <span class="ws-run-label">Compute FIFO lots</span>
+                <span class="ws-run-state" data-run-state>Pending</span>
+              </li>
+
+              <li class="ws-run-item is-pending" data-run-step="3">
+                <span class="ws-run-icon" aria-hidden="true"></span>
+                <span class="ws-run-label">Apply jurisdiction rules</span>
+                <span class="ws-run-state" data-run-state>Pending</span>
+              </li>
+
+              <li class="ws-run-item is-pending" data-run-step="4">
+                <span class="ws-run-icon" aria-hidden="true"></span>
+                <span class="ws-run-label">Finalize &amp; save run</span>
+                <span class="ws-run-state" data-run-state>Pending</span>
+              </li>
+            </ol>
+
+            <div class="ws-run-note">
+              Please keep this window open while we calculate.
+            </div>
+          </div>
+
+          <div id="wizardDoneSection" class="ws-done-panel" style="display:none;" aria-live="polite">
+            <div class="ws-done-top">
+              <div id="wizardDoneRing" class="ws-countdown-ring" style="--ws-cd-pct:100%;">
+                <span id="wizardDoneCountdown" class="ws-countdown-number">5</span>
+              </div>
+            </div>
+
+            <div class="ws-done-title">Results are ready</div>
+
+            <div class="ws-done-sub">
+              Closing in <span id="wizardDoneCountdownText">5</span>s…
+            </div>
+
+            <div class="ws-done-note">
+              Redirecting you to your results page…
+            </div>
+          </div>
+        </div>
+
+        <div id="wsWizardError" class="ws-wizard-error" style="display:none;"></div>
+        <div id="wsWizardSuccess" class="ws-wizard-success">
+          <span class="ws-wizard-success-icon">✔</span>
+          <span class="ws-wizard-success-text"></span>
+        </div>
+
+        <div class="ws-wizard-footer">
+          <div id="wsWizardActionHint" class="ws-wizard-action-hint" aria-live="polite"></div>
+          <button id="wsWizardBack" type="button" class="btn btn-outline">Back</button>
+          <button id="wsWizardNext" type="submit" class="btn btn-primary">Continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Global CSV drag overlay (drop anywhere on the page) -->
+  <div id="wsCsvDropOverlay" class="ws-csvdrop-overlay" aria-hidden="true">
+    <div class="ws-csvdrop-card">
+      <div class="ws-csvdrop-icon" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 3v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 7l4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 14v4a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div id="wsCsvDropOverlayTitle" class="ws-csvdrop-title">Drop CSV files to start calculation</div>
+      <div id="wsCsvDropOverlaySub" class="ws-csvdrop-sub">CSV only • No API keys • Saved to History</div>
+      <div class="ws-csvdrop-sub" style="margin-top:6px;">You can drop anywhere on this page.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    const wsShell = document.querySelector('.ws-shell');
+    const SIDEBAR_KEY = 'wsSidebarCollapsed';
+    const btnSidebarToggle = document.getElementById('btnSidebarToggle');
+
+    const HISTORY_BADGE_KEY = 'wsHistoryHasNew';
+    const navHistory = document.getElementById('wsNavHistory');
+    const historyBadge = document.getElementById('wsHistoryBadge');
+
+    /* Sidebar collapse/expand with animated page shift */
+    function setSidebarCollapsed(collapsed) {
+      if (!wsShell) return;
+      const isCollapsed = !!collapsed;
+      wsShell.classList.toggle('is-collapsed', isCollapsed);
+      /* Keep collapse state local to this page (prevents global CSS interactions) */
+    }
+
+    function initSidebar() {
+      try {
+        const saved = window.localStorage.getItem(SIDEBAR_KEY);
+        setSidebarCollapsed(saved === '1');
+      } catch (_) {}
+
+      if (btnSidebarToggle) {
+        btnSidebarToggle.addEventListener('click', () => {
+          const collapsed = wsShell.classList.contains('is-collapsed');
+          const next = !collapsed;
+          setSidebarCollapsed(next);
+          try {
+            window.localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+          } catch (_) {}
+        });
+      }
+    }
+
+    function setHistoryBadgeVisible(visible) {
+      if (historyBadge) historyBadge.style.display = visible ? 'inline-flex' : 'none';
+      if (navHistory) navHistory.classList.toggle('has-new', !!visible);
+    }
+
+    function initHistoryBadge() {
+      const pathNow = (window.location && window.location.pathname ? window.location.pathname : '/').replace(/\/+$/, '') || '/';
+
+      // If the user is on History, the “New” indicator must clear deterministically.
+      if (pathNow === '/history') {
+        try {
+          window.localStorage.removeItem(HISTORY_BADGE_KEY);
+        } catch (_) {}
+        setHistoryBadgeVisible(false);
+      } else {
+        let hasNew = false;
+        try {
+          hasNew = window.localStorage.getItem(HISTORY_BADGE_KEY) === '1';
+        } catch (_) {}
+        setHistoryBadgeVisible(hasNew);
+      }
+
+      if (navHistory) {
+        navHistory.addEventListener('click', () => {
+          try {
+            window.localStorage.removeItem(HISTORY_BADGE_KEY);
+          } catch (_) {}
+          setHistoryBadgeVisible(false);
+        });
+      }
+    }
+
+    function normalizePath(p) {
+      const s = String(p || '').trim();
+      const stripped = s.replace(/\/+$/, '');
+      return stripped === '' ? '/' : stripped;
+    }
+
+    function hrefPath(href) {
+      try {
+        const u = new URL(String(href || ''), window.location.origin);
+        return normalizePath(u.pathname);
+      } catch (_) {
+        return normalizePath(String(href || '').split('?')[0]);
+      }
+    }
+
+    function syncSidebarActiveNav() {
+      const current = normalizePath(window.location && window.location.pathname ? window.location.pathname : '/');
+
+      const links = Array.from(document.querySelectorAll('.ws-sidebar-nav a.ws-nav-item[href]'));
+      let active = null;
+
+      links.forEach((a) => {
+        a.classList.remove('is-active');
+        a.removeAttribute('aria-current');
+
+        const p = hrefPath(a.getAttribute('href'));
+        if (p === current) active = a;
+      });
+
+      // Optional fallback: treat "/" as workspace if needed
+      if (!active && current === '/') {
+        const ws = document.getElementById('wsNavWorkspace');
+        if (ws) active = ws;
+      }
+
+      if (active) {
+        active.classList.add('is-active');
+        active.setAttribute('aria-current', 'page');
+      }
+    }
+
+    function initNativeSidebarTooltips() {
+      const nodes = Array.from(document.querySelectorAll('.ws-sidebar [data-tip]'));
+      nodes.forEach((el) => {
+        const tip = el.getAttribute('data-tip');
+        if (!tip) return;
+        if (!el.getAttribute('title')) el.setAttribute('title', tip);
+      });
+    }
+
+    /* Hero CTA */
+    const btnStartFirst = document.getElementById('btnStartFirstReport');
+
+    /* Wizard elements */
+    const wizardBackdrop = document.getElementById('wsWizardBackdrop');
+    const wizardRoot     = document.getElementById('wsWizard');
+    const wizardTitle    = document.getElementById('wsWizardTitle');
+    const wizardClose    = document.getElementById('wsWizardClose');
+    const wizardForm     = document.getElementById('wsWizardForm');
+    const wizardError    = document.getElementById('wsWizardError');
+    const wizardSuccess  = document.getElementById('wsWizardSuccess');
+    const wizardBackBtn  = document.getElementById('wsWizardBack');
+    const wizardNextBtn  = document.getElementById('wsWizardNext');
+    const wizardActionHint = document.getElementById('wsWizardActionHint');
+
+    const wizardSteps = Array.from(document.querySelectorAll('.ws-wizard-step'));
+    const wizardStepsBar = document.querySelector('.ws-wizard-steps');
+    const stepPane1   = document.getElementById('wsWizardStep1');
+    const stepPane2   = document.getElementById('wsWizardStep2');
+    const stepPane3   = document.getElementById('wsWizardStep3');
+
+    const wizardStepStatus   = document.getElementById('wsWizardStepStatus');
+
+    const wizardFilesInput      = document.getElementById('wizardFiles');
+    const wizardDropzone        = document.getElementById('wizardDropzone');
+    const wizardDropTitle       = document.getElementById('wizardDropTitle');
+    const wizardDropSub         = document.getElementById('wizardDropSub');
+    const wizardFilesSummary    = document.getElementById('wizardFilesSummary');
+    const wizardFileList        = document.getElementById('wizardFileList');
+    const wizardFileTools       = document.getElementById('wizardFileTools');
+    const wizardFileSearch      = document.getElementById('wizardFileSearch');
+    const wizardFileSearchClear = document.getElementById('wizardFileSearchClear');
+    const wizardFileCount       = document.getElementById('wizardFileCount');
+    const wizardAddMoreBtn      = document.getElementById('wizardAddMore');
+    const wizardClearFilesBtn   = document.getElementById('wizardClearFiles');
+    const wizardFilesError      = document.getElementById('wizardFilesError');
+    const wizardUnsupportedPanel = document.getElementById('wizardUnsupportedPanel');
+    const wizardUnsupportedFiles = document.getElementById('wizardUnsupportedFiles');
+    const wizardDownloadTemplate = document.getElementById('wizardDownloadTemplate');
+    const wizardSupportedSources = document.getElementById('wizardSupportedSources');
+    const wizardSupportedSourceDetails = document.getElementById('wizardSupportedSourceDetails');
+
+    let wsSupportedSourcesCache = null;
+    let wsSupportedSourcesLoading = false;
+    let wsSupportedSourcesById = new Map();
+    const wizardUndoToast       = document.getElementById('wizardUndoToast');
+    const wizardUndoText        = document.getElementById('wizardUndoText');
+    const wizardUndoBtn         = document.getElementById('wizardUndoBtn');
+
+    const wizardJurisdiction    = document.getElementById('wizardJurisdiction');
+    const wizardTaxYearSelect   = document.getElementById('wizardTaxYearSelect');
+    const wizardTaxYear         = document.getElementById('wizardTaxYear');
+    const wizardTaxYearToggle   = document.getElementById('wizardTaxYearToggle');
+    const wizardTaxYearError    = document.getElementById('wizardTaxYearError');
+    const wizardRuleVersion     = document.getElementById('wizardRuleVersion');
+
+    const wizardReviewFiles        = document.getElementById('wizardReviewFiles');
+    const wizardReviewJurisdiction = document.getElementById('wizardReviewJurisdiction');
+    const wizardReviewTaxYear      = document.getElementById('wizardReviewTaxYear');
+    const wizardReviewNext         = document.getElementById('wizardReviewNext');
+    const wizardReviewMethod       = document.getElementById('wizardReviewMethod');
+    const wizardReviewFilesToggle  = document.getElementById('wizardReviewFilesToggle');
+    const wizardReviewFilesExpand  = document.getElementById('wizardReviewFilesExpand');
+    const wizardReviewSection   = document.getElementById('wizardReviewSection');
+
+    const wizardRunningSection  = document.getElementById('wizardRunningSection');
+    const wizardRunEta          = document.getElementById('wizardRunEta');
+    const wizardRunElapsed      = document.getElementById('wizardRunElapsed');
+    const wizardRunBarFill      = document.getElementById('wizardRunBarFill');
+    const wizardRunList         = document.getElementById('wizardRunList');
+
+    const wizardDoneSection       = document.getElementById('wizardDoneSection');
+    const wizardDoneRing          = document.getElementById('wizardDoneRing');
+    const wizardDoneCountdown     = document.getElementById('wizardDoneCountdown');
+    const wizardDoneCountdownText = document.getElementById('wizardDoneCountdownText');
+    const csvDropOverlay      = document.getElementById('wsCsvDropOverlay');
+    const csvDropOverlayTitle = document.getElementById('wsCsvDropOverlayTitle');
+    const csvDropOverlaySub   = document.getElementById('wsCsvDropOverlaySub');
+
+    /* Info modal (Privacy / Methodology / Disclaimer) */
+    const infoBackdrop = document.getElementById('wsInfoBackdrop');
+    const infoRoot     = document.getElementById('wsInfoModal');
+    const infoClose    = document.getElementById('wsInfoClose');
+    const infoTitleEl  = document.getElementById('wsInfoTitle');
+    const infoBodyEl   = document.getElementById('wsInfoBody');
+    const infoTriggers = Array.from(document.querySelectorAll('[data-ws-info]'));
+
+    const INFO_CONTENT = {
+      privacy: {
+        title: 'Privacy & Data',
+        body: [
+          'We only process the CSV exports you choose to upload in order to generate your tax summary.',
+          'We do not ask for exchange API keys and we do not request wallet access.',
+          'After each calculation, we save the run to History so you can re-open and export later.'
+        ]
+      },
+      methodology: {
+        title: 'Methodology',
+        body: [
+          'We normalize your CSV transactions into a consistent event ledger and apply the selected jurisdiction and tax year rule set.',
+          'Your results show realized totals and per-event classification, plus flags where the source data may need review (missing prices, duplicates, or unusual timestamps).',
+          'You review the setup before the run, and you can review results again before exporting.'
+        ]
+      },
+      disclaimer: {
+        title: 'Disclaimer',
+        body: [
+          'CryptoTaxCalc is informational software and does not provide tax advice.',
+          'Tax treatment can vary by personal circumstances and may change. Always verify outputs and consult a qualified professional if needed.'
+        ]
+      }
+    };
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function downloadCryptoTaxCalcTemplate() {
+      const headers = [
+        'timestamp',
+        'type',
+        'base_asset',
+        'base_amount',
+        'quote_asset',
+        'quote_amount',
+        'fee_asset',
+        'fee_amount',
+        'exchange',
+        'memo',
+        'fair_value'
+      ];
+
+      const rows = [
+        headers,
+        // Example BUY row (delete after you map your export)
+        ['2025-01-15 10:00:00', 'BUY', 'BTC', '0.01000000', 'EUR', '500.00', 'EUR', '1.00', 'ExampleExchange', 'Example buy', ''],
+        // Example SELL row
+        ['2026-02-20 12:30:00', 'SELL', 'BTC', '0.01000000', 'EUR', '650.00', 'EUR', '1.00', 'ExampleExchange', 'Example sell', '']
+      ];
+
+      const csv = rows.map(r => r.map(v => {
+        const s = String(v ?? '');
+        const needs = /[",\n]/.test(s);
+        return needs ? `"${s.replaceAll('"', '""')}"` : s;
+      }).join(',')).join('\n') + '\n';
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cryptotaxcalc_template.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    function setActionHint(text) {
+      if (!wizardActionHint) return;
+      const t = String(text || '').trim();
+      wizardActionHint.textContent = t;
+      wizardActionHint.style.display = t ? '' : 'none';
+    }
+
+    function openInfo(key) {
+      const cfg = INFO_CONTENT[key];
+      if (!cfg || !infoBackdrop || !infoRoot) return;
+
+      if (infoTitleEl) infoTitleEl.textContent = cfg.title;
+      if (infoBodyEl) {
+        infoBodyEl.innerHTML = cfg.body
+          .map(p => `<p>${escapeHtml(p)}</p>`)
+          .join('');
+      }
+
+      infoBackdrop.classList.add('is-open');
+      infoRoot.classList.add('is-open');
+      infoBackdrop.setAttribute('aria-hidden', 'false');
+      infoRoot.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeInfo() {
+      if (!infoBackdrop || !infoRoot) return;
+      infoBackdrop.classList.remove('is-open');
+      infoRoot.classList.remove('is-open');
+      infoBackdrop.setAttribute('aria-hidden', 'true');
+      infoRoot.setAttribute('aria-hidden', 'true');
+    }
+
+    let wizardStep = 1;
+    let wizardIsRunning = false;
+    let wizardIsComplete = false;
+    let wizardYearMode = 'select';
+    let selectedFiles = [];
+    let wizardFileFilter = '';
+
+    let wsCsvDetectToken = 0;
+    let wsCsvDetectTimer = null;
+    const wsFileSupport = new Map(); // fileKey -> { status, sourceName, confidence }
+
+    function pruneCsvSupportMap() {
+      const keep = new Set(selectedFiles.map(fileKey));
+      for (const k of Array.from(wsFileSupport.keys())) {
+        if (!keep.has(k)) wsFileSupport.delete(k);
+      }
+    }
+
+    function getCsvSupportCounts() {
+      let supported = 0, unsupported = 0, checking = 0;
+      selectedFiles.forEach((f) => {
+        const st = wsFileSupport.get(fileKey(f));
+        const s = st && st.status ? String(st.status) : 'checking';
+        if (s === 'supported') supported += 1;
+        else if (s === 'unsupported') unsupported += 1;
+        else checking += 1;
+      });
+      return { supported, unsupported, checking, total: selectedFiles.length };
+    }
+
+    function scheduleCsvSupportDetection() {
+      if (!selectedFiles.length) {
+        wsFileSupport.clear();
+        wizardFileFilter = '';
+        if (wizardFileSearch) wizardFileSearch.value = '';
+        syncStepValidity(false);
+        return;
+      }
+
+      selectedFiles.forEach((f) => {
+        const k = fileKey(f);
+        if (!wsFileSupport.has(k)) {
+          wsFileSupport.set(k, { status: 'checking', sourceName: null, confidence: 0 });
+        }
+      });
+
+      pruneCsvSupportMap();
+
+      if (wsCsvDetectTimer) window.clearTimeout(wsCsvDetectTimer);
+      wsCsvDetectTimer = window.setTimeout(() => {
+        detectCsvSupportNow();
+      }, 120);
+    }
+
+    async function ensureSupportedSourcesLoaded() {
+      if (wsSupportedSourcesCache) return wsSupportedSourcesCache;
+      if (wsSupportedSourcesLoading) return null;
+
+      wsSupportedSourcesLoading = true;
+
+      try {
+        const resp = await fetch('/csv/sources/catalog', { credentials: 'same-origin' });
+        if (!resp.ok) throw new Error('failed');
+
+        const data = await resp.json();
+        const sources = Array.isArray(data && data.sources) ? data.sources : [];
+        wsSupportedSourcesCache = sources.filter(s => s && s.name && s.id);
+        wsSupportedSourcesById = new Map(wsSupportedSourcesCache.map(s => [String(s.id), s]));
+        return wsSupportedSourcesCache;
+      } catch (_) {
+        wsSupportedSourcesCache = [];
+        return wsSupportedSourcesCache;
+      } finally {
+        wsSupportedSourcesLoading = false;
+      }
+    }
+
+    function renderSupportedSourcesChips(list) {
+      if (!wizardSupportedSources) return;
+
+      const sources = Array.isArray(list) ? list : [];
+      if (!sources.length) {
+        wizardSupportedSources.textContent = '—';
+        return;
+      }
+
+      wizardSupportedSources.innerHTML = sources.slice(0, 6).map(s =>
+        `<button type="button" class="ws-unsup-chip" data-src-id="${escapeHtml(s.id || '')}" title="${escapeHtml(s.id || '')}">${escapeHtml(s.name)}</button>`
+      ).join('');
+    }
+
+    function renderSourceDetails(sourceId) {
+      if (!wizardSupportedSourceDetails) return;
+
+      const id = String(sourceId || '').trim();
+      const src = wsSupportedSourcesById.get(id);
+
+      if (!src) {
+        wizardSupportedSourceDetails.style.display = 'none';
+        wizardSupportedSourceDetails.innerHTML = '';
+        return;
+      }
+
+      const m = (src.match && typeof src.match === 'object') ? src.match : {};
+      const req = Array.isArray(m.headers_all) ? m.headers_all : [];
+      const opt = Array.isArray(m.headers_any) ? m.headers_any : [];
+      const hints = Array.isArray(m.filename_keywords) ? m.filename_keywords : [];
+
+      const pills = (arr) => arr.length
+        ? arr.map(x => `<span class="ws-unsup-pill">${escapeHtml(String(x))}</span>`).join('')
+        : '<span class="ws-unsup-pill">—</span>';
+
+      wizardSupportedSourceDetails.innerHTML = `
+        <div class="ws-unsup-detail-title">${escapeHtml(String(src.name || src.id))}</div>
+
+        <div class="ws-unsup-detail-row">
+          <div class="ws-unsup-detail-k">Required</div>
+          <div class="ws-unsup-detail-v">${pills(req)}</div>
+        </div>
+
+        <div class="ws-unsup-detail-row">
+          <div class="ws-unsup-detail-k">Optional</div>
+          <div class="ws-unsup-detail-v">${pills(opt)}</div>
+        </div>
+
+        <div class="ws-unsup-detail-row">
+          <div class="ws-unsup-detail-k">Filename hints</div>
+          <div class="ws-unsup-detail-v">${pills(hints)}</div>
+        </div>
+      `;
+
+      wizardSupportedSourceDetails.style.display = '';
+    }
+
+    async function detectCsvSupportNow() {
+      const token = ++wsCsvDetectToken;
+      const filesSnapshot = selectedFiles.slice();
+      if (!filesSnapshot.length) return;
+
+      filesSnapshot.forEach((f) => {
+        wsFileSupport.set(fileKey(f), { status: 'checking', sourceName: null, confidence: 0 });
+      });
+      renderFilesUI();
+
+      try {
+        const form = new FormData();
+        filesSnapshot.forEach((f) => form.append('files', f, f.name));
+
+        const resp = await fetch('/csv/detect/multiple', {
+          method: 'POST',
+          body: form,
+          credentials: 'same-origin',
+        });
+
+        if (token !== wsCsvDetectToken) return;
+        if (!resp.ok) throw new Error(`Detection failed (${resp.status}).`);
+
+        const data = await resp.json();
+        const results = Array.isArray(data && data.results) ? data.results : [];
+
+        filesSnapshot.forEach((f, i) => {
+          const r = results[i] || {};
+          const status = String(r.recognized_source_status || '').toLowerCase() === 'supported'
+            ? 'supported'
+            : 'unsupported';
+
+          wsFileSupport.set(fileKey(f), {
+            status,
+            sourceName: r.recognized_source_name || null,
+            confidence: Number(r.recognized_source_confidence) || 0,
+          });
+        });
+
+        pruneCsvSupportMap();
+        renderFilesUI();
+      } catch (_) {
+        if (token !== wsCsvDetectToken) return;
+
+        // Conservative UX: if we cannot verify, treat as not supported to avoid wasted runs.
+        filesSnapshot.forEach((f) => {
+          wsFileSupport.set(fileKey(f), { status: 'unsupported', sourceName: null, confidence: 0 });
+        });
+
+        pruneCsvSupportMap();
+        renderFilesUI();
+      }
+    }
+
+    let wizardRunToken = 0;
+    let wizardCountdownTimer = null;
+    let wizardCountdownEndsAt = 0;
+    let wizardCountdownTotalMs = 0;
+    let wizardLastRunId = null;
+    let wizardRunStartedAt = 0;
+    let wizardRunElapsedTimer = null;
+
+    const RULE_VERSION = '2025.1';
+
+    let wizardUndoAction = null;
+    let wizardUndoHideTimer = null;
+
+    let wizardReviewFilesExpanded = false;
+
+    let wizardReturnFocusEl = null;
+    let wizardLastFocusStep = null;
+    let wizardLastFocusMode = '';
+
+    function formatBytes(bytes) {
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let value = Math.max(0, Number(bytes) || 0);
+      let unitIndex = 0;
+      while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+      }
+      const dp = unitIndex === 0 ? 0 : 1;
+      return `${value.toFixed(dp)} ${units[unitIndex]}`;
+    }
+
+    function formatElapsed(ms) {
+      const totalSec = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      const mm = String(m).padStart(2, '0');
+      const ss = String(s).padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    function stopRunElapsedTimer() {
+      if (wizardRunElapsedTimer) {
+        window.clearInterval(wizardRunElapsedTimer);
+        wizardRunElapsedTimer = null;
+      }
+    }
+
+    function startRunElapsedTimer() {
+      stopRunElapsedTimer();
+      if (!wizardRunElapsed) return;
+
+      wizardRunElapsed.textContent = 'Elapsed: 00:00';
+
+      wizardRunElapsedTimer = window.setInterval(() => {
+        if (!wizardIsRunning) return;
+        const elapsed = Date.now() - (wizardRunStartedAt || Date.now());
+        wizardRunElapsed.textContent = `Elapsed: ${formatElapsed(elapsed)}`;
+      }, 500);
+    }
+
+    function fileKey(file) {
+      return `${file.name}__${file.size}__${file.lastModified}`;
+    }
+
+    function setFilesError(msg) {
+      if (wizardFilesError) {
+        wizardFilesError.textContent = msg;
+        wizardFilesError.style.display = 'block';
+      }
+      if (wizardDropzone) wizardDropzone.classList.add('is-invalid');
+    }
+
+    function clearFilesError() {
+      if (wizardFilesError) {
+        wizardFilesError.textContent = '';
+        wizardFilesError.style.display = 'none';
+      }
+      if (wizardDropzone) wizardDropzone.classList.remove('is-invalid');
+    }
+
+    function setTaxYearError(msg) {
+      if (wizardTaxYearError) {
+        wizardTaxYearError.textContent = msg;
+        wizardTaxYearError.style.display = 'block';
+      }
+      if (wizardYearMode === 'manual') {
+        if (wizardTaxYear) wizardTaxYear.classList.add('is-invalid');
+      } else {
+        if (wizardTaxYearSelect) wizardTaxYearSelect.classList.add('is-invalid');
+      }
+    }
+
+    function clearTaxYearError() {
+      if (wizardTaxYearError) {
+        wizardTaxYearError.textContent = '';
+        wizardTaxYearError.style.display = 'none';
+      }
+      if (wizardTaxYear) wizardTaxYear.classList.remove('is-invalid');
+      if (wizardTaxYearSelect) wizardTaxYearSelect.classList.remove('is-invalid');
+    }
+
+    function syncFileInput() {
+      if (!wizardFilesInput) return;
+      try {
+        const dt = new DataTransfer();
+        selectedFiles.forEach((f) => dt.items.add(f));
+        wizardFilesInput.files = dt.files;
+      } catch (_) {
+        /* If DataTransfer is unavailable, we still render UI based on selectedFiles */
+      }
+    }
+
+    async function renderUnsupportedPanel() {
+      if (!wizardUnsupportedPanel) return;
+
+      const counts = getCsvSupportCounts();
+      const show = counts.unsupported > 0 && counts.checking === 0;
+
+      wizardUnsupportedPanel.style.display = show ? '' : 'none';
+      if (!show) {
+        if (wizardSupportedSourceDetails) {
+          wizardSupportedSourceDetails.style.display = 'none';
+          wizardSupportedSourceDetails.innerHTML = '';
+        }
+        return;
+      }
+
+      // Show which files are unsupported (small, calm summary)
+      if (wizardUnsupportedFiles) {
+        const names = selectedFiles
+          .filter(f => {
+            const st = wsFileSupport.get(fileKey(f));
+            return st && st.status === 'unsupported';
+          })
+          .map(f => f.name);
+
+        if (names.length) {
+          const head = names.length <= 3
+            ? `Not supported: ${names.join(', ')}`
+            : `Not supported: ${names.slice(0, 3).join(', ')} (+${names.length - 3} more)`;
+          wizardUnsupportedFiles.textContent = head;
+          wizardUnsupportedFiles.style.display = '';
+        } else {
+          wizardUnsupportedFiles.textContent = '';
+          wizardUnsupportedFiles.style.display = 'none';
+        }
+      }
+
+      const sources = await ensureSupportedSourcesLoaded();
+      if (sources) renderSupportedSourcesChips(sources);
+    }
+
+    function renderFilesUI() {
+      const hasFiles = selectedFiles.length > 0;
+      const filter = String(wizardFileFilter || '').trim().toLowerCase();
+      const visibleFiles = filter
+        ? selectedFiles.filter(f => String(f && f.name || '').toLowerCase().includes(filter))
+        : selectedFiles;
+
+      if (wizardDropzone) {
+        wizardDropzone.classList.toggle('has-files', hasFiles);
+        wizardDropzone.style.display = hasFiles ? 'none' : '';
+      }
+
+      if (wizardDropTitle) {
+        wizardDropTitle.textContent = hasFiles ? 'Add more CSV files' : 'Drop your CSV files here';
+      }
+
+      if (wizardDropSub) {
+        wizardDropSub.textContent = hasFiles
+          ? 'Drop or click to add additional CSVs (CSV only)'
+          : 'or click to browse (CSV only)';
+      }
+
+      if (wizardFilesSummary) {
+        if (!hasFiles) {
+          wizardFilesSummary.textContent = 'No files selected yet.';
+        } else {
+          const totalBytes = selectedFiles.reduce((acc, f) => acc + (Number(f.size) || 0), 0);
+          const n = selectedFiles.length;
+          wizardFilesSummary.textContent = `${n} CSV${n === 1 ? '' : 's'} selected • ${formatBytes(totalBytes)}`;
+        }
+      }
+
+
+      if (wizardFileList) {
+        wizardFileList.classList.toggle('is-dense', selectedFiles.length >= 10);
+
+        if (!selectedFiles.length) {
+          wizardFileList.innerHTML = '';
+        } else if (filter && visibleFiles.length === 0) {
+          wizardFileList.innerHTML = '<div class="ws-upload-empty">No matching files.</div>';
+        } else {
+          wizardFileList.innerHTML = visibleFiles.map((f) => {
+            const key = fileKey(f);
+            const name = escapeHtml(f.name);
+            const meta = escapeHtml(formatBytes(f.size));
+
+            const st = wsFileSupport.get(key) || { status: 'checking', sourceName: null, confidence: 0 };
+
+            const status = String(st.status || 'checking');
+            const pillText =
+              status === 'supported' ? 'Supported' :
+              status === 'unsupported' ? 'Not supported' :
+              'Checking…';
+
+            const pillClass =
+              status === 'supported' ? 'ws-upload-status--supported' :
+              status === 'unsupported' ? 'ws-upload-status--unsupported' :
+              'ws-upload-status--checking';
+
+            const tip =
+              status === 'supported' && st.sourceName
+                ? `Recognized: ${st.sourceName}`
+                : (status === 'unsupported'
+                    ? 'Unrecognized CSV format (saved for implementation)'
+                    : 'Checking CSV format…');
+
+            return `
+              <div class="ws-upload-item">
+                <div class="ws-upload-main">
+                  <div class="ws-upload-name" title="${name}">${name}</div>
+                  <div class="ws-upload-meta">${meta}</div>
+                </div>
+
+                <div class="ws-upload-right">
+                  <span class="ws-upload-status ${pillClass}" title="${escapeHtml(tip)}">${escapeHtml(pillText)}</span>
+                  <button type="button" class="ws-upload-remove" data-file-key="${escapeHtml(key)}">Remove</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      if (wizardClearFilesBtn) {
+        wizardClearFilesBtn.style.display = selectedFiles.length ? '' : 'none';
+      }
+
+      if (wizardFileTools) {
+        wizardFileTools.style.display = selectedFiles.length ? '' : 'none';
+      }
+
+      if (wizardFileCount) {
+        wizardFileCount.textContent = filter
+          ? `Showing ${visibleFiles.length} / ${selectedFiles.length}`
+          : `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'}`;
+      }
+
+      if (wizardFileSearchClear) {
+        wizardFileSearchClear.style.display = filter ? '' : 'none';
+      }
+
+      renderUnsupportedPanel();
+      syncStepValidity(false);
+    }
+
+    function addFiles(fileList) {
+      const incoming = Array.from(fileList || []);
+      if (!incoming.length) return;
+
+      let added = 0;
+      let rejected = 0;
+
+      const seen = new Set(selectedFiles.map(fileKey));
+      incoming.forEach((f) => {
+        if (!f || !f.name) return;
+        const isCsv = f.name.toLowerCase().endsWith('.csv');
+        if (!isCsv) {
+          rejected += 1;
+          return;
+        }
+        const key = fileKey(f);
+        if (seen.has(key)) return;
+        selectedFiles.push(f);
+        seen.add(key);
+        added += 1;
+      });
+
+      if (rejected) {
+        setFilesError('Only .csv files are supported.');
+      } else {
+        clearFilesError();
+      }
+
+      if (added) syncFileInput();
+      renderFilesUI();
+      scheduleCsvSupportDetection();
+    }
+
+    function hideUndo() {
+      if (wizardUndoHideTimer) {
+        window.clearTimeout(wizardUndoHideTimer);
+        wizardUndoHideTimer = null;
+      }
+      wizardUndoAction = null;
+      if (wizardUndoToast) wizardUndoToast.style.display = 'none';
+    }
+
+    function showUndo(message, action) {
+      if (!wizardUndoToast || !wizardUndoText) return;
+
+      if (wizardUndoHideTimer) {
+        window.clearTimeout(wizardUndoHideTimer);
+        wizardUndoHideTimer = null;
+      }
+
+      wizardUndoAction = action;
+      wizardUndoText.textContent = message;
+      wizardUndoToast.style.display = 'flex';
+
+      wizardUndoHideTimer = window.setTimeout(() => {
+        hideUndo();
+      }, 7000);
+    }
+
+    function applyUndo() {
+      if (!wizardUndoAction) return;
+
+      if (wizardUndoAction.kind === 'clear') {
+        selectedFiles = Array.isArray(wizardUndoAction.files) ? wizardUndoAction.files.slice() : [];
+      } else if (wizardUndoAction.kind === 'remove') {
+        const idx = Math.max(0, Math.min(selectedFiles.length, Number(wizardUndoAction.index) || 0));
+        if (wizardUndoAction.file) {
+          selectedFiles.splice(idx, 0, wizardUndoAction.file);
+        }
+      }
+
+      syncFileInput();
+      renderFilesUI();
+      scheduleCsvSupportDetection();
+      hideUndo();
+    }
+
+    function removeFileByKey(key) {
+      const idx = selectedFiles.findIndex((f) => fileKey(f) === key);
+      if (idx < 0) return;
+
+      const removed = selectedFiles[idx];
+      selectedFiles.splice(idx, 1);
+
+      // Keep support-map state aligned with current selection
+      pruneCsvSupportMap();
+
+      syncFileInput();
+      renderFilesUI();
+
+      showUndo('File removed.', { kind: 'remove', file: removed, index: idx });
+    }
+
+    function clearAllFiles() {
+      const prev = selectedFiles.slice();
+
+      selectedFiles = [];
+      wsFileSupport.clear();   // prevent stale statuses when re-adding files
+      wizardFileFilter = '';
+      if (wizardFileSearch) wizardFileSearch.value = '';
+      syncFileInput();
+      renderFilesUI();
+      clearFilesError();
+
+      if (prev.length) {
+        showUndo('Files cleared.', { kind: 'clear', files: prev });
+      }
+    }
+
+    function initTaxYearOptions() {
+      if (!wizardTaxYearSelect) return;
+      if (wizardTaxYearSelect.dataset.wsInit === '1') return;
+
+      const currentYear = new Date().getFullYear();
+      const minRecentYear = Math.max(2016, currentYear - 7);
+
+      const opts = [];
+      opts.push('<option value="">Tax year</option>');
+      for (let y = currentYear; y >= minRecentYear; y -= 1) {
+        opts.push(`<option value="${y}">${y}</option>`);
+      }
+
+      wizardTaxYearSelect.innerHTML = opts.join('');
+      wizardTaxYearSelect.dataset.wsInit = '1';
+
+      if (wizardTaxYear && !wizardTaxYear.value) {
+        wizardTaxYear.value = String(currentYear);
+      }
+
+      if (!wizardTaxYearSelect.value && (!wizardTaxYear || !wizardTaxYear.value)) {
+        wizardTaxYearSelect.value = String(currentYear);
+      }
+
+      setYearMode('select');
+    }
+
+    function setYearMode(mode) {
+      wizardYearMode = mode === 'manual' ? 'manual' : 'select';
+
+      if (wizardYearMode === 'manual') {
+        if (wizardTaxYearSelect && wizardTaxYearSelect.value && wizardTaxYear) {
+          wizardTaxYear.value = wizardTaxYearSelect.value;
+        }
+      } else {
+        if (wizardTaxYear && wizardTaxYear.value && wizardTaxYearSelect) {
+          const candidate = String(parseInt(wizardTaxYear.value, 10));
+          const hasOption = Array.from(wizardTaxYearSelect.options).some(o => o.value === candidate);
+          wizardTaxYearSelect.value = hasOption ? candidate : '';
+        }
+      }
+
+      if (wizardTaxYearSelect) wizardTaxYearSelect.style.display = wizardYearMode === 'select' ? '' : 'none';
+      if (wizardTaxYear) wizardTaxYear.style.display = wizardYearMode === 'manual' ? '' : 'none';
+      if (wizardTaxYearToggle) wizardTaxYearToggle.textContent = wizardYearMode === 'manual' ? 'Use dropdown' : 'Enter manually';
+
+      clearTaxYearError();
+      syncStepValidity(false);
+    }
+
+    function getTaxYearValue() {
+      const raw = wizardYearMode === 'manual'
+        ? (wizardTaxYear ? wizardTaxYear.value : '')
+        : (wizardTaxYearSelect ? wizardTaxYearSelect.value : '');
+
+      const year = raw ? parseInt(raw, 10) : NaN;
+      return year;
+    }
+
+    function updateRuleVersionLabel() {
+      if (!wizardRuleVersion) return;
+      const juris = (wizardJurisdiction && wizardJurisdiction.value) ? wizardJurisdiction.value : '—';
+      wizardRuleVersion.textContent = `Rule set: ${juris} ${RULE_VERSION}`;
+    }
+
+    function renderReviewSummary() {
+      const filesText =
+        selectedFiles.length === 1 ? selectedFiles[0].name :
+        selectedFiles.length > 1  ? `${selectedFiles.length} CSV files` :
+                                    '—';
+
+      if (wizardReviewFiles) wizardReviewFiles.textContent = filesText;
+
+      const isMulti = selectedFiles.length > 1;
+
+      if (wizardReviewFilesToggle) {
+        wizardReviewFilesToggle.style.display = isMulti ? '' : 'none';
+        wizardReviewFilesToggle.textContent = wizardReviewFilesExpanded ? 'Hide' : 'View';
+      }
+
+      if (wizardReviewFilesExpand) {
+        if (!isMulti) {
+          wizardReviewFilesExpand.style.display = 'none';
+          wizardReviewFilesExpand.innerHTML = '';
+          wizardReviewFilesExpanded = false;
+        } else {
+          const listHtml = selectedFiles
+            .map(f => `<li title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</li>`)
+            .join('');
+          wizardReviewFilesExpand.innerHTML = `<ul>${listHtml}</ul>`;
+          wizardReviewFilesExpand.style.display = wizardReviewFilesExpanded ? '' : 'none';
+        }
+      }
+
+      if (wizardJurisdiction && wizardReviewJurisdiction) {
+        const opt = wizardJurisdiction.options[wizardJurisdiction.selectedIndex];
+        wizardReviewJurisdiction.textContent = opt ? opt.textContent : '—';
+      }
+
+      const yearVal = getTaxYearValue();
+      if (wizardReviewTaxYear) {
+        wizardReviewTaxYear.textContent = Number.isFinite(yearVal) ? String(yearVal) : '—';
+      }
+
+      if (wizardReviewNext) {
+        wizardReviewNext.textContent = 'Run → results page → saved to History.';
+      }
+
+      if (wizardReviewMethod) {
+        const juris = (wizardJurisdiction && wizardJurisdiction.value) ? wizardJurisdiction.value : '—';
+        const fx = juris === 'IT' ? 'ECB' : 'HNB';
+        wizardReviewMethod.textContent = `Rule set: ${juris} ${RULE_VERSION} • Lot method: FIFO • FX source: ${fx}`;
+      }
+    }
+
+    const WIZARD_AUTO_CLOSE_SECONDS = 5;
+
+    function applyStep3View() {
+      if (!wizardReviewSection || !wizardRunningSection || !wizardDoneSection) return;
+      const isStep3 = wizardStep === 3;
+
+      wizardReviewSection.style.display = (isStep3 && !wizardIsRunning && !wizardIsComplete) ? '' : 'none';
+      wizardRunningSection.style.display = (isStep3 && wizardIsRunning) ? '' : 'none';
+      wizardDoneSection.style.display = (isStep3 && wizardIsComplete) ? '' : 'none';
+    }
+
+    function getSelectedBytes() {
+      return selectedFiles.reduce((acc, f) => acc + (Number(f && f.size) || 0), 0);
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function setRunProgressUi(activeIndex, completedCount) {
+      if (!wizardRunList) return;
+
+      const items = Array.from(wizardRunList.querySelectorAll('.ws-run-item'));
+      const total = items.length || 1;
+
+      items.forEach((li, idx) => {
+        const isDone = idx < completedCount;
+        const isActive = !isDone && idx === activeIndex;
+
+        li.classList.toggle('is-done', isDone);
+        li.classList.toggle('is-active', isActive);
+        li.classList.toggle('is-pending', !isDone && !isActive);
+
+        const stateEl = li.querySelector('[data-run-state]');
+        if (stateEl) {
+          stateEl.textContent = isDone ? 'Done' : (isActive ? 'Working…' : 'Pending');
+        }
+      });
+
+      if (wizardRunBarFill) {
+        const pct = Math.max(0, Math.min(100, (completedCount / total) * 100));
+        wizardRunBarFill.style.width = pct.toFixed(0) + '%';
+      }
+    }
+
+    function stopWizardCountdown() {
+      if (wizardCountdownTimer) {
+        window.cancelAnimationFrame(wizardCountdownTimer);
+        wizardCountdownTimer = null;
+      }
+    }
+
+    function resetRunUi() {
+      stopWizardCountdown();
+      stopRunElapsedTimer();
+      wizardRunStartedAt = 0;
+
+      if (wizardRunElapsed) wizardRunElapsed.textContent = 'Elapsed: 00:00';
+      if (wizardRunBarFill) {
+        wizardRunBarFill.classList.remove('is-animating');
+        wizardRunBarFill.style.width = '0%';
+      }
+      setRunProgressUi(0, 0);
+
+      if (wizardDoneRing) wizardDoneRing.style.setProperty('--ws-cd-pct', '100%');
+      if (wizardDoneCountdown) wizardDoneCountdown.textContent = String(WIZARD_AUTO_CLOSE_SECONDS);
+      if (wizardDoneCountdownText) wizardDoneCountdownText.textContent = String(WIZARD_AUTO_CLOSE_SECONDS);
+    }
+
+    function goToResultsPlaceholder(runId) {
+      const rid =
+        (runId !== null && runId !== undefined && String(runId).trim() !== '')
+          ? String(runId).trim()
+          : (() => {
+              try { return (window.localStorage.getItem('wsLastRunId') || '').trim(); } catch (_) { return ''; }
+            })();
+
+      const url = rid
+        ? `/workspace/results?run_id=${encodeURIComponent(rid)}`
+        : `/workspace/results`;
+
+      window.location.href = url;
+    }
+
+    function startWizardCountdown(seconds, runId) {
+      stopWizardCountdown();
+
+      const totalMs = Math.max(1000, Number(seconds) * 1000);
+      wizardCountdownTotalMs = totalMs;
+
+      const usePerf = !!(window.performance && typeof performance.now === 'function');
+      const start = usePerf ? performance.now() : Date.now();
+      const end = start + totalMs;
+
+      wizardCountdownEndsAt = end;
+
+      let lastShownSec = null;
+
+      // Ensure initial state is correct immediately (no “jump”)
+      if (wizardDoneRing) wizardDoneRing.style.setProperty('--ws-cd-pct', '100%');
+      if (wizardDoneCountdown) wizardDoneCountdown.textContent = String(Math.ceil(totalMs / 1000));
+      if (wizardDoneCountdownText) wizardDoneCountdownText.textContent = String(Math.ceil(totalMs / 1000));
+
+      function frame(ts) {
+        const now = usePerf ? ts : Date.now();
+        const msLeft = end - now;
+
+        if (msLeft <= 0) {
+          stopWizardCountdown();
+          closeWizard();
+          goToResultsPlaceholder(runId);
+          return;
+        }
+
+        const pctLeft = (msLeft / totalMs) * 100;
+
+        // Smooth ring (updates every frame)
+        if (wizardDoneRing) {
+          wizardDoneRing.style.setProperty('--ws-cd-pct', pctLeft.toFixed(2) + '%');
+        }
+
+        // Text updates only when the second changes (no jitter)
+        const secLeft = Math.max(1, Math.ceil(msLeft / 1000));
+        if (lastShownSec === null || secLeft !== lastShownSec) {
+          lastShownSec = secLeft;
+          if (wizardDoneCountdown) wizardDoneCountdown.textContent = String(secLeft);
+          if (wizardDoneCountdownText) wizardDoneCountdownText.textContent = String(secLeft);
+        }
+
+        wizardCountdownTimer = window.requestAnimationFrame(frame);
+      }
+
+      wizardCountdownTimer = window.requestAnimationFrame(frame);
+    }
+
+    async function runWizardCalculation() {
+      wizardRunToken += 1;
+      const token = wizardRunToken;
+
+      wizardIsRunning = true;
+      wizardIsComplete = false;
+      wizardLastRunId = null;
+      clearWizardError();
+      clearWizardSuccess();
+      resetRunUi();
+      updateWizardUI();
+
+      wizardRunStartedAt = Date.now();
+      if (wizardRunBarFill) wizardRunBarFill.classList.add('is-animating');
+      startRunElapsedTimer();
+
+      const bytes = getSelectedBytes();
+      if (wizardRunEta) {
+        const n = selectedFiles.length;
+        const sizeLabel = formatBytes(bytes);
+        wizardRunEta.textContent = n
+          ? `${n} CSV${n === 1 ? '' : 's'} • ${sizeLabel} — Large files may take 1–2 minutes.`
+          : 'This may take a few minutes for large CSV files.';
+      }
+
+      try {
+        // Step 0: Upload CSVs (real backend call)
+        setRunProgressUi(0, 0);
+
+        const form = new FormData();
+        selectedFiles.forEach((f) => {
+          form.append('files', f, f.name);
+        });
+
+        const importResp = await fetch('/import/multiple?reset=1', {
+          method: 'POST',
+          body: form,
+          credentials: 'same-origin',
+        });
+
+        if (token !== wizardRunToken) return;
+
+        if (!importResp.ok) {
+          let msg = `Upload failed (${importResp.status}).`;
+          try {
+            const errJson = await importResp.json();
+            if (errJson && errJson.detail) msg = String(errJson.detail);
+          } catch (_) {}
+          throw new Error(msg);
+        }
+
+        // Validate per-file import outcome (prevents “successful but empty” runs)
+        let importJson = null;
+        try {
+          importJson = await importResp.json();
+        } catch (_) {
+          importJson = null;
+        }
+
+        const importResults = Array.isArray(importJson && importJson.results) ? importJson.results : null;
+        if (!importResults) {
+          throw new Error('Upload completed, but the server returned an unexpected response. Please retry.');
+        }
+
+        const failures = importResults.filter(r => r && r.error);
+        if (failures.length) {
+          const first = failures[0] || {};
+          const fname = first.filename ? String(first.filename) : 'A CSV file';
+          const reason = first.error ? String(first.error) : 'Import failed.';
+          throw new Error(`${fname}: ${reason}`);
+        }
+
+        const totalInserted = importResults.reduce((acc, r) => acc + (Number(r && r.inserted) || 0), 0);
+        if (totalInserted <= 0) {
+          throw new Error('No valid transactions were imported. Please verify your CSV exports and try again.');
+        }
+
+        // Step 1: Normalize (short transition for clarity)
+        setRunProgressUi(1, 1);
+        await sleep(250);
+
+        if (token !== wizardRunToken) return;
+
+        // Step 2: Calculate (real backend call; can take 2+ minutes for huge files)
+        setRunProgressUi(2, 2);
+
+        const juris = (wizardJurisdiction && wizardJurisdiction.value) ? wizardJurisdiction.value : 'HR';
+        const taxYear = getTaxYearValue();
+        const fxSource = juris === 'IT' ? 'ECB' : 'HNB';
+
+        const calcResp = await fetch('/calculate/v2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            jurisdiction: juris,
+            tax_year: taxYear,
+            rule_version: RULE_VERSION,
+            lot_method: 'FIFO',
+            fx_source: fxSource,
+          }),
+        });
+
+        if (token !== wizardRunToken) return;
+
+        if (!calcResp.ok) {
+          let msg = `Calculation failed (${calcResp.status}).`;
+          try {
+            const errJson = await calcResp.json();
+            if (errJson && errJson.detail) msg = String(errJson.detail);
+          } catch (_) {}
+          throw new Error(msg);
+        }
+
+        const calcJson = await calcResp.json();
+        const runId = (calcJson && (calcJson.run_id ?? calcJson.runId)) ?? null;
+        wizardLastRunId = runId;
+
+        // Step 3: Apply rules (confidence-building transition)
+        setRunProgressUi(3, 3);
+        await sleep(260);
+
+        // Step 4: Finalize
+        setRunProgressUi(4, 4);
+        await sleep(260);
+
+        // All done
+        setRunProgressUi(5, 5);
+
+        stopRunElapsedTimer();
+        if (wizardRunBarFill) wizardRunBarFill.classList.remove('is-animating');
+
+        wizardIsRunning = false;
+        wizardIsComplete = true;
+        updateWizardUI();
+
+        // Store for future results page wiring (optional)
+        try {
+          if (runId !== null && runId !== undefined) {
+            window.localStorage.setItem('wsLastRunId', String(runId));
+          }
+
+          /* Default results filters: All assets + wizard-selected tax year */
+          if (Number.isFinite(taxYear)) {
+            window.localStorage.setItem('wsLastTaxYear', String(taxYear));
+            window.localStorage.setItem('rsResultsFilterAsset', '');
+            window.localStorage.setItem('rsResultsFilterYear', String(taxYear));
+          }
+
+          window.localStorage.setItem(HISTORY_BADGE_KEY, '1');
+        } catch (_) {}
+
+        setHistoryBadgeVisible(true);
+        startWizardCountdown(WIZARD_AUTO_CLOSE_SECONDS, runId);
+      } catch (err) {
+        if (token !== wizardRunToken) return;
+
+        stopRunElapsedTimer();
+        if (wizardRunBarFill) wizardRunBarFill.classList.remove('is-animating');
+
+        wizardIsRunning = false;
+        wizardIsComplete = false;
+        wizardLastRunId = null;
+        updateWizardUI();
+
+        const msg = (err && err.message) ? err.message : 'Calculation failed.';
+        setWizardError(msg);
+      }
+    }
+
+    function syncStepValidity(showErrors) {
+      if (!wizardNextBtn) return;
+
+      if (showErrors) {
+        setActionHint('');
+      }
+
+      if (wizardIsRunning) {
+        wizardNextBtn.disabled = true;
+        return;
+      }
+
+      if (wizardStep === 1) {
+        const counts = getCsvSupportCounts();
+        const hasFiles = counts.total > 0;
+        const allSupported = hasFiles && counts.unsupported === 0 && counts.checking === 0;
+
+        wizardNextBtn.disabled = !allSupported;
+
+        if (!showErrors) {
+          if (!hasFiles) setActionHint('Add at least one CSV file to continue.');
+          else if (counts.checking) setActionHint('Checking CSV formats…');
+          else if (counts.unsupported) setActionHint('One or more files are not supported. Use a supported export format (shown below) or download the CryptoTaxCalc template.');
+          else setActionHint('');
+        }
+
+        if (showErrors) {
+          if (!hasFiles) setFilesError('Please add at least one CSV file to continue.');
+          else if (counts.checking) setFilesError('We are still checking CSV formats. Please wait a moment.');
+          else if (counts.unsupported) setFilesError('One or more files are not supported. Use a supported export format (shown below) or download the CryptoTaxCalc template.');
+          else clearFilesError();
+        }
+        return;
+      }
+
+      if (wizardStep === 2) {
+        const year = getTaxYearValue();
+        const ok = Number.isFinite(year) && year >= 2016 && year <= 2100;
+        wizardNextBtn.disabled = !ok;
+
+        if (!showErrors) {
+          setActionHint(ok ? '' : 'Select a valid tax year to continue.');
+        }
+
+        if (showErrors) {
+          if (!ok) setTaxYearError('Please select or enter a valid tax year (2016–2100).');
+          else clearTaxYearError();
+        }
+        return;
+      }
+
+      /* Step 3 is always actionable (Run / Done) */
+      wizardNextBtn.disabled = false;
+      if (!showErrors) setActionHint('');
+    }
+
+    function openWizard() {
+      closeInfo();
+      wizardReturnFocusEl = document.activeElement;
+
+      stopWizardCountdown();
+      wizardRunToken += 1;
+
+      wizardIsRunning = false;
+      wizardIsComplete = false;
+
+      initTaxYearOptions();
+      updateRuleVersionLabel();
+      renderFilesUI();
+      scheduleCsvSupportDetection();
+      resetRunUi();
+
+      wizardStep = 1;
+      updateWizardUI();
+      clearWizardError();
+      clearWizardSuccess();
+
+      if (wizardBackdrop) wizardBackdrop.classList.add('is-open');
+      if (wizardRoot) {
+        wizardRoot.classList.add('is-open');
+        wizardRoot.setAttribute('aria-hidden', 'false');
+      }
+
+      window.setTimeout(() => {
+        if (wizardDropzone && wizardDropzone.style.display !== 'none') {
+          wizardDropzone.focus();
+        } else if (wizardNextBtn && !wizardNextBtn.disabled) {
+          wizardNextBtn.focus();
+        }
+      }, 0);
+    }
+
+    function closeWizard() {
+      if (wizardIsRunning) return;
+
+      stopWizardCountdown();
+      wizardRunToken += 1;
+
+      wizardIsComplete = false;
+
+      if (wizardBackdrop) wizardBackdrop.classList.remove('is-open');
+      if (wizardRoot) {
+        wizardRoot.classList.remove('is-open');
+        wizardRoot.setAttribute('aria-hidden', 'true');
+      }
+
+      const restore = (wizardReturnFocusEl && wizardRoot && wizardRoot.contains(wizardReturnFocusEl))
+        ? btnStartFirst
+        : (wizardReturnFocusEl || btnStartFirst);
+
+      wizardReturnFocusEl = null;
+
+      if (restore && typeof restore.focus === 'function') {
+        window.setTimeout(() => restore.focus(), 0);
+      }
+    }
+
+    function clearWizardError() {
+      if (wizardError) {
+        wizardError.style.display = 'none';
+        wizardError.textContent = '';
+      }
+    }
+
+    function setWizardError(msg) {
+      if (wizardError) {
+        wizardError.textContent = msg;
+        wizardError.style.display = 'block';
+      }
+      clearWizardSuccess();
+    }
+
+    function clearWizardSuccess() {
+      if (wizardSuccess) {
+        wizardSuccess.style.display = 'none';
+        const textEl = wizardSuccess.querySelector('.ws-wizard-success-text');
+        if (textEl) textEl.textContent = '';
+      }
+    }
+
+    function setWizardSuccess(msg) {
+      if (wizardSuccess) {
+        const textEl = wizardSuccess.querySelector('.ws-wizard-success-text');
+        if (textEl) textEl.textContent = msg;
+        wizardSuccess.style.display = 'flex';
+      }
+    }
+
+    function updateWizardUI() {
+      wizardSteps.forEach(stepEl => {
+        const stepIndex = parseInt(stepEl.getAttribute('data-step'), 10);
+        const isActive = stepIndex === wizardStep;
+        const isComplete = wizardIsComplete ? (stepIndex <= wizardStep) : (stepIndex < wizardStep);
+        stepEl.classList.toggle('is-active', isActive);
+        stepEl.classList.toggle('is-complete', isComplete);
+
+        const dot = stepEl.querySelector('.ws-wizard-step-dot');
+        if (dot) dot.textContent = isComplete ? '✓' : String(stepIndex);
+      });
+
+      const panes = [stepPane1, stepPane2, stepPane3];
+      panes.forEach((pane, index) => {
+        if (!pane) return;
+        const isActivePane = (wizardStep === index + 1);
+        pane.style.display = isActivePane ? '' : 'none';
+        pane.classList.remove('ws-wizard-pane-enter');
+        if (isActivePane) {
+          void pane.offsetWidth;
+          pane.classList.add('ws-wizard-pane-enter');
+        }
+      });
+
+      applyStep3View();
+
+      if (wizardTitle) {
+        if (wizardIsRunning) {
+          wizardTitle.textContent = 'Calculating…';
+        } else if (wizardIsComplete) {
+          wizardTitle.textContent = 'Results are ready';
+        } else {
+          wizardTitle.textContent =
+            wizardStep === 1 ? 'Add your CSV files' :
+            wizardStep === 2 ? 'Choose your tax jurisdiction' :
+                               'Review before we calculate';
+        }
+      }
+
+      if (wizardStepStatus) {
+        wizardStepStatus.textContent = wizardIsRunning
+          ? 'Processing…'
+          : (wizardIsComplete ? 'Results ready' : `Step ${wizardStep} of 3`);
+      }
+
+      if (wizardStepsBar) {
+        const scale = wizardStep === 1 ? 0 : (wizardStep === 2 ? 0.5 : 1);
+        wizardStepsBar.style.setProperty('--ws-wiz-progress-scale', String(scale));
+      }
+
+      if (wizardClose) {
+        wizardClose.disabled = wizardIsRunning;
+      }
+
+      if (wizardBackBtn) {
+        wizardBackBtn.style.display = wizardIsComplete ? 'none' : '';
+        wizardBackBtn.textContent = wizardStep === 1 ? 'Cancel' : 'Back';
+        wizardBackBtn.disabled = wizardIsRunning;
+      }
+
+      if (wizardNextBtn) {
+        wizardNextBtn.classList.remove('ws-btn-loading');
+        wizardNextBtn.innerHTML = '';
+
+        if (wizardIsRunning) {
+          wizardNextBtn.disabled = true;
+          wizardNextBtn.classList.add('ws-btn-loading');
+          wizardNextBtn.innerHTML = `<span class="ws-btn-spinner" aria-hidden="true"></span>Running…`;
+        } else if (wizardIsComplete) {
+          wizardNextBtn.disabled = false;
+          wizardNextBtn.textContent = 'Go to results';
+        } else {
+          wizardNextBtn.textContent = wizardStep < 3 ? 'Continue' : 'Run calculation';
+        }
+      }
+
+      if (wizardStep === 3) {
+        renderReviewSummary();
+      }
+
+      const focusMode = wizardIsRunning ? 'running' : (wizardIsComplete ? 'done' : 'idle');
+      const shouldFocus = (wizardStep !== wizardLastFocusStep) || (focusMode !== wizardLastFocusMode);
+
+      if (wizardRoot && wizardRoot.classList.contains('is-open') && shouldFocus) {
+        wizardLastFocusStep = wizardStep;
+        wizardLastFocusMode = focusMode;
+
+        window.setTimeout(() => {
+          if (wizardIsRunning) return;
+
+          if (wizardStep === 1) {
+            if (wizardDropzone && wizardDropzone.style.display !== 'none') {
+              wizardDropzone.focus();
+            } else if (wizardNextBtn) {
+              wizardNextBtn.focus();
+            }
+          }
+
+          if (wizardStep === 2 && wizardJurisdiction) wizardJurisdiction.focus();
+          if (wizardStep === 3 && wizardNextBtn) wizardNextBtn.focus();
+        }, 0);
+      }
+
+      syncStepValidity(false);
+    }
+
+    if (wizardDownloadTemplate) {
+      wizardDownloadTemplate.addEventListener('click', () => {
+        downloadCryptoTaxCalcTemplate();
+      });
+    }
+
+    if (wizardFileSearch) {
+      wizardFileSearch.addEventListener('input', () => {
+        wizardFileFilter = wizardFileSearch.value || '';
+        renderFilesUI();
+      });
+    }
+
+    if (wizardFileSearchClear) {
+      wizardFileSearchClear.addEventListener('click', () => {
+        wizardFileFilter = '';
+        if (wizardFileSearch) wizardFileSearch.value = '';
+        renderFilesUI();
+      });
+    }
+
+    if (wizardSupportedSources) {
+      wizardSupportedSources.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-src-id]');
+        if (!btn) return;
+
+        const id = btn.getAttribute('data-src-id') || '';
+        Array.from(wizardSupportedSources.querySelectorAll('.ws-unsup-chip')).forEach((el) => {
+          el.classList.toggle('is-active', el === btn);
+        });
+
+        renderSourceDetails(id);
+      });
+    }
+
+    /* Upload wiring */
+    if (wizardFilesInput) {
+      wizardFilesInput.addEventListener('change', () => {
+        clearFilesError();
+        addFiles(wizardFilesInput.files);
+      });
+    }
+
+    if (wizardAddMoreBtn && wizardFilesInput) {
+      wizardAddMoreBtn.addEventListener('click', () => {
+        wizardFilesInput.click();
+      });
+    }
+
+    if (wizardClearFilesBtn) {
+      wizardClearFilesBtn.addEventListener('click', () => {
+        clearAllFiles();
+      });
+    }
+
+    if (wizardUndoBtn) {
+      wizardUndoBtn.addEventListener('click', () => {
+        applyUndo();
+      });
+    }
+
+    if (wizardFileList) {
+      wizardFileList.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-file-key]');
+        if (!btn) return;
+        const key = btn.getAttribute('data-file-key');
+        if (key) removeFileByKey(key);
+      });
+    }
+
+    if (wizardDropzone) {
+      wizardDropzone.addEventListener('keydown', (e) => {
+        if (!wizardFilesInput) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          wizardFilesInput.click();
+        }
+      });
+
+      wizardDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        wizardDropzone.classList.add('is-dragover');
+      });
+
+      wizardDropzone.addEventListener('dragleave', () => {
+        wizardDropzone.classList.remove('is-dragover');
+      });
+
+      wizardDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        wizardDropzone.classList.remove('is-dragover');
+        clearFilesError();
+        addFiles(e.dataTransfer ? e.dataTransfer.files : []);
+      });
+    }
+
+    /* Step 2 wiring (safer tax year) */
+    if (wizardTaxYearSelect) {
+      wizardTaxYearSelect.addEventListener('change', () => {
+        clearTaxYearError();
+        syncStepValidity(false);
+      });
+    }
+
+    if (wizardTaxYear) {
+      wizardTaxYear.addEventListener('input', () => {
+        clearTaxYearError();
+        syncStepValidity(false);
+      });
+    }
+
+    if (wizardTaxYearToggle) {
+      wizardTaxYearToggle.addEventListener('click', () => {
+        setYearMode(wizardYearMode === 'manual' ? 'select' : 'manual');
+        if (wizardYearMode === 'manual' && wizardTaxYear) wizardTaxYear.focus();
+      });
+    }
+
+    if (wizardJurisdiction) {
+      wizardJurisdiction.addEventListener('change', () => {
+        updateRuleVersionLabel();
+        if (wizardStep === 3) renderReviewSummary();
+      });
+    }
+
+    /* Review “Edit” links */
+    if (wizardReviewFilesToggle) {
+      wizardReviewFilesToggle.addEventListener('click', () => {
+        wizardReviewFilesExpanded = !wizardReviewFilesExpanded;
+        renderReviewSummary();
+      });
+    }
+
+    if (stepPane3) {
+      stepPane3.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-ws-edit-step]');
+        if (!btn || wizardIsRunning || wizardIsComplete) return;
+        const step = parseInt(btn.getAttribute('data-ws-edit-step'), 10);
+        if (!step || step < 1 || step > 3) return;
+        wizardIsComplete = false;
+        wizardStep = step;
+        updateWizardUI();
+      });
+    }
+
+    if (wizardBackBtn) {
+      wizardBackBtn.addEventListener('click', () => {
+        clearWizardError();
+        clearWizardSuccess();
+        clearFilesError();
+        clearTaxYearError();
+
+        if (wizardIsRunning) return;
+
+        if (wizardStep === 1) {
+          closeWizard();
+          return;
+        }
+
+        wizardIsComplete = false;
+        wizardStep -= 1;
+        updateWizardUI();
+      });
+    }
+
+    if (wizardClose) {
+      wizardClose.addEventListener('click', () => {
+        closeWizard();
+      });
+    }
+
+    if (wizardBackdrop) {
+      wizardBackdrop.addEventListener('click', (e) => {
+        if (wizardIsRunning) return;
+        if (e.target === wizardBackdrop) closeWizard();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (wizardIsRunning) return;
+
+      if (wizardRoot && wizardRoot.classList.contains('is-open')) {
+        closeWizard();
+      }
+
+      if (infoRoot && infoRoot.classList.contains('is-open')) {
+        closeInfo();
+      }
+    });
+
+    function getWizardFocusables() {
+      if (!wizardRoot) return [];
+      const nodes = Array.from(
+        wizardRoot.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      );
+      return nodes.filter(el => !el.disabled && el.offsetParent !== null);
+    }
+
+    if (wizardRoot) {
+      wizardRoot.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        if (!wizardRoot.classList.contains('is-open')) return;
+
+        const items = getWizardFocusables();
+        if (!items.length) return;
+
+        const first = items[0];
+        const last = items[items.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      });
+    }
+
+    if (wizardForm) {
+      wizardForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        clearWizardError();
+
+        if (wizardIsRunning) return;
+
+        if (wizardStep === 3 && wizardIsComplete) {
+          goToResultsPlaceholder(wizardLastRunId);
+          closeWizard();
+          return;
+        }
+
+        if (wizardStep === 1) {
+          syncStepValidity(true);
+          if (!selectedFiles.length) return;
+          wizardStep = 2;
+          updateWizardUI();
+          return;
+        }
+
+        if (wizardStep === 2) {
+          syncStepValidity(true);
+
+          const yearVal = getTaxYearValue();
+          const validYear = Number.isFinite(yearVal) && yearVal >= 2016 && yearVal <= 2100;
+          if (!validYear) return;
+
+          wizardStep = 3;
+          updateWizardUI();
+          return;
+        }
+
+        if (wizardStep === 3) {
+          runWizardCalculation();
+          return;
+        }
+      });
+    }
+
+    /* Info modal wiring */
+    if (infoTriggers.length) {
+      infoTriggers.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = btn.getAttribute('data-ws-info');
+          openInfo(key);
+        });
+      });
+    }
+
+    if (infoClose) {
+      infoClose.addEventListener('click', () => {
+        closeInfo();
+      });
+    }
+
+    if (infoBackdrop) {
+      infoBackdrop.addEventListener('click', (e) => {
+        if (e.target === infoBackdrop) closeInfo();
+      });
+    }
+
+    if (btnStartFirst) {
+      btnStartFirst.addEventListener('click', () => {
+        openWizard();
+      });
+    }
+
+    /* =========================================================
+       GLOBAL CSV DROP (drop anywhere on the page)
+       ========================================================= */
+
+    let wsGlobalDragDepth = 0;
+
+    function isFileDragEvent(e) {
+      if (!e || !e.dataTransfer) return false;
+
+      const dt = e.dataTransfer;
+      const types = Array.from(dt.types || []);
+      if (types.includes('Files')) return true;
+
+      const items = Array.from(dt.items || []);
+      return items.some(it => it && it.kind === 'file');
+    }
+
+    function showCsvOverlay() {
+      if (!csvDropOverlay) return;
+
+      const wizardOpen = !!(wizardRoot && wizardRoot.classList.contains('is-open'));
+      const hasFiles = selectedFiles.length > 0;
+
+      if (csvDropOverlayTitle) {
+        csvDropOverlayTitle.textContent = wizardOpen
+          ? (hasFiles ? 'Drop CSV files to add more' : 'Drop CSV files to upload')
+          : 'Drop CSV files to start calculation';
+      }
+
+      if (csvDropOverlaySub) {
+        csvDropOverlaySub.textContent = wizardOpen
+          ? 'CSV only • Drop anywhere to attach files'
+          : 'CSV only • Drop anywhere to begin';
+      }
+
+      csvDropOverlay.classList.add('is-open');
+      csvDropOverlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideCsvOverlay() {
+      if (!csvDropOverlay) return;
+      csvDropOverlay.classList.remove('is-open');
+      csvDropOverlay.setAttribute('aria-hidden', 'true');
+    }
+
+    function handleDroppedFiles(files) {
+      const list = Array.from(files || []);
+      if (!list.length) return;
+      if (wizardIsRunning) return;
+
+      const wizardOpen = !!(wizardRoot && wizardRoot.classList.contains('is-open'));
+
+      if (!wizardOpen) {
+        /* Fresh start for drop-to-start (avoid surprising “old files” carryover) */
+        hideUndo();
+        clearFilesError();
+        selectedFiles = [];
+        openWizard();
+      } else {
+        /* Dropping files implies changing Step 1 inputs */
+        wizardIsComplete = false;
+        wizardStep = 1;
+        updateWizardUI();
+      }
+
+      clearFilesError();
+      addFiles(list);
+
+      window.setTimeout(() => {
+        if (wizardNextBtn && !wizardNextBtn.disabled) wizardNextBtn.focus();
+      }, 0);
+    }
+
+    window.addEventListener('dragenter', (e) => {
+      if (!isFileDragEvent(e)) return;
+      e.preventDefault();
+      wsGlobalDragDepth += 1;
+      showCsvOverlay();
+    }, true);
+
+    window.addEventListener('dragover', (e) => {
+      const overlayOpen = !!(csvDropOverlay && csvDropOverlay.classList.contains('is-open'));
+      if (!overlayOpen && !isFileDragEvent(e)) return;
+
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      showCsvOverlay();
+    }, true);
+
+    window.addEventListener('dragleave', (e) => {
+      if (!csvDropOverlay || !csvDropOverlay.classList.contains('is-open')) return;
+
+      // Leaving the window typically yields no related target.
+      if (e.relatedTarget === null) {
+        wsGlobalDragDepth = 0;
+        hideCsvOverlay();
+        return;
+      }
+
+      wsGlobalDragDepth = Math.max(0, wsGlobalDragDepth - 1);
+      if (wsGlobalDragDepth === 0) hideCsvOverlay();
+    }, true);
+
+    window.addEventListener('dragend', () => {
+      wsGlobalDragDepth = 0;
+      hideCsvOverlay();
+    }, true);
+
+    window.addEventListener('drop', (e) => {
+      const files = e.dataTransfer ? e.dataTransfer.files : null;
+      if (!files || files.length === 0) return;
+
+      e.preventDefault();
+      wsGlobalDragDepth = 0;
+      hideCsvOverlay();
+      handleDroppedFiles(files);
+    }, true);
+
+    initSidebar();
+    initHistoryBadge();
+    syncSidebarActiveNav();
+    initNativeSidebarTooltips();
+  })();
+</script>
+{% endblock %}

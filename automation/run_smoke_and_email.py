@@ -1,126 +1,392 @@
-# automation/run_smoke_and_email.py
-# Sends a start ping, runs pytest, then sends a PASS/FAIL summary to Telegram.
-# Also writes full stdout/stderr to automation/smoke_test_output.log and exits
-# with pytest's return code.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-import os, io
-import sys
+"""
+automation/run_smoke_and_email.py
+
+Runs the smoke tests, collects artifacts into a ZIP under support_bundles/,
+embeds a last_error_report.txt into that ZIP, and prints a JSON summary
+for CI/log consumption.
+
+Optional notifications (env-driven, off by default).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import re
 import subprocess
+import sys
+import tempfile
+import time
+import zipfile
 from datetime import datetime, timezone
-import requests
-
-# --- Force UTF-8-friendly stdout/stderr, but never crash on Unicode ---
-try:
-    # Prefer UTF-8. Task Scheduler often ignores codepage; this still helps.
-    os.environ["PYTHONIOENCODING"] = "utf-8"
-
-    # Python 3.7+ has .reconfigure()
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    else:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    if hasattr(sys.stderr, "reconfigure"):
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    else:
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-except Exception:
-    # Never let encoding setup kill the job
-    pass
+from typing import Optional, Tuple
+from pathlib import Path
 
 
-def safe_print(msg: str) -> None:
-    """Print without crashing on Unicode in constrained consoles."""
-    try:
-        print(msg)
-    except UnicodeEncodeError:
-        # Fallback: strip un-encodable characters
-        try:
-            print(msg.encode("ascii", "ignore").decode("ascii"))
-        except Exception:
-            # Last-ditch: print a generic line
-            print("<<message omitted due to encoding>>")
+# ------------------------------
+# Paths & constants
+# ------------------------------
 
-def utcnow_iso() -> str:
+def _project_root() -> pathlib.Path:
+    """
+    Try to anchor to the repo root by walking up until we see a familiar marker.
+    Fallback to file's parent if markers aren't found (still deterministic).
+    """
+    here = pathlib.Path(__file__).resolve()
+    for p in [here] + list(here.parents):
+        if (p / "pyproject.toml").exists() or (p / ".git").exists() or (p / "tests").exists():
+            return p if (p / "tests").exists() else p.parent if (p.name == "automation") else p
+    # fallback: two levels up (common layout: repo/automation/run_smoke_and_email.py)
+    return here.parents[1]
+
+
+ROOT = _project_root()
+TESTS_DIR = ROOT / "tests"
+ARTIFACTS_DIR = ROOT / "artifacts"
+SUPPORT_BUNDLES_DIR = ROOT / "support_bundles"
+
+LAST_ERROR_REPORT_BASENAME = "last_error_report.txt"
+LAST_ERROR_REPORT_PATH = SUPPORT_BUNDLES_DIR / LAST_ERROR_REPORT_BASENAME
+
+# How many bytes of stdout/stderr we keep in the JSON for quick inspection
+TAIL_MAX_BYTES = 4000
+
+# ------------------------------
+# Utilities
+# ------------------------------
+
+def _ensure_dirs() -> None:
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    SUPPORT_BUNDLES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _tail_bytes(s: str, limit: int = TAIL_MAX_BYTES) -> str:
+    b = s.encode("utf-8", errors="replace")
+    if len(b) <= limit:
+        return s
+    return b[-limit:].decode("utf-8", errors="replace")
+
+
+def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
-def send_telegram(msg: str) -> None:
-    token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("TELEGRAM_CHATID")
-    if not token or not chat_id:
-        print("Telegram not configured (missing TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID) — skipping.")
+
+def _zip_write_text(zf: zipfile.ZipFile, arcname: str, text: str) -> None:
+    zf.writestr(arcname, text.encode("utf-8"))
+
+
+def _safe_glob(dirpath: pathlib.Path, pattern: str) -> list[pathlib.Path]:
+    if not dirpath.exists():
+        return []
+    return sorted(dirpath.glob(pattern))
+
+
+# ------------------------------
+# Running pytest
+# ------------------------------
+
+def _run_pytest_smoke(tests_target: pathlib.Path, extra_args: Optional[list[str]] = None) -> Tuple[int, str, str]:
+    """
+    Run the smoke tests and capture stdout/stderr. Return (rc, out, err).
+    """
+    _ensure_dirs()
+
+    cmd = [
+        sys.executable, "-m", "pytest",
+        str(tests_target),
+        "-q",
+        "--disable-warnings",
+        "--maxfail=1",
+    ]
+    if extra_args:
+        cmd.extend(extra_args)
+
+    env = os.environ.copy()
+    # Ensure consistent output (e.g., no color codes)
+    env["PYTEST_ADDOPTS"] = env.get("PYTEST_ADDOPTS", "") + " -s"
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(ROOT),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+    except KeyboardInterrupt:
+        # Pass up; main() will handle gracefully
+        raise
+    except Exception as e:
+        return 2, "", f"[run_smoke_and_email] Exception while running pytest: {e!r}"
+
+
+def _normalize_pytest_exit(rc: int, stdout: str) -> tuple[int, Optional[str]]:
+    """
+    Signal integrity policy:
+      - Do NOT treat KeyboardInterrupt as success.
+      - Do NOT treat non-zero exits as success based on regex heuristics.
+
+    If you want to allow “manual Ctrl+C after tests finished” during local dev,
+    set CTC_ALLOW_INTERRUPT_SUCCESS=1; then rc=130 is normalized to 0 only if
+    the final summary clearly indicates a clean pass.
+    """
+    allow_interrupt = os.getenv("CTC_ALLOW_INTERRUPT_SUCCESS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+    if rc == 130 and allow_interrupt:
+        summary_ok = bool(
+            re.search(r"\b\d+\s+passed\b(?:,\s*\d+\s+deselected\b)?\s+in\s+\d+(\.\d+)?s", stdout)
+        )
+        no_fail = not re.search(r"\bfailed\b|\berror\b", stdout, flags=re.IGNORECASE)
+        if summary_ok and no_fail:
+            return 0, "Normalized exit: interrupt after completed pass (CTC_ALLOW_INTERRUPT_SUCCESS=1)."
+
+    return rc, None
+
+
+# ------------------------------
+# Collect support bundle
+# ------------------------------
+
+def _gather_bundle_files(tmp_dir: pathlib.Path) -> list[tuple[pathlib.Path, str]]:
+    """
+    Decide which files to include. Returns list of (path, arcname).
+    """
+    files: list[tuple[pathlib.Path, str]] = []
+
+    # Logs at repo root
+    for p in _safe_glob(ROOT, "*.log"):
+        files.append((p, f"logs/{p.name}"))
+
+    # Artifacts (include everything once; don't explicitly re-add specific files)
+    for p in _safe_glob(ARTIFACTS_DIR, "*"):
+        if p.is_file():
+            files.append((p, f"artifacts/{p.name}"))
+
+    # Selected project sources for context (keep small)
+    src_dir = ROOT / "src"
+    if src_dir.exists():
+        for p in _safe_glob(src_dir, "**/*.py"):
+            try:
+                rel = p.relative_to(ROOT)
+            except Exception:
+                continue
+            if len(rel.parts) <= 6:  # shallow-ish
+                files.append((p, f"src/{rel}"))
+
+    # Tests (smoke file)
+    smoke = TESTS_DIR / "smoke_test.py"
+    if smoke.exists():
+        files.append((smoke, "tests/smoke_test.py"))
+
+    # Anything temp we created
+    for p in _safe_glob(tmp_dir, "*"):
+        if p.is_file():
+            files.append((p, f"tmp/{p.name}"))
+
+    return files
+
+
+def _write_last_error_report(content: str) -> pathlib.Path:
+    """
+    Make sure last_error_report.txt lives under support_bundles/ and return its path.
+    """
+    _ensure_dirs()
+    LAST_ERROR_REPORT_PATH.write_text(content, encoding="utf-8")
+    return LAST_ERROR_REPORT_PATH
+
+
+def _create_support_bundle_zip(note: Optional[str] = None) -> pathlib.Path:
+    """
+    Create a timestamped support bundle zip and embed the last_error_report.txt.
+    Returns the created zip path.
+    """
+    _ensure_dirs()
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    zip_path = SUPPORT_BUNDLES_DIR / f"support_bundle_{ts}.zip"
+
+    # Prepare a small temp area for additional files
+    with tempfile.TemporaryDirectory() as td:
+        tmpdir = pathlib.Path(td)
+
+        # Build a basic manifest for the bundle itself
+        bundle_manifest = {
+            "bundle_created_at": _utc_now_iso(),
+            "cwd": str(ROOT),
+            "python": sys.version,
+            "note": note or "",
+        }
+        (tmpdir / "BUNDLE_MANIFEST.json").write_text(
+            json.dumps(bundle_manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+        # Write or refresh last_error_report.txt in the support_bundles folder
+        # (The content may be updated later by caller; we ensure a file exists.)
+        if not LAST_ERROR_REPORT_PATH.exists():
+            _write_last_error_report("No error recorded.\n")
+
+        files = _gather_bundle_files(tmpdir)
+
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            # Always include last_error_report.txt at the bundle root
+            if LAST_ERROR_REPORT_PATH.exists():
+                zf.write(LAST_ERROR_REPORT_PATH, arcname=LAST_ERROR_REPORT_BASENAME)
+
+            # Deduplicate by arcname to avoid duplicate warnings and flaky behavior
+            seen_arcnames: set[str] = {LAST_ERROR_REPORT_BASENAME}
+
+            for path, arc in files:
+                if arc in seen_arcnames:
+                    # Already added — skip silently
+                    continue
+                try:
+                    zf.write(path, arcname=arc)
+                    seen_arcnames.add(arc)
+                except FileNotFoundError:
+                    # Best-effort; keep going
+                    pass
+
+    return zip_path
+
+
+# ------------------------------
+# Optional notifications (no-ops unless configured)
+# ------------------------------
+
+def _maybe_send_email(subject: str, body: str) -> None:
+    """
+    Stub: Implement SMTP or API email by reading env vars if you want.
+    Left as a no-op unless MAIL_* env vars are defined.
+    """
+    if not os.environ.get("MAIL_SMTP_HOST"):
         return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    try:
-        r = requests.post(
-            url,
-            data={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"},
-            timeout=15,
+    # Implement your SMTP here if needed.
+    # Intentionally left blank to avoid side effects for local runs.
+
+
+def _maybe_send_telegram(message: str) -> None:
+    """
+    Stub: Implement Telegram bot notification by reading env vars if you want.
+    Left as a no-op unless TG_* env vars are defined.
+    """
+    if not os.environ.get("TG_BOT_TOKEN") or not os.environ.get("TG_CHAT_ID"):
+        return
+    # Implement Telegram send here if needed.
+    # Intentionally left blank to avoid side effects for local runs.
+
+def _find_tests_start():
+    """
+    Return the best path to run pytest against:
+    - Prefer <repo_root>/tests/smoke_test.py
+    - else <repo_root>/tests
+    - else raise with a helpful message
+    """
+    here = Path(__file__).resolve()
+    # Heuristic repo root = parent containing either "tests" or "src"
+    candidates = [here.parent, here.parent.parent, here.parent.parent.parent]
+    tests_path = None
+    for base in candidates:
+        if not base or not base.exists():
+            continue
+        t1 = base / "tests" / "smoke_test.py"
+        t2 = base / "tests"
+        if t1.exists():
+            tests_path = t1
+            break
+        if t2.exists():
+            tests_path = t2
+            # keep looking for smoke_test.py higher priority, but remember t2
+    if tests_path is None:
+        raise FileNotFoundError(
+            "Could not locate tests. Expected 'tests/smoke_test.py' or a 'tests' folder "
+            f"near {here}. Try running from your project root."
         )
-        r.raise_for_status()
-        print("Telegram message sent.")
-    except Exception as e:
-        print(f"Telegram send failed: {e}")
+    return tests_path
 
-def main() -> None:
-    safe_print("=== CryptoTaxCalc smoke runner ===")
-    started = utcnow_iso()
-    safe_print(f"Started at {started}")
+def _find_latest_bundle_zip() -> Optional[pathlib.Path]:
+    zips = _safe_glob(SUPPORT_BUNDLES_DIR, "support_bundle_*.zip")
+    return max(zips, key=lambda p: p.stat().st_mtime) if zips else None
 
-    # 1) Startup ping
-    send_telegram("🚀 Smoke test monitor started successfully.")
+# ------------------------------
+# Main
+# ------------------------------
 
-    # 2) Run pytest (smoke)
-    pytest_exe = os.path.join(
-        os.path.dirname(sys.executable),
-        "pytest.exe"
-    )
-    cmd = [pytest_exe, "-q", "-m", "smoke", "--maxfail=1", "--disable-warnings", "-rA"]
-    t0 = datetime.now(timezone.utc)
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    t1 = datetime.now(timezone.utc)
-    dur = (t1 - t0).total_seconds()
+def main():
+    print("=== CryptoTaxCalc smoke runner ===")
+    print(time.strftime("Started at %Y-%m-%dT%H:%M:%S%z"))
+    _ensure_dirs()
 
-    stdout = proc.stdout or ""
-    stderr = proc.stderr or ""
-
-    # 3) Save full output for debugging
-    out_dir = os.path.dirname(__file__)
-    log_path = os.path.join(out_dir, "logs", "smoke_test_output.log")
     try:
-        with open(log_path, "w", encoding="utf-8") as f:
-            f.write("=== STDOUT ===\n")
-            f.write(stdout)
-            f.write("\n\n=== STDERR ===\n")
-            f.write(stderr)
-        safe_print(f"Wrote log: {log_path}")
-    except Exception as e:
-        safe_print(f"Failed writing log: {e}")
+        # Make sure tests exist early (so we can print a helpful error/bundle)
+        tests_target = _find_tests_start()
+        print(f"[smoke] using tests at: {tests_target}")
 
-    # 4) Telegram finish summary
-    if proc.returncode == 0:
-        msg = f"✅ *Smoke test PASSED* in {dur:.1f}s.\nStarted: {started}\nFinished: {utcnow_iso()}"
-    else:
-        # Try to extract a short failure summary
-        summary_lines = []
-        for line in (stdout or "").splitlines():
-            if "FAILURES" in line or "FAILED" in line or "ERROR" in line:
-                summary_lines.append(line)
-        if not summary_lines:
-            summary_lines = (stdout or "").splitlines()[-10:] or (stderr or "").splitlines()[-10:]
+        # Use the subprocess runner so we capture output and can normalize exit codes.
+        rc_raw, stdout, stderr = _run_pytest_smoke(tests_target)
+        rc, note = _normalize_pytest_exit(rc_raw, stdout)
 
-        summary_block = "\n".join(summary_lines[-8:])
-        if not summary_block:
-            summary_block = "(no summary available)"
+        # Write a concise last_error_report
+        report_lines = [
+            f"Exit code (raw): {rc_raw}",
+            f"Exit code (normalized): {rc}",
+            f"Started at: {_utc_now_iso()}",
+        ]
+        if note:
+            report_lines.append(f"Note: {note}")
+        _write_last_error_report("\n".join(report_lines) + "\n")
 
-        msg = (
-            f"❌ *Smoke test FAILED* (exit={proc.returncode}) in {dur:.1f}s.\n"
-            f"Started: {started}\nFinished: {utcnow_iso()}\n"
-            f"```\n{summary_block}\n```"
-        )
+        # Always build a support bundle
+        zip_path = _create_support_bundle_zip(note=note)
 
-    send_telegram(msg)
-    safe_print(msg.replace("✅", "[OK]").replace("❌", "[FAIL]").replace("🚀", "[START]"))
-    sys.exit(proc.returncode)
+        payload = {
+            "status": "ok" if rc == 0 else "error",
+            "return_code": rc,
+            "latest_bundle_zip": str(zip_path),
+            "stdout_tail": _tail_bytes(stdout),
+            "stderr_tail": _tail_bytes(stderr),
+        }
+        print(json.dumps(payload, indent=2))
+        sys.exit(rc)
+
+    except KeyboardInterrupt:
+        allow_interrupt = os.getenv("CTC_ALLOW_INTERRUPT_SUCCESS", "").strip().lower() in {"1", "true", "yes", "on"}
+        bundle_zip = _create_support_bundle_zip(note="interrupted")
+        result = {
+            "status": "ok" if allow_interrupt else "error",
+            "message": "Interrupted",
+            "latest_bundle_zip": str(bundle_zip),
+            "return_code": 0 if allow_interrupt else 130,
+        }
+        print(json.dumps(result, indent=2))
+        sys.exit(0 if allow_interrupt else 130)
+    except FileNotFoundError as e:
+        _write_last_error_report(f"FileNotFoundError: {e}\n")
+        zip_path = _create_support_bundle_zip()
+        print(json.dumps({
+            "status": "error",
+            "return_code": 4,
+            "message": str(e),
+            "latest_bundle_zip": str(zip_path),
+        }, indent=2))
+        sys.exit(4)
+    except Exception as ex:
+        _write_last_error_report(f"{type(ex).__name__}: {ex}\n")
+        zip_path = _create_support_bundle_zip()
+        print(json.dumps({
+            "status": "error",
+            "return_code": 2,
+            "message": f"{type(ex).__name__}: {ex}",
+            "latest_bundle_zip": str(zip_path),
+        }, indent=2))
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()
