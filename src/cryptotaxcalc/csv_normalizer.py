@@ -1138,6 +1138,9 @@ def parse_csv_stream_with_meta(
                 ttype = "transfer"
 
             base_asset = _upper_or_none(row.get(header_map.get("base_asset", "")))
+            if not base_asset:
+                raise ValueError("base_asset is required")
+
             base_amount = _dec(row.get(header_map.get("base_amount", "")))
             if base_amount is None:
                 raise ValueError("base_amount is required")
@@ -1154,7 +1157,7 @@ def parse_csv_stream_with_meta(
             tx = Transaction(
                 timestamp=ts,
                 type=ttype,
-                base_asset=(base_asset or ""),
+                base_asset=base_asset,
                 base_amount=Decimal(str(base_amount)),
                 quote_asset=quote_asset,
                 quote_amount=(None if quote_amount is None else Decimal(str(quote_amount))),
@@ -1245,6 +1248,9 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             if ttype in {"transfer_in", "transfer_out", "transfer-in", "transfer-out"}:
                 ttype = "transfer"
             base_asset = _upper_or_none(row.get(header_map.get("base_asset", "")))
+            if not base_asset:
+                raise ValueError("base_asset is required")
+
             base_amount = _dec(row.get(header_map.get("base_amount", "")))
             if base_amount is None:
                 raise ValueError("base_amount is required")
@@ -1261,7 +1267,7 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             tx = Transaction(
                 timestamp=ts,
                 type=ttype,
-                base_asset=(base_asset or ""),
+                base_asset=base_asset,
                 base_amount=Decimal(str(base_amount)),
                 quote_asset=quote_asset,
                 quote_amount=(None if quote_amount is None else Decimal(str(quote_amount))),
