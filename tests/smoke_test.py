@@ -113,6 +113,56 @@ def test_auto_repair_migrations_is_idempotent_and_safe():
     auto_repair_migrations()
 
 @pytest.mark.smoke
+def test_init_db_repairs_legacy_calc_runs_schema(tmp_path):
+    """
+    Regression guard for old SQLite databases.
+
+    Older local databases may have calc_runs without newer /calculate/v2 metadata
+    columns. init_db(engine) must repair that shape before calculations run.
+    """
+    from sqlalchemy import create_engine
+
+    legacy_db = tmp_path / "legacy_calc_runs.sqlite"
+    legacy_engine = create_engine(
+        f"sqlite:///{legacy_db}",
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
+    )
+
+    with legacy_engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE calc_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at TEXT,
+                finished_at TEXT,
+                jurisdiction TEXT,
+                rule_version TEXT,
+                lot_method TEXT,
+                fx_set_id INTEGER,
+                params_json TEXT,
+                run_id TEXT
+            );
+        """))
+
+    init_db(legacy_engine)
+
+    with legacy_engine.connect() as conn:
+        rows = conn.execute(text("PRAGMA table_info(calc_runs);")).fetchall()
+
+    columns = {str(row[1]) for row in rows}
+
+    required_columns = {
+        "tax_year",
+        "input_hash",
+        "output_hash",
+        "manifest_hash",
+        "summary_json",
+    }
+
+    missing = required_columns - columns
+    assert not missing, f"init_db did not repair calc_runs columns: {sorted(missing)}"
+
+@pytest.mark.smoke
 def test_engine_connectivity_and_select_1():
     """
     Minimal 'can we talk to the DB?' check using the SQLAlchemy engine,
