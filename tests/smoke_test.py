@@ -165,7 +165,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 # Ensure smoke tests have a usable schema even when TestClient startup/lifespan
 # hooks are not entered before the first request.
-init_db()
+init_db(engine)
 Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
