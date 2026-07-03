@@ -853,9 +853,124 @@ def _try_download_zip(run_id: str):
     return last
 
 
+def _try_csv_upload_endpoint(csv_text: str):
+    """
+    Try known CSV upload/import endpoints.
+
+    Returns:
+      (response, endpoint_used)
+
+    The test skips if this build does not expose a CSV endpoint.
+    """
+    endpoints = [
+        "/upload/csv",
+        "/import/csv",
+        "/api/upload/csv",
+        "/api/import/csv",
+        "/api/v1/upload/csv",
+        "/api/v1/import/csv",
+    ]
+
+    for endpoint in endpoints:
+        files = {
+            "file": (
+                "smoke_transactions.csv",
+                csv_text.encode("utf-8"),
+                "text/csv",
+            )
+        }
+
+        r = client.post(endpoint, files=files)
+
+        if r.status_code not in (404, 405):
+            return r, endpoint
+
+    pytest.skip("No CSV upload/import endpoint is available in this build")
+
+
+def _csv_response_reports_success(data: dict) -> bool:
+    """
+    Accept multiple response shapes from preview/import endpoints.
+
+    Known possible fields include:
+      total_valid
+      inserted
+      imported
+      rows
+      count
+      preview_first_5
+    """
+    numeric_success_fields = (
+        "total_valid",
+        "inserted",
+        "imported",
+        "rows_imported",
+        "rows_inserted",
+        "count",
+        "valid_rows",
+    )
+
+    for field in numeric_success_fields:
+        value = data.get(field)
+        if isinstance(value, int) and value >= 1:
+            return True
+
+    preview = data.get("preview_first_5")
+    if isinstance(preview, list) and len(preview) >= 1:
+        return True
+
+    items = data.get("items")
+    if isinstance(items, list) and len(items) >= 1:
+        return True
+
+    return False
+
+
 # --------------------------------------------------------------------------------------
 # Tests
 # --------------------------------------------------------------------------------------
+def test_csv_upload_or_import_accepts_valid_buy_sell_file():
+    csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,smoke csv sell
+"""
+
+    r, endpoint = _try_csv_upload_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV endpoint {endpoint} must not crash on valid CSV. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202, 204, 400, 422), (
+        f"Unexpected CSV endpoint status from {endpoint}: {r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 422):
+        pytest.fail(
+            f"CSV endpoint {endpoint} rejected a valid minimal BUY/SELL CSV: {r.text[:1000]}"
+        )
+
+    if r.status_code == 204:
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    if "application/json" not in ct:
+        # Some import endpoints may redirect or return HTML/plain status; status already proved no crash.
+        return
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_success(data), (
+        f"CSV endpoint {endpoint} returned success status but did not report valid/imported rows. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
     memo_tag = f"smoke-deterministic-{uuid.uuid4().hex}"
     _insert_deterministic_btc_buy_sell_rows(memo_tag)
