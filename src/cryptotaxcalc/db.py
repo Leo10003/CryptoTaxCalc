@@ -178,14 +178,29 @@ def _ensure_compatibility_objects(conn) -> None:
             finished_at TEXT,
             jurisdiction TEXT,
             rule_version TEXT,
+            tax_year INTEGER,
             lot_method TEXT,
             fx_set_id INTEGER,
             params_json TEXT,
-            run_id TEXT
+            run_id TEXT,
+            input_hash TEXT,
+            output_hash TEXT,
+            manifest_hash TEXT,
+            summary_json TEXT
         );
     """))
+
+    # Legacy DBs may have been created before the newer CalcRun metadata fields existed.
+    # Keep this additive and idempotent so startup/smoke tests can repair old SQLite files.
+    _ensure_column(conn, "calc_runs", "tax_year", "INTEGER")
+    _ensure_column(conn, "calc_runs", "input_hash", "TEXT")
+    _ensure_column(conn, "calc_runs", "output_hash", "TEXT")
+    _ensure_column(conn, "calc_runs", "manifest_hash", "TEXT")
+    _ensure_column(conn, "calc_runs", "summary_json", "TEXT")
+
     _ensure_index(conn, "ix_calc_runs_started_at", "calc_runs", "(started_at)")
     _ensure_index(conn, "ux_calc_runs_run_id", "calc_runs", "(run_id)")
+    _ensure_index(conn, "ix_calc_runs_juris_year", "calc_runs", "(jurisdiction, tax_year)")
 
     # calc_audit
     conn.execute(text("""

@@ -266,7 +266,7 @@ def test_history_download_zip_contains_manifest_with_run_id():
 
 
 def test_history_events_csv_if_present():
-    run_id, _ = _call_calculate_v2_and_get_payload()
+    run_id, payload = _call_calculate_v2_and_get_payload()
     r = client.get(f"/history/run/{run_id}/events.csv")
     if r.status_code in (404, 405, 422):
         pytest.skip("events.csv endpoint not available")
@@ -274,7 +274,18 @@ def test_history_events_csv_if_present():
 
     ct = r.headers.get("content-type", "").lower()
     assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
-    assert len(r.text.splitlines()) >= 2, "CSV should have a header + at least one row"
+
+    lines = r.text.splitlines()
+    assert len(lines) >= 1, "CSV should have a header row"
+
+    header = lines[0]
+    assert "timestamp" in header
+    assert "asset" in header
+    assert "gain" in header or "gain_eur" in header
+
+    events = payload.get("events") or payload.get("realized_events") or []
+    if events:
+        assert len(lines) >= 2, "CSV should have at least one data row when calculation produced events"
 
 
 def test_audit_history_list_if_present():
