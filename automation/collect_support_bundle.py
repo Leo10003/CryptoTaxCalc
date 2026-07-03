@@ -34,6 +34,13 @@ import zipfile
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
+# Ensure the ::zip:: marker is UTF-8 even on Windows consoles (prevents path mangling).
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 
 # ------------- Config defaults -------------
 EXPECTED_TABLES_DEFAULT = [

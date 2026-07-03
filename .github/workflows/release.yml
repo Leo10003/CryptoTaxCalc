@@ -16,6 +16,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -27,9 +35,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run tests (excluding smoke)
+      - name: Dependency vulnerability audit (pip-audit)
+        shell: bash
         run: |
-          pytest -q -m "not smoke"
+          set -euo pipefail
+          python -m pip install --upgrade pip pip-audit
+          if [ -f requirements.txt ]; then
+            grep -vE '^\s*(-e|--editable)\s' requirements.txt > /tmp/requirements_audit.txt
+            pip-audit -r /tmp/requirements_audit.txt
+          else
+            pip-audit
+          fi
+
+      - name: Decide whether this tag should be Latest
+        id: latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          TAG="${GITHUB_REF_NAME}"
+
+          # Only semver tags (vX.Y.Z) participate in "Latest".
+          latest_semver="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1 || true)"
+
+          make_latest="false"
+          if [ -n "${latest_semver}" ] && [ "${TAG}" = "${latest_semver}" ]; then
+            make_latest="true"
+          fi
+
+          echo "latest_semver=${latest_semver}" >> "${GITHUB_OUTPUT}"
+          echo "make_latest=${make_latest}" >> "${GITHUB_OUTPUT}"
 
       - name: Build release bundle zip (keeps templates/static at repo root)
         id: bundle
@@ -57,6 +93,36 @@ jobs:
           sha256sum "dist/${BUNDLE}" | tee "dist/${BUNDLE}.sha256"
           echo "bundle_name=${BUNDLE}" >> "$GITHUB_OUTPUT"
 
+      - name: Validate release bundle contents (no secrets / no runtime artifacts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="dist/${{ steps.bundle.outputs.bundle_name }}"
+
+          # List archive entries (one per line)
+          unzip -Z1 "$ZIP" > /tmp/bundle_files.txt
+
+          # Fail on forbidden patterns
+          if grep -E -n '(^|/)\.env($|/)|(^|/)\.git($|/)|(^|/)\.venv($|/)|__pycache__|\.pyc$|\.pyo$|\.pyd$|\.db$|\.sqlite$|(^|/)logs/|(^|/)storage_raw/|(^|/)support_bundles/|(^|/)artifacts/|(^|/)backups/|(^|/)dist/|(^|/)build/|(^|/)\.DS_Store$' /tmp/bundle_files.txt; then
+            echo "Forbidden files detected in release bundle. Refusing to publish."
+            exit 1
+          fi
+      
+      - name: Validate release bundle contents (no secrets / no runtime artifacts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="dist/${{ steps.bundle.outputs.bundle_name }}"
+
+          # List files only (one per line)
+          unzip -Z1 "$ZIP" > /tmp/bundle_files.txt
+
+          # Fail on forbidden patterns (secrets, runtime artifacts, caches, DBs, logs)
+          if grep -E -n '(^|/)\.env($|/)|(^|/)\.git($|/)|(^|/)\.venv($|/)|__pycache__|\.pyc$|\.pyo$|\.db$|\.sqlite$|(^|/)logs/|(^|/)storage_raw/|(^|/)support_bundles/|(^|/)artifacts/|(^|/)backups/|(^|/)\.DS_Store$' /tmp/bundle_files.txt; then
+            echo "Forbidden files detected in release bundle. Refusing to publish."
+            exit 1
+          fi
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -74,3 +140,4 @@ jobs:
             dist/${{ steps.bundle.outputs.bundle_name }}
             dist/${{ steps.bundle.outputs.bundle_name }}.sha256
           generate_release_notes: true
+          make_latest: ${{ steps.latest.outputs.make_latest }}

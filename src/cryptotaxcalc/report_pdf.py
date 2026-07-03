@@ -1644,18 +1644,30 @@ def build_summary_pdf(payload: Dict[str, Any]) -> bytes:
             base_rate = 0.25
             context_lines: List[str] = []
 
+            # Determine tax year (best-effort) for accurate illustrative fallback rates.
+            try:
+                tax_year_ctx = int(run_totals.get("tax_year_used") or run_totals.get("tax_year") or 0)
+            except Exception:
+                tax_year_ctx = 0
+
             if "croat" in juris_norm or juris_norm in {"hr", "hrvatska"}:
-                base_rate = 0.10
+                base_rate = 0.12 if (tax_year_ctx and tax_year_ctx >= 2024) else 0.10
                 context_lines.append(
-                    "Croatia: capital gains on crypto are typically taxed at around 10% plus any applicable local surtax (prirez)."
+                    "Croatia: crypto capital gains are taxed as capital income (10% through 2023; 12% from 2024)."
+                )
+                context_lines.append(
+                    "Local surtax (prirez) applied through 2023 and was abolished from 01.01.2024; if your tax year is 2023 or earlier, a city surtax may apply."
                 )
                 context_lines.append(
                     "Relief may apply if an asset has been held for 2 years or more; confirm details with Porezna uprava or a local tax advisor."
                 )
             elif "ital" in juris_norm or juris_norm in {"it", "italia"}:
-                base_rate = 0.26
+                base_rate = 0.33 if (tax_year_ctx and tax_year_ctx >= 2026) else 0.26
                 context_lines.append(
-                    "Italy: capital gains on financial assets, including many crypto positions, are often taxed at 26%."
+                    "Italy: crypto gains are commonly treated under substitute tax rules (26% until 2025; 33% from 2026)."
+                )
+                context_lines.append(
+                    "Local add-ons are generally not applied to the national substitute tax; confirm filing duties (e.g., RT/RW) with a commercialista."
                 )
                 context_lines.append(
                     "Reporting obligations can include Quadro RT (capital gains) and Quadro RW (foreign-held crypto); discuss your case with a commercialista."

@@ -1,13 +1,65 @@
 from __future__ import annotations
 import sys, os, time, socket, webbrowser, argparse, threading
+import shutil
 from pathlib import Path
 import uvicorn
 import urllib.request
 
+def _normalize_cwd_for_frozen():
+    """
+    In PyInstaller onefile, the process extracts to a temp dir.
+    Set CWD to the exe directory so relative paths like logs/ and demo/ work.
+    """
+    try:
+        if getattr(sys, "frozen", False):
+            exe_dir = Path(sys.executable).resolve().parent
+            os.chdir(exe_dir)
+    except Exception:
+        pass
+    
+
+def _ensure_writable_demo_db() -> Path:
+    """
+    Ensure a writable demo.sqlite exists at ./demo/demo.sqlite (relative to CWD),
+    which we already normalize to the exe directory when frozen.
+    """
+    exe_dir = Path(os.getcwd()).resolve()
+    dst_dir = exe_dir / "demo"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    dst = dst_dir / "demo.sqlite"
+
+    if dst.exists() and dst.is_file():
+        return dst
+
+    seed = _find_seed_demo_db()
+    if not seed:
+        raise RuntimeError("Seed demo.sqlite not found (expected demo/demo.sqlite in bundle)")
+    shutil.copy2(seed, dst)
+    return dst
+
+
 # Ensure demo environment variables are set BEFORE importing the app/db layer
 os.environ.setdefault("DEMO_MODE", "true")
-os.environ.setdefault("SQLITE_URL", "sqlite:///demo/demo.sqlite")
+# Ensure demo DB is writable next to the EXE (SQLite needs WAL/SHM write access)
+try:
+    _normalize_cwd_for_frozen()  # guarantee CWD is exe dir before resolving ./demo
+    writable_db = _ensure_writable_demo_db()
+    os.environ.setdefault("SQLITE_URL", f"sqlite:///{writable_db.as_posix()}")
+except Exception:
+    # Fallback to the previous relative path (may fail, but preserves behavior if something unexpected happens)
+    os.environ.setdefault("SQLITE_URL", "sqlite:///demo/demo.sqlite")
 os.environ.setdefault("ADMIN_TOKEN", "demo-admin")
+
+# Disable dotenv for packaged demos to avoid accidentally reading a local .env
+os.environ.setdefault("CTC_DISABLE_DOTENV", "true")
+
+# Lock down admin surfaces in the investor demo (reduces accidental discovery + trust concerns)
+os.environ.setdefault("ENABLE_ADMIN_ENDPOINTS", "false")
+os.environ.setdefault("ENABLE_ADMIN_SCRIPTS", "false")
+os.environ.setdefault("ALLOW_QUERY_TOKENS", "false")
+
+# Explicitly mark this runtime as demo (not production)
+os.environ.setdefault("CTC_ENV", "demo")
 
 from cryptotaxcalc.logging_setup import get_logger, _now_iso_z
 from cryptotaxcalc.demo_assets import ensure_demo_env
@@ -21,18 +73,33 @@ def _free_port() -> int:
     port = s.getsockname()[1]
     s.close()
     return port
+    
 
-def _normalize_cwd_for_frozen():
+def _find_seed_demo_db() -> Path | None:
     """
-    In PyInstaller onefile, the process extracts to a temp dir.
-    Set CWD to the exe directory so relative paths like logs/ and demo/ work.
+    Locate the bundled seed demo.sqlite.
+    Supports:
+      - source tree (project_root/demo/demo.sqlite)
+      - onedir bundle (./demo/demo.sqlite)
+      - onedir internal (./_internal/demo/demo.sqlite)
     """
-    try:
-        if getattr(sys, "frozen", False):
-            exe_dir = Path(sys.executable).resolve().parent
-            os.chdir(exe_dir)
-    except Exception:
-        pass
+    project_root = Path(__file__).resolve().parents[1]
+    exe_dir = Path(os.getcwd()).resolve()
+
+    candidates = [
+        project_root / "demo" / "demo.sqlite",
+        exe_dir / "demo" / "demo.sqlite",
+        exe_dir / "_internal" / "demo" / "demo.sqlite",
+        exe_dir / "_internal" / "cryptotaxcalc" / "demo" / "demo.sqlite",
+    ]
+    for p in candidates:
+        try:
+            if p.exists() and p.is_file():
+                return p
+        except Exception:
+            pass
+    return None
+
 
 def main():
     """
@@ -72,12 +139,12 @@ def main():
 
         # Actively verify the server is reachable (demo verification must be real)
         health_url = f"http://{host}:{port}/health"
-        deadline = time.time() + 10.0
+        deadline = time.time() + 30.0
         last_err = None
 
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen(health_url, timeout=1.5) as resp:
+                with urllib.request.urlopen(health_url, timeout=2.5) as resp:
                     if getattr(resp, "status", 200) == 200:
                         return 0
             except Exception as e:

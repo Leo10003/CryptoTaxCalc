@@ -1,0 +1,1294 @@
+{
+  "timestamp_built": "2025-12-06T09:13:35Z",
+  "run_id": 47,
+  "run": {
+    "id": 47,
+    "started_at": "2025-12-06 09:13:35.197991",
+    "finished_at": "2025-12-06 09:13:35.245016",
+    "jurisdiction": "HR",
+    "rule_version": "2025.1",
+    "lot_method": "FIFO",
+    "fx_set_id": 9,
+    "params": "{\"jurisdiction\":\"HR\",\"rule_version\":\"2025.1\",\"lot_method\":\"FIFO\",\"fx_source\":\"HNB\",\"holding_exemption_days\":730,\"it_threshold_eur\":null,\"round_dp\":2,\"include_tax_helpers\":true,\"include_audit_appendix\":true,\"strict_fx\":false}"
+  },
+  "fx_batch": {
+    "id": 9,
+    "imported_at": "2025-12-06T00:00:42.868753+00:00",
+    "source": "runtime-self-heal",
+    "rates_hash": null
+  },
+  "inputs": {
+    "transactions_hashes_ordered": [
+      "03f85c2d21b00a21551e507e3b365191abd16f853cd2f31b77515ffce9bca69c",
+      "0513a264bba1e1251a887b0c522966c528f6ee0bca69690eaa79f4eed14180c8",
+      "058133d3b34bc212aa101b207805879ebbb6bebb16ab93e6c336287a2dae138c",
+      "059223568e7c1debf6189062ac5b130e2bbfc68de03edc096cff0917b6e78faa",
+      "07db4a5f13a7d77465d897cdcb4551f01659abad3d1a01c1046eafc196ebf1b6",
+      "09cd6733cb309411a0cda8052717a66c1e626caa4c42729cbf8a2f1c4619c39c",
+      "0c97ffde66704832613cb945ba51047585b8eed034e777e341cd925d2d09e4aa",
+      "0db57887faedf2f0b7507c46b3fc6b6dfceaf020fc2a8b7e5037f6e4f7b4b99a",
+      "0ecba68289f9f30caf78ea2237636e1e0146f907d7d84ab8550a3f26a3837975",
+      "0ed01fe7a6f0985fdb1063110e930df285b625c4d2ee6bb5bdf3065e1ae6847f",
+      "0f966e739923bdf4b0d2fa49b9028a47b77077373d33824f8754794171124222",
+      "10b749c514663cf88568e03008a291fd4b1dafcfd52b7ec17e03e0c391f25aa9",
+      "12a651a0fddd9189feffb2634232615e02d6ab2520c5c137a03b950e03ce5089",
+      "157c25ab99383b12d86e70d418f43ff8fc9cc904513dfa1674173f448c4c991b",
+      "16fbec980d7ee20c3946ae0a4688037b1e8f78c0f92c2b0170eb0b89c407964b",
+      "1779721b6b5ffa53ab0ea92b40702c4872a5eb3ecd3ec36a0ee19d3e02f85781",
+      "2004945e8a7d9b118a9104a9c308662cc9a7cafa49686a37d5be73668fefb25d",
+      "205ed06b561b172da0bd879dbfd93727fdca241a2353b2db01c3234a868dc9c8",
+      "23cbdaa04e90f447cc2164d5a3bd20834fbc01932154628c73d292bc95663b9d",
+      "24619edcfe4cfb9a3336a7b1c9c2d4812f60bfbdb7c72e763bbe490f0bfa366f",
+      "263a7960179f7c0b296cc08621b65908cf84b799ac8718ed0c5bf521cb845764",
+      "296e4912aefae998321d51b032a4c5a1f8326ce676aba421830046954e919f1d",
+      "2aeb3aab628c8484c367b4b454fa47706da87b979b67bbda81ae405095e2a22b",
+      "2b8e4fdec69ec2d9f62bd7df1811766ef079f95db48297fb0f73038fc753fde5",
+      "2dd123d04a375db434970b4f5012fe009b040f4b8fa592541c11b8828315a805",
+      "2e0ce5ac1d952a916c1f15a698b1c6c6a9860ef8477c687f6162e011c871b335",
+      "31614c1443baafeae45de55bdcf59a2b00cd1f400a4eb43452d4dc48ea784040",
+      "317a7cfac540aba05f7dbab23b4d7cfe90c12cc17306dbeb72014c2dff6d88d6",
+      "3a907926cd006b8dbe87ee83b8a26bd34df051ceb1c30ae6391c29b7b8feeeaa",
+      "3c1733a654b5b45efdd0298860b5973574ae20a2cd751b5aba6bc51a56348e1f",
+      "3e5ccce968c8659c57654e705cbc787affa4129e2a9c4f642f340efcb6c85960",
+      "3f24a5fa4f0772324ef5e15ad6d56f4775e6f97c7c69c73436afcf1f6b200ce2",
+      "3f33ccaaf9158cee015c2e4b32e19ded0c668f6d4e95f0d2cb743e9df143ff0e",
+      "3fa4da7eb0ba5e6e98ac4b46612ef416f08b92d1c20d295990330ef81464cca2",
+      "447ebebe28e23b53ea7c815d742df8a54597a969c1d2f8d0d467421a3af742de",
+      "480cb3916df2e626a7a334feb47841210649de41417ff86205d1ce0c61af3ee5",
+      "490cfb58d20b7f64bff226cd5349f186766d79c81b4acf82baa737f2f403fea2",
+      "4ec80751614fe7eb44616faa076fc0fae319376cae8edc8326700c9d5e8c9959",
+      "50c86002d9cfccb538bf81ce4814fd1e2c00c70565080bd3612092a04d251330",
+      "52e5ff246aaf0850570bf097138274faa2deae0ab0c540ba004f6a86704c9be4",
+      "53cf13ad6d1f3e20cf913c8f9402713a0fd3174fc7f82ef5fbf46546c7e9589b",
+      "5470fc4740d04c924affe262d65a434f2a0fbc7a26e5daaccb7d37ab9cd34167",
+      "5827887d9924a34095c561f78164436efcc7e2622d0111b664d1f66a75c2e47b",
+      "5866083761941f0626695a9eadca7ede8788b214d6872c0474d648580d492716",
+      "58efe609d41c4bbe9e8e547e96c6f4be8bd556b9360a6bdbf69946fa56029925",
+      "5969fd658da83fca4f52d8d54efa0435c8f9dcbeb25d0c8b30074c01548eed83",
+      "599e066afcb6779f0b95086cdb0f800b1b6425bcb1e9c8692a58b610b1e7bbc5",
+      "5bfa2fcf1bef35e8461750d24bc293917b2fba51e3452ad6c672989ab11effdb",
+      "62e304e0534455bd59b64f465fe921d3dc047870c70b75bbbdac68d584f85058",
+      "646da6c497cea5df9f720060fa4ee0462d15858454c8194ca092e2ecdb27628f",
+      "64faa4425915daba5c412144429682dc4cd524fb1249d29fba5783a744c02f8e",
+      "659ca4fbc6298f76feb6d7f34c185aee2c3192f4b9cb65e670a38138063ff9a6",
+      "683e8cd7397bdda37a7680c31b551e4d674c54b6ab70b3f69ee0e21512480e4a",
+      "699e54d32f007021726e545337f96ee9cf71a67da6670e7b2790b3d88bd4fd90",
+      "6b06bab8816f7b596a77a1c5c52267ad8d21bcd30b1a5222c4ff064910c6ca16",
+      "6b7a2631360aad1c71aa3ea6ebda8069230f58e58a15fa630d197853f3a4a698",
+      "6e45ae0a6e3d584b6e02b76c52ec0815d37729bb998356083593cfa5e181cdc5",
+      "6e9a3907856b064bf972ee8c485bb3fe60fa4ddb56cde1df8c5b9362322891e4",
+      "715cce095520ac562d029d7e9847f0f7337eee09aca01000edd3c18b0d1282aa",
+      "723b08fbbee6bcc8c74f2ab61dd17dc730fff0be55ae71811865637f52312656",
+      "726698a0805626cef3e504b71f4fd58ddde7cee474a53beea65472441e740637",
+      "7391ee8f8c9b3532eb0544ea9f6282e8bd2308542482c6a7fe200df49e8a4ae4",
+      "757c67534c4e0115b06c8144e8b513e92166242a61d7d3f5e07157101e7dd08e",
+      "7a389b58907b520488244e91a9a89cd84a841d2dd3955ffd38e6bfb0be95186a",
+      "7ae623c5d5de2bee4b88f40cafc22079e610f2e499842a8d3ccce4492c5ecff1",
+      "7ba28915af213ffe62c9dba0502f569d44be752566ba3dc1253d0e818637eb5a",
+      "7c365e2690b33b639809e65346cbb94670905bb2a44fdd7bb4d1c5bea39a3b45",
+      "80a497296baf907e58ad6cb853bf03fdd8cec072f5c4d2e58d3a2385457a4bd1",
+      "840bcb7379e63901c01a09fcac283d117d574182d2468c0cb32660ac7c4fc7a1",
+      "842885a6959e276f88ba67e8e5c6777d6b92b17432961f424c899145659251b1",
+      "843fb0bfcadb8ec024e03dec93fc891ab8199c3077db970d32ac1d432ce8c06b",
+      "84cfbd404f2aee9f3da69e77bf1d84f5e7f1f4048bcfe27d52d4c51861517dec",
+      "853acbf7a6e51bcf21c4bf5e505c2919c8e57394f8f46a6ac30eca35010fc5a1",
+      "85eae004aa655ea73b73a934ada6844698caa92c076ee55a8b39b4a3512aa1ba",
+      "87a36caed564fbcf87bd3a0e9e50deacc8b58fe26c74b585386882f33997b96a",
+      "89c83851ef00766237cfbba3caf7d4f8f65b385947c97d0bd8da9dfdd33dbfce",
+      "8a9d2b877331a5b593b4e18f1b49aed29b2e6708dfb87d309e7c27a2dd661a2e",
+      "8c7bb1852c4bb476845a7f594e4bd06c32b17502903e8174676f0c2435b5cc2f",
+      "8e1ab14d4d07fc1fa62bd85e89c23acf104518dfa67082e230d79ac4fd06c33a",
+      "9258a69a6e64778be0684210a31bdfbd3ebd20a51e56e0100db33ad83b36fab0",
+      "94e1ff379f242003b09c4861a152ddba078549685c934e952c7c19ea545a3683",
+      "95099e4bb3ea14b3f5d94c69aaa865e9367d7c6de87389c18da23175e93695da",
+      "955830786dcbb4bbe08b4719c690a5c657c1e86d8c27d29fc067bd53a532f7b6",
+      "9799958d9c4fcc71b3b4572e347a5fd62eb192d2ca0864e93ee8454d036c91b8",
+      "9817f70970e392c633aacd89f4484fe5dba86b5b6adc19c7e9faf7a05e115fc9",
+      "98f77fe8fb395974da4d3e8dc560020117d8a3a089e922371544c54ce918eb3e",
+      "99762ab14c1784255c0d9be0888973d488b49effd29ff9727e508e38f437fc24",
+      "9aabc37e9e9e24901aacec9ba31ecf13d43235fb67af2de98846590ac3108fe5",
+      "9b4db9a242e479045278f09b4a57c32315802851d425b14cc9aa78e2c6397f2c",
+      "9d594b1fdf9a4995e434a8fd341f7d6e7bc4470bfbc6b54e523a626f3336183d",
+      "a406eefdb441a1d0c0fdedb98134069f09da3e586a39dafb760af8fad35059c3",
+      "af71efcff02540e58c2b79227f19f67416d842b8da3b873a469bf8c7227f9e18",
+      "afdc3969665eedf5ebc3c2d5ee0544e46984817427c221db776cabe7c8d92d70",
+      "b22f91a90b890fa5844cef3e927616596a8155b0c88ff1aecf4a5394d4b11e50",
+      "b2cac3608a0d69860cc850f17464472c2af689f5edb9e2e3502a913b37a55569",
+      "b7b0fcb5b4391d981e123e1be3713bdd21ce6d8914f1a8ddb3cb462d0a0da67d",
+      "c10ca237893c0e8c10e9e34fcdb815445ee8f269160295d658f1f89e3697090a",
+      "c10f43cd7bd4ca3fa8846a3aee55e2a0953418f149b27043cf673d70e7894361",
+      "c4b21f5f2d7a74ce92a2758502afb507db601178c2f7181fe3dd0dc5d46b762c",
+      "c6e88a1713eecce4c769ba6eb24fa380b597dc67360565e7803f373b9bc26da4",
+      "cbd9d0666687dc2b4b6de626873383bcc30173854be5f0c23fc270c55ca6b429",
+      "cfbbf919d20f36e391573a3ce59862ed6cb5f4f4f5dede16e5c24d1e91761026",
+      "cfee011e2f3e5fb2dfeedec8982f6c2fccb929e57f4502f9956584f3b18c5655",
+      "d0e7ea13d2166ac527fc15bd90aa35aa2a9d2801e603985373cc4a91c2f0cb75",
+      "d225025faa95adc2e686a21a69e6715ef34b3692441fc8b7e4a9bf5214210505",
+      "d373cef4c397b61defcdc0f82dcd9122a754f28c5902ddf8fa27fc684e6c5d3b",
+      "d3cf7f3333896352c41b7819f4c3b3ea3e9a77e0703f36ef8cfd8c4e9a736734",
+      "d472217ba86723201d952e1b9f574eceb6399cea6f8a995c6adf9200d5ca0f97",
+      "d50822779d162f9f404dfbba4ad7bbd7d3e38d4aa20dcb490262805c00e75f8a",
+      "d90278a4f30d3c0bda69129ec54f3497df847cf6baa6e0de22e0e9629e4e1400",
+      "da893c0076eb5dd78571ac596c4f3f8cd98f0f5b57429ab3e3634092f9af3dd0",
+      "db524d8d0cab8bb6809cca8121a6be959c1cad2665105825d66f66fd164c48f6",
+      "dcc889a6ee89db8fa92e5af6a6b4ea34e738f4769e804f482c9294eef9d6458f",
+      "dd50d96a7ba6f185cf3479996801fd7a334915537add866291c2d1f36fee7b13",
+      "dea4a135826c363e3c5ae47dc99e64c6754d4fcc07968afd490854fefeea65ab",
+      "df1fd3686f39ac15b13abf8e627833dd6e1e1232fee837c08a3ccfd94bee9155",
+      "e22140640e238fb27255da088f58017d4fbd8bfa8aeba3b3e02a2cf5c4a5583b",
+      "e29c36bdf0cb67fd0748d0f601ca49cf2ce626016244310df3602b0f6679abbc",
+      "e54634e415dbc90579395424ec9ce81a32adba0990a888a69f1f2f5ea94a0227",
+      "e6824ea8f25f0399a9d44f44ae5cdcf183bfa7cacbf6551b9c3a9b4ee98d1669",
+      "e6d31d0ccfe58043223f4efe14f77946d15af76942420ba693b651d7e798d940",
+      "eab24a4c0b3616defeef4e7f89cec4bd90a3a36d04868f0ac703601796de809e",
+      "eb2b25026e8d807433753da9b7b091cbcc1bba43d5d98d6d57ed927a26240488",
+      "eb9296b6221cb30050585f78cace9c9828ed41cd1321d023da56b3f385396370",
+      "ece209f6fd7d47c5df57c0d68dcccac31d3a2175f3ba09d2d3804aa66dad39d0",
+      "ee0370a1c2e27c0367f0cb8e7c413978d0a97a9a9e391802e37548f20f233932",
+      "f0d869b3ce44e3717f8f71685c33df83bbdbc647fbe78a806d1216d7cc0a12f2",
+      "f2da0fe9485b46fcf4f64759f133f07c2fc45f112263909b979c7a8a65789d5b",
+      "f31c0e9a58b38ac581bb3c160df43ff1ce3c3aac3fd7228fc382d036309f4251",
+      "f57cf419bc82ee08ceb962063e53addd5761432939a85a9a71af05158a668f82",
+      "f85cabca9a44676e8ebd90d956993b912c0a7d628de76514c0eaa191dfbc3696",
+      "fabeb304a83a8f8c81438e1418cc8a9c7451131e8af7461b32b68c3ad0bfaf2b",
+      "fc644c6fd25c0e54ec4ebaa90aa35f83f0f1b88844ae5976bd63f9b1fff15b61",
+      "fd674c7d6b2cdb3ce2256d0d5ea087c7226aa446d4915ec41bcce9e6fe976ee2",
+      "fed65ef0dcb61d797b540adc234072a2fbfc37233a6f7d1c2bffbf28757aa510",
+      "fee055560b3cf7930df883772436e78fe4d5ea3f7a77ce780e658f2889894a7d"
+    ]
+  },
+  "outputs": [
+    {
+      "timestamp": "2022-03-18T12:47:00",
+      "asset": "BTC",
+      "qty_sold": "0.00006613",
+      "proceeds": "2.43",
+      "cost_basis": "2.433787421038176325185388629",
+      "gain": "-0.003787421038176325185388629",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.00006613",
+          "lot_cost_per_unit": "36803.07607800054929964295523",
+          "lot_cost_total": "2.433787421038176325185388629",
+          "acquired_at": "2022-03-18T12:41:48",
+          "disposed_at": "2022-03-18T12:47:00"
+        }
+      ]
+    },
+    {
+      "timestamp": "2023-01-01T11:40:20",
+      "asset": "BTC",
+      "qty_sold": "0.00326399",
+      "proceeds": "50.42",
+      "cost_basis": "89.53327677337115082750459592",
+      "gain": "-39.11327677337115082750459592",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.00048002",
+          "lot_cost_per_unit": "36803.07607800054929964295523",
+          "lot_cost_total": "17.66621257896182367481461137",
+          "acquired_at": "2022-03-18T12:41:48",
+          "disposed_at": "2023-01-01T11:40:20"
+        },
+        {
+          "from_qty": "0.00010594",
+          "lot_cost_per_unit": "36813.29054181612233339626204",
+          "lot_cost_total": "3.900000000000000000000000001",
+          "acquired_at": "2022-03-18T13:50:47",
+          "disposed_at": "2023-01-01T11:40:20"
+        },
+        {
+          "from_qty": "0.00050985",
+          "lot_cost_per_unit": "37383.54417966068451505344709",
+          "lot_cost_total": "19.06000000000000000000000000",
+          "acquired_at": "2022-04-16T05:51:53",
+          "disposed_at": "2023-01-01T11:40:20"
+        },
+        {
+          "from_qty": "0.00049656",
+          "lot_cost_per_unit": "29080.07088770742709843724827",
+          "lot_cost_total": "14.44000000000000000000000000",
+          "acquired_at": "2022-05-13T20:22:29",
+          "disposed_at": "2023-01-01T11:40:20"
+        },
+        {
+          "from_qty": "0.00050164",
+          "lot_cost_per_unit": "21270.23363368152459931424926",
+          "lot_cost_total": "10.67000000000000000000000000",
+          "acquired_at": "2022-06-14T20:33:12",
+          "disposed_at": "2023-01-01T11:40:20"
+        },
+        {
+          "from_qty": "0.00049539",
+          "lot_cost_per_unit": "22325.84428430125759502614102",
+          "lot_cost_total": "11.06000000000000000000000000",
+          "acquired_at": "2022-08-04T15:14:10",
+          "disposed_at": "2023-01-01T11:40:20"
+        },
+        {
+          "from_qty": "0.00049925",
+          "lot_cost_per_unit": "19789.68452679018527791687531",
+          "lot_cost_total": "9.879999999999999999999999999",
+          "acquired_at": "2022-10-18T20:27:12",
+          "disposed_at": "2023-01-01T11:40:20"
+        },
+        {
+          "from_qty": "0.00017534",
+          "lot_cost_per_unit": "16294.42337406939176850681275",
+          "lot_cost_total": "2.857064194409327152689984548",
+          "acquired_at": "2022-12-09T07:16:42",
+          "disposed_at": "2023-01-01T11:40:20"
+        }
+      ]
+    },
+    {
+      "timestamp": "2023-01-01T11:53:11",
+      "asset": "ETH",
+      "qty_sold": "0.045126202752201",
+      "proceeds": "50.38",
+      "cost_basis": "54.20013590545620603448275863",
+      "gain": "-3.82013590545620603448275863",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.003",
+          "lot_cost_per_unit": "1216.666666666666666666666667",
+          "lot_cost_total": "3.650000000000000000000000001",
+          "acquired_at": "2022-11-12T18:39:35",
+          "disposed_at": "2023-01-01T11:53:11"
+        },
+        {
+          "from_qty": "0.0208",
+          "lot_cost_per_unit": "1193.75",
+          "lot_cost_total": "24.830000",
+          "acquired_at": "2022-11-13T08:14:11",
+          "disposed_at": "2023-01-01T11:53:11"
+        },
+        {
+          "from_qty": "0.021326202752201",
+          "lot_cost_per_unit": "1206.034482758620689655172414",
+          "lot_cost_total": "25.72013590545620603448275863",
+          "acquired_at": "2022-12-03T07:30:35",
+          "disposed_at": "2023-01-01T11:53:11"
+        }
+      ]
+    },
+    {
+      "timestamp": "2023-02-01T13:35:35",
+      "asset": "ETH",
+      "qty_sold": "0.030983237089347",
+      "proceeds": "44.52",
+      "cost_basis": "35.77173795965964478971497308",
+      "gain": "8.74826204034035521028502692",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.001873797247799",
+          "lot_cost_per_unit": "1206.034482758620689655172414",
+          "lot_cost_total": "2.259864094543793965517241380",
+          "acquired_at": "2022-12-03T07:30:35",
+          "disposed_at": "2023-02-01T13:35:35"
+        },
+        {
+          "from_qty": "0.025962623855511084",
+          "lot_cost_per_unit": "1116.605169082180232656026476",
+          "lot_cost_total": "28.99000000000000000000000000",
+          "acquired_at": "2023-01-01T10:43:23",
+          "disposed_at": "2023-02-01T13:35:35"
+        },
+        {
+          "from_qty": "0.003146815986036916",
+          "lot_cost_per_unit": "1436.967997232871472266596974",
+          "lot_cost_total": "4.521873865115850824197731695",
+          "acquired_at": "2023-02-01T13:29:47",
+          "disposed_at": "2023-02-01T13:35:35"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-05-08T14:32:35",
+      "asset": "ETH",
+      "qty_sold": "2.232968867303205944",
+      "proceeds": "3934.94",
+      "cost_basis": "5482.859484857069517391456861",
+      "gain": "-1547.919484857069517391456861",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.016742283879120621",
+          "lot_cost_per_unit": "1436.967997232871472266596974",
+          "lot_cost_total": "24.05812613488414917580226830",
+          "acquired_at": "2023-02-01T13:29:47",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.0180656816568816",
+          "lot_cost_per_unit": "1548.792928571384771564551430",
+          "lot_cost_total": "27.98000000000000000000000000",
+          "acquired_at": "2023-03-01T12:39:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.0164",
+          "lot_cost_per_unit": "1678.048780487804878048780488",
+          "lot_cost_total": "27.52000000000000000000000000",
+          "acquired_at": "2023-04-01T08:55:59",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.0152",
+          "lot_cost_per_unit": "1667.763157894736842105263158",
+          "lot_cost_total": "25.35000000000000000000000000",
+          "acquired_at": "2023-05-02T05:36:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.016126513685373309",
+          "lot_cost_per_unit": "1730.690249890419372034511589",
+          "lot_cost_total": "27.91000000000000000000000000",
+          "acquired_at": "2023-06-01T04:55:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.016436946583596827",
+          "lot_cost_per_unit": "1760.059257530869905699542268",
+          "lot_cost_total": "28.93000000000000000000000000",
+          "acquired_at": "2023-07-01T14:59:35",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.016439931625483042",
+          "lot_cost_per_unit": "1760.347953950184266878177791",
+          "lot_cost_total": "28.94000000000000000000000000",
+          "acquired_at": "2023-07-01T15:00:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.03214417",
+          "lot_cost_per_unit": "1709.485732560523416843552034",
+          "lot_cost_total": "54.94999999999999999999999998",
+          "acquired_at": "2023-11-01T18:30:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.059723153160620986",
+          "lot_cost_per_unit": "1932.248950246151076685423346",
+          "lot_cost_total": "115.4000000000000000000000000",
+          "acquired_at": "2023-12-02T09:06:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.0561",
+          "lot_cost_per_unit": "2086.452762923351158645276292",
+          "lot_cost_total": "117.0500000000000000000000000",
+          "acquired_at": "2024-01-01T08:00:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.054549932024169755",
+          "lot_cost_per_unit": "2134.558113627130705870909051",
+          "lot_cost_total": "116.4400000000000000000000000",
+          "acquired_at": "2024-02-02T16:10:59",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.076196848653612087",
+          "lot_cost_per_unit": "3178.084189555528073850347370",
+          "lot_cost_total": "242.1600000000000000000000000",
+          "acquired_at": "2024-03-01T14:25:35",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.033228097253100464",
+          "lot_cost_per_unit": "2912.595303391006029250354017",
+          "lot_cost_total": "96.77999999999999999999999999",
+          "acquired_at": "2024-03-20T07:28:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.087311303413188116",
+          "lot_cost_per_unit": "3344.469599979568589935811814",
+          "lot_cost_total": "292.0100000000000000000000000",
+          "acquired_at": "2024-04-01T04:47:59",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.031579784229376235",
+          "lot_cost_per_unit": "3063.352152672729387280930926",
+          "lot_cost_total": "96.73999999999999999999999999",
+          "acquired_at": "2024-04-03T04:34:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.01435643421998441",
+          "lot_cost_per_unit": "3120.552033570955156454119231",
+          "lot_cost_total": "44.80000000000000000000000000",
+          "acquired_at": "2024-04-12T18:06:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.1009",
+          "lot_cost_per_unit": "2790.782953419226957383548067",
+          "lot_cost_total": "281.5900000000000000000000000",
+          "acquired_at": "2024-05-01T05:51:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.0714",
+          "lot_cost_per_unit": "3470.028011204481792717086835",
+          "lot_cost_total": "247.7600000000000000000000000",
+          "acquired_at": "2024-05-22T16:02:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.0827",
+          "lot_cost_per_unit": "3509.068923821039903264812576",
+          "lot_cost_total": "290.2000000000000000000000000",
+          "acquired_at": "2024-06-02T05:34:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.089",
+          "lot_cost_per_unit": "3238.651685393258426966292135",
+          "lot_cost_total": "288.2400000000000000000000000",
+          "acquired_at": "2024-07-01T18:04:35",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.0955",
+          "lot_cost_per_unit": "3071.204188481675392670157068",
+          "lot_cost_total": "293.3000000000000000000000000",
+          "acquired_at": "2024-07-30T14:39:59",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.04255",
+          "lot_cost_per_unit": "2126.909518213866039952996475",
+          "lot_cost_total": "90.50000000000000000000000001",
+          "acquired_at": "2024-08-05T08:29:47",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.140242833699488636",
+          "lot_cost_per_unit": "2062.707892938523778266786514",
+          "lot_cost_total": "289.2800000000000000000000000",
+          "acquired_at": "2024-09-09T06:09:35",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.101387992652327965",
+          "lot_cost_per_unit": "2384.010114776151531718437039",
+          "lot_cost_total": "241.7100000000000000000000000",
+          "acquired_at": "2024-10-01T05:50:59",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.099855488113925184",
+          "lot_cost_per_unit": "2926.128603634086295019895653",
+          "lot_cost_total": "292.1900000000000000000000000",
+          "acquired_at": "2024-11-14T15:25:47",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.078727033487867994",
+          "lot_cost_per_unit": "3742.297746369442190562668043",
+          "lot_cost_total": "294.6200000000000000000000000",
+          "acquired_at": "2024-12-12T06:58:47",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.096958808020365392",
+          "lot_cost_per_unit": "2953.006599873431437141743929",
+          "lot_cost_total": "286.3200000000000000000000000",
+          "acquired_at": "2025-01-13T16:05:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.116888804297662103",
+          "lot_cost_per_unit": "2502.292685406912854889514558",
+          "lot_cost_total": "292.4899999999999999999999999",
+          "acquired_at": "2025-02-12T13:47:35",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.14442873301384099",
+          "lot_cost_per_unit": "2058.385432014486395995330195",
+          "lot_cost_total": "297.2900000000000000000000000",
+          "acquired_at": "2025-02-28T09:16:35",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.055138553662431892",
+          "lot_cost_per_unit": "1763.557321349426543131216772",
+          "lot_cost_total": "97.24000000000000000000000002",
+          "acquired_at": "2025-03-12T12:17:47",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.034758146814406004",
+          "lot_cost_per_unit": "1419.523321063548225726040147",
+          "lot_cost_total": "49.34000000000000000000000001",
+          "acquired_at": "2025-04-07T05:31:11",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.07189772",
+          "lot_cost_per_unit": "1310.055450993439013086924036",
+          "lot_cost_total": "94.19000000000000000000000000",
+          "acquired_at": "2025-04-09T04:57:59",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.067176472741047649",
+          "lot_cost_per_unit": "1435.621670279676735417013009",
+          "lot_cost_total": "96.43999999999999999999999998",
+          "acquired_at": "2025-04-15T15:20:59",
+          "disposed_at": "2025-05-08T14:32:35"
+        },
+        {
+          "from_qty": "0.182857200415334683",
+          "lot_cost_per_unit": "1603.116300896850479885553224",
+          "lot_cost_total": "293.1413587221853682156545928",
+          "acquired_at": "2025-05-01T06:27:23",
+          "disposed_at": "2025-05-08T14:32:35"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-05-09T16:57:54",
+      "asset": "BTC",
+      "qty_sold": "0.03360427",
+      "proceeds": "3071.62",
+      "cost_basis": "1408.954047663378368744251740",
+      "gain": "1662.665952336621631255748260",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.00032299",
+          "lot_cost_per_unit": "16294.42337406939176850681275",
+          "lot_cost_total": "5.262935805590672847310015450",
+          "acquired_at": "2022-12-09T07:16:42",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00050042",
+          "lot_cost_per_unit": "15806.72235322329243435514168",
+          "lot_cost_total": "7.910000000000000000000000000",
+          "acquired_at": "2023-01-03T21:46:35",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00177917",
+          "lot_cost_per_unit": "20964.83191600577797512323162",
+          "lot_cost_total": "37.30000000000000000000000000",
+          "acquired_at": "2023-02-01T14:30:02",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00049259",
+          "lot_cost_per_unit": "20382.06216122942000446618892",
+          "lot_cost_total": "10.04000000000000000000000000",
+          "acquired_at": "2023-02-10T15:57:33",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00051162",
+          "lot_cost_per_unit": "20874.86806614284038935147180",
+          "lot_cost_total": "10.68000000000000000000000000",
+          "acquired_at": "2023-03-08T09:36:30",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00049475",
+          "lot_cost_per_unit": "25649.31783729156139464375947",
+          "lot_cost_total": "12.69000000000000000000000000",
+          "acquired_at": "2023-04-04T10:33:52",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00047293",
+          "lot_cost_per_unit": "24210.77115006449157380584865",
+          "lot_cost_total": "11.45000000000000000000000000",
+          "acquired_at": "2023-06-19T07:11:08",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00106872",
+          "lot_cost_per_unit": "26910.69690845123137959428101",
+          "lot_cost_total": "28.76000000000000000000000000",
+          "acquired_at": "2023-08-02T15:01:14",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00241497",
+          "lot_cost_per_unit": "24029.28400766883232503923444",
+          "lot_cost_total": "58.03000000000000000000000000",
+          "acquired_at": "2023-09-01T07:21:59",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.001748",
+          "lot_cost_per_unit": "32591.53318077803203661327231",
+          "lot_cost_total": "56.97000000000000000000000000",
+          "acquired_at": "2023-11-01T18:42:55",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00174953",
+          "lot_cost_per_unit": "32591.61031819974507439140798",
+          "lot_cost_total": "57.02000000000000000000000000",
+          "acquired_at": "2023-11-01T19:25:50",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00323",
+          "lot_cost_per_unit": "35631.57894736842105263157895",
+          "lot_cost_total": "115.0900000000000000000000000",
+          "acquired_at": "2023-12-02T09:33:34",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00044331",
+          "lot_cost_per_unit": "35618.41600685750377839435158",
+          "lot_cost_total": "15.79000000000000000000000000",
+          "acquired_at": "2023-12-02T10:26:33",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00289115",
+          "lot_cost_per_unit": "38687.02765335593103090465732",
+          "lot_cost_total": "111.8500000000000000000000000",
+          "acquired_at": "2024-01-01T19:56:21",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.0028968",
+          "lot_cost_per_unit": "39864.67826567246616956641812",
+          "lot_cost_total": "115.4800000000000000000000000",
+          "acquired_at": "2024-02-02T16:23:58",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00091178",
+          "lot_cost_per_unit": "46414.70530171751957709096493",
+          "lot_cost_total": "42.32000000000000000000000000",
+          "acquired_at": "2024-02-13T08:22:05",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00420052",
+          "lot_cost_per_unit": "57738.08956986277889404169008",
+          "lot_cost_total": "242.5300000000000000000000000",
+          "acquired_at": "2024-03-01T14:33:58",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.0016834",
+          "lot_cost_per_unit": "57294.76060354045384341214209",
+          "lot_cost_total": "96.44999999999999999999999999",
+          "acquired_at": "2024-03-20T07:49:26",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00445839",
+          "lot_cost_per_unit": "65095.24738750984099641350353",
+          "lot_cost_total": "290.2200000000000000000000000",
+          "acquired_at": "2024-04-01T05:03:52",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00046657",
+          "lot_cost_per_unit": "64363.33240456951797157982725",
+          "lot_cost_total": "30.03000000000000000000000000",
+          "acquired_at": "2024-04-01T06:18:23",
+          "disposed_at": "2025-05-09T16:57:54"
+        },
+        {
+          "from_qty": "0.00086666",
+          "lot_cost_per_unit": "61247.90789673885479535426282",
+          "lot_cost_total": "53.08111185778769589694172542",
+          "acquired_at": "2024-04-03T04:47:52",
+          "disposed_at": "2025-05-09T16:57:54"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-06-01T06:32:59",
+      "asset": "ETH",
+      "qty_sold": "0.13328887948744128",
+      "proceeds": "295.42",
+      "cost_basis": "295.0025544717460465909769068",
+      "gain": "0.4174455282539534090230932",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.000672840315584836",
+          "lot_cost_per_unit": "1603.116300896850479885553224",
+          "lot_cost_total": "1.078641277814631784345407242",
+          "acquired_at": "2025-05-01T06:27:23",
+          "disposed_at": "2025-06-01T06:32:59"
+        },
+        {
+          "from_qty": "0.132616039171856444",
+          "lot_cost_per_unit": "2216.352675207234363225320271",
+          "lot_cost_total": "293.9239131939314148066314996",
+          "acquired_at": "2025-06-01T06:17:59",
+          "disposed_at": "2025-06-01T06:32:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-07-01T07:16:11",
+      "asset": "ETH",
+      "qty_sold": "0.141392356844495424",
+      "proceeds": "295.22",
+      "cost_basis": "294.6244818153918177564307898",
+      "gain": "0.5955181846081822435692102",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.000083960828143556",
+          "lot_cost_per_unit": "2216.352675207234363225320271",
+          "lot_cost_total": "0.1860868060685851933685003768",
+          "acquired_at": "2025-06-01T06:17:59",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "from_qty": "0.141308396016351868",
+          "lot_cost_per_unit": "2083.658178210808712851277918",
+          "lot_cost_total": "294.4383950093232325630622894",
+          "acquired_at": "2025-07-01T06:46:47",
+          "disposed_at": "2025-07-01T07:16:11"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-01T11:28:47",
+      "asset": "ETH",
+      "qty_sold": "0.091045901507339712",
+      "proceeds": "284.46",
+      "cost_basis": "287.5077867028527367818019617",
+      "gain": "-3.0477867028527367818019617",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.000106353812249116",
+          "lot_cost_per_unit": "2083.658178210808712851277918",
+          "lot_cost_total": "0.2216049906767674369377106190",
+          "acquired_at": "2025-07-01T06:46:47",
+          "disposed_at": "2025-08-01T11:28:47"
+        },
+        {
+          "from_qty": "0.090939547695090596",
+          "lot_cost_per_unit": "3159.089625950330260888941130",
+          "lot_cost_total": "287.2861817121759693448642511",
+          "acquired_at": "2025-08-01T06:09:47",
+          "disposed_at": "2025-08-01T11:28:47"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-14T07:33:59",
+      "asset": "SD",
+      "qty_sold": "14.16936648",
+      "proceeds": "9.11",
+      "cost_basis": "7.879999995249543439049958141",
+      "gain": "1.230000004750456560950041859",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "14.16936648",
+          "lot_cost_per_unit": "0.5561293094064670870909648560",
+          "lot_cost_total": "7.879999995249543439049958141",
+          "acquired_at": "2025-08-07T20:25:47",
+          "disposed_at": "2025-08-14T07:33:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-14T07:37:11",
+      "asset": "ETHX",
+      "qty_sold": "0.257",
+      "proceeds": "1121.31",
+      "cost_basis": "475.7387116292188377849624717",
+      "gain": "645.5712883707811622150375283",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.257",
+          "lot_cost_per_unit": "1851.123391553380691770281991",
+          "lot_cost_total": "475.7387116292188377849624717",
+          "acquired_at": "2025-05-08T14:32:35",
+          "disposed_at": "2025-08-14T07:37:11"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-14T11:04:59",
+      "asset": "ETH",
+      "qty_sold": "0.26101216329197262",
+      "proceeds": "1055.05",
+      "cost_basis": "1062.976509032729573293215460",
+      "gain": "-7.926509032729573293215460",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.000083510858842654",
+          "lot_cost_per_unit": "3159.089625950330260888941130",
+          "lot_cost_total": "0.2638182878240306551357489121",
+          "acquired_at": "2025-08-01T06:09:47",
+          "disposed_at": "2025-08-14T11:04:59"
+        },
+        {
+          "from_qty": "0.00081211",
+          "lot_cost_per_unit": "4063.488936227850906896848949",
+          "lot_cost_total": "3.300000000000000000000000000",
+          "acquired_at": "2025-08-14T07:21:35",
+          "disposed_at": "2025-08-14T11:04:59"
+        },
+        {
+          "from_qty": "0.00224549121049948",
+          "lot_cost_per_unit": "4070.378880693515231650006331",
+          "lot_cost_total": "9.140000000000000000000000001",
+          "acquired_at": "2025-08-14T07:33:59",
+          "disposed_at": "2025-08-14T11:04:59"
+        },
+        {
+          "from_qty": "0.257871051222630486",
+          "lot_cost_per_unit": "4072.860004119511423990709529",
+          "lot_cost_total": "1050.272690744905542638079711",
+          "acquired_at": "2025-08-14T07:37:11",
+          "disposed_at": "2025-08-14T11:04:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-18T14:57:59",
+      "asset": "ETHX",
+      "qty_sold": "0.3",
+      "proceeds": "1179.00",
+      "cost_basis": "555.3370174660142075310845973",
+      "gain": "623.6629825339857924689154027",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.3",
+          "lot_cost_per_unit": "1851.123391553380691770281991",
+          "lot_cost_total": "555.3370174660142075310845973",
+          "acquired_at": "2025-05-08T14:32:35",
+          "disposed_at": "2025-08-18T14:57:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-18T15:03:23",
+      "asset": "ETH",
+      "qty_sold": "0.320085063729443",
+      "proceeds": "1186.00",
+      "cost_basis": "1186.440489537998932522188284",
+      "gain": "-0.440489537998932522188284",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.013108063916043183",
+          "lot_cost_per_unit": "4072.860004119511423990709529",
+          "lot_cost_total": "53.38730925509445736192028916",
+          "acquired_at": "2025-08-14T07:37:11",
+          "disposed_at": "2025-08-18T15:03:23"
+        },
+        {
+          "from_qty": "0.306976999813399817",
+          "lot_cost_per_unit": "3691.003498541084196671654681",
+          "lot_cost_total": "1133.053180282904475160267995",
+          "acquired_at": "2025-08-18T14:57:59",
+          "disposed_at": "2025-08-18T15:03:23"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-18T17:04:53",
+      "asset": "BTC",
+      "qty_sold": "0.01101044",
+      "proceeds": "1095.42",
+      "cost_basis": "658.5291704659720952257736793",
+      "gain": "436.8908295340279047742263207",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.00071070",
+          "lot_cost_per_unit": "61247.90789673885479535426282",
+          "lot_cost_total": "43.52888814221230410305827459",
+          "acquired_at": "2024-04-03T04:47:52",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "from_qty": "0.00067",
+          "lot_cost_per_unit": "64044.77611940298507462686567",
+          "lot_cost_total": "42.91000000000000000000000000",
+          "acquired_at": "2024-04-12T18:26:58",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "from_qty": "0.00157323",
+          "lot_cost_per_unit": "60614.15050564761668668916814",
+          "lot_cost_total": "95.35999999999999999999999999",
+          "acquired_at": "2024-04-19T08:55:02",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "from_qty": "0.00503",
+          "lot_cost_per_unit": "55717.69383697813121272365805",
+          "lot_cost_total": "280.2600000000000000000000000",
+          "acquired_at": "2024-05-01T06:28:40",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "from_qty": "0.00302651",
+          "lot_cost_per_unit": "64916.44908616187989556135770",
+          "lot_cost_total": "196.4702823237597911227154047",
+          "acquired_at": "2024-05-22T16:09:29",
+          "disposed_at": "2025-08-18T17:04:53"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-20T16:26:23",
+      "asset": "ETHX",
+      "qty_sold": "0.26",
+      "proceeds": "1024.21",
+      "cost_basis": "481.2920818038789798602733177",
+      "gain": "542.9179181961210201397266823",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.26",
+          "lot_cost_per_unit": "1851.123391553380691770281991",
+          "lot_cost_total": "481.2920818038789798602733177",
+          "acquired_at": "2025-05-08T14:32:35",
+          "disposed_at": "2025-08-20T16:26:23"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-20T16:32:59",
+      "asset": "ETH",
+      "qty_sold": "0.280037069828845",
+      "proceeds": "1022.52",
+      "cost_basis": "1022.894831839373834493467441",
+      "gain": "-0.374831839373834493467441",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.009403085023033393",
+          "lot_cost_per_unit": "3691.003498541084196671654681",
+          "lot_cost_total": "34.70681971709552483973200500",
+          "acquired_at": "2025-08-18T14:57:59",
+          "disposed_at": "2025-08-20T16:32:59"
+        },
+        {
+          "from_qty": "0.270633984805811607",
+          "lot_cost_per_unit": "3651.381820473634446172475374",
+          "lot_cost_total": "988.1880121222783096537354358",
+          "acquired_at": "2025-08-20T16:26:23",
+          "disposed_at": "2025-08-20T16:32:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-26T07:01:56",
+      "asset": "BTC",
+      "qty_sold": "0.00528905",
+      "proceeds": "500.38",
+      "cost_basis": "332.0238599176195192221121815",
+      "gain": "168.3561400823804807778878185",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.00080349",
+          "lot_cost_per_unit": "64916.44908616187989556135770",
+          "lot_cost_total": "52.15971767624020887728459530",
+          "acquired_at": "2024-05-22T16:09:29",
+          "disposed_at": "2025-08-26T07:01:56"
+        },
+        {
+          "from_qty": "0.00448556",
+          "lot_cost_per_unit": "62392.24137931034482758620690",
+          "lot_cost_total": "279.8641422413793103448275862",
+          "acquired_at": "2024-06-02T05:55:07",
+          "disposed_at": "2025-08-26T07:01:56"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-12-03T08:22:35",
+      "asset": "ETH",
+      "qty_sold": "0.000033730304303796",
+      "proceeds": "0.08",
+      "cost_basis": "0.1231622199339243053868774810",
+      "gain": "-0.0431622199339243053868774810",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.000033730304303796",
+          "lot_cost_per_unit": "3651.381820473634446172475374",
+          "lot_cost_total": "0.1231622199339243053868774810",
+          "acquired_at": "2025-08-20T16:26:23",
+          "disposed_at": "2025-12-03T08:22:35"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-12-03T08:22:35",
+      "asset": "ETHX",
+      "qty_sold": "1.632196369035614031",
+      "proceeds": "4599.37",
+      "cost_basis": "3258.552189100887974823679614",
+      "gain": "1340.817810899112025176320386",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "1.288586271442025775",
+          "lot_cost_per_unit": "1851.123391553380691770281991",
+          "lot_cost_total": "2385.332189100887974823679614",
+          "acquired_at": "2025-05-08T14:32:35",
+          "disposed_at": "2025-12-03T08:22:35"
+        },
+        {
+          "from_qty": "0.125470481087971358",
+          "lot_cost_per_unit": "2357.048426335810803685974230",
+          "lot_cost_total": "295.7400000000000000000000000",
+          "acquired_at": "2025-06-01T06:32:59",
+          "disposed_at": "2025-12-03T08:22:35"
+        },
+        {
+          "from_qty": "0.132805481962171791",
+          "lot_cost_per_unit": "2217.754836987028091839659367",
+          "lot_cost_total": "294.5300000000000000000000000",
+          "acquired_at": "2025-07-01T07:16:11",
+          "disposed_at": "2025-12-03T08:22:35"
+        },
+        {
+          "from_qty": "0.085334134543445107",
+          "lot_cost_per_unit": "3315.789179955240353289132236",
+          "lot_cost_total": "282.9500000000000000000000000",
+          "acquired_at": "2025-08-01T11:28:47",
+          "disposed_at": "2025-12-03T08:22:35"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-12-03T08:22:52",
+      "asset": "BTC",
+      "qty_sold": "0.06409041",
+      "proceeds": "5116.61",
+      "cost_basis": "4787.325857758620689655172414",
+      "gain": "329.284142241379310344827586",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.00015444",
+          "lot_cost_per_unit": "62392.24137931034482758620690",
+          "lot_cost_total": "9.635857758620689655172413794",
+          "acquired_at": "2024-06-02T05:55:07",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.0049",
+          "lot_cost_per_unit": "59267.34693877551020408163265",
+          "lot_cost_total": "290.4100000000000000000000000",
+          "acquired_at": "2024-07-01T18:09:03",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00489",
+          "lot_cost_per_unit": "59267.89366053169734151329243",
+          "lot_cost_total": "289.8200000000000000000000000",
+          "acquired_at": "2024-07-01T18:16:50",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.0048",
+          "lot_cost_per_unit": "61260.41666666666666666666667",
+          "lot_cost_total": "294.0500000000000000000000000",
+          "acquired_at": "2024-07-30T16:35:25",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00206375",
+          "lot_cost_per_unit": "47937.00787401574803149606299",
+          "lot_cost_total": "98.93000000000000000000000000",
+          "acquired_at": "2024-08-05T07:32:59",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00585907",
+          "lot_cost_per_unit": "49277.44505527327715832034777",
+          "lot_cost_total": "288.7200000000000000000000000",
+          "acquired_at": "2024-09-09T06:28:18",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00420099",
+          "lot_cost_per_unit": "57772.09657723536594945477138",
+          "lot_cost_total": "242.7000000000000000000000000",
+          "acquired_at": "2024-10-01T06:07:47",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00351406",
+          "lot_cost_per_unit": "84164.75529729145205261150919",
+          "lot_cost_total": "295.7600000000000000000000000",
+          "acquired_at": "2024-11-14T15:44:17",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.0030838",
+          "lot_cost_per_unit": "96264.34917958363058564109216",
+          "lot_cost_total": "296.8600000000000000000000000",
+          "acquired_at": "2024-12-12T07:05:23",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00302332",
+          "lot_cost_per_unit": "96265.03314237328499794927431",
+          "lot_cost_total": "291.0400000000000000000000000",
+          "acquired_at": "2024-12-12T10:07:16",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.003102",
+          "lot_cost_per_unit": "95199.87105093488072211476467",
+          "lot_cost_total": "295.3100000000000000000000000",
+          "acquired_at": "2025-01-04T07:05:40",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00317849",
+          "lot_cost_per_unit": "91990.22177197348426454070958",
+          "lot_cost_total": "292.3900000000000000000000000",
+          "acquired_at": "2025-02-12T15:03:23",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00389896",
+          "lot_cost_per_unit": "76061.30865666741900404210354",
+          "lot_cost_total": "296.5600000000000000000000000",
+          "acquired_at": "2025-02-28T09:09:23",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00127954",
+          "lot_cost_per_unit": "76785.40725573252887756537506",
+          "lot_cost_total": "98.25000000000000000000000000",
+          "acquired_at": "2025-03-12T12:24:41",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00069209",
+          "lot_cost_per_unit": "70409.91778525914259706107587",
+          "lot_cost_total": "48.73000000000000000000000000",
+          "acquired_at": "2025-04-07T06:35:28",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00137373",
+          "lot_cost_per_unit": "69300.37197993783348984152636",
+          "lot_cost_total": "95.20000000000000000000000001",
+          "acquired_at": "2025-04-09T04:58:32",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00129407",
+          "lot_cost_per_unit": "75420.95868075142766620043738",
+          "lot_cost_total": "97.60000000000000000000000000",
+          "acquired_at": "2025-04-15T15:47:30",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00349074",
+          "lot_cost_per_unit": "84171.26454562642878014403823",
+          "lot_cost_total": "293.8200000000000000000000000",
+          "acquired_at": "2025-05-01T06:31:40",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.0032",
+          "lot_cost_per_unit": "91931.25",
+          "lot_cost_total": "294.180000",
+          "acquired_at": "2025-06-01T06:46:05",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00325325",
+          "lot_cost_per_unit": "90721.58610620149081687543226",
+          "lot_cost_total": "295.1400000000000000000000000",
+          "acquired_at": "2025-07-01T07:04:02",
+          "disposed_at": "2025-12-03T08:22:52"
+        },
+        {
+          "from_qty": "0.00283811",
+          "lot_cost_per_unit": "99439.41566746884370232302483",
+          "lot_cost_total": "282.2200000000000000000000000",
+          "acquired_at": "2025-08-01T06:31:29",
+          "disposed_at": "2025-12-03T08:22:52"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-12-03T08:28:59",
+      "asset": "ETH",
+      "qty_sold": "1.763024118310617",
+      "proceeds": "4620.08",
+      "cost_basis": "4661.854957284072578604225060",
+      "gain": "-41.774957284072578604225060",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "from_qty": "0.003748943915159258",
+          "lot_cost_per_unit": "3651.381820473634446172475374",
+          "lot_cost_total": "13.68882565778776604087768667",
+          "acquired_at": "2025-08-20T16:26:23",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "from_qty": "0.063267329415918475",
+          "lot_cost_per_unit": "3219.671224952127410286740879",
+          "lot_cost_total": "203.7000000000000000000000000",
+          "acquired_at": "2025-11-03T22:02:59",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "from_qty": "1.696007844979539267",
+          "lot_cost_per_unit": "2620.545739091143826192135880",
+          "lot_cost_total": "4444.466131626284812563347373",
+          "acquired_at": "2025-12-03T08:22:35",
+          "disposed_at": "2025-12-03T08:28:59"
+        }
+      ]
+    }
+  ]
+}

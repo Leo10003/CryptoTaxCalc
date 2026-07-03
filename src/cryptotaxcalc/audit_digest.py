@@ -145,6 +145,41 @@ def build_run_manifest(run_id: int) -> Dict[str, Any]:
             "matches": json.loads(r["matches_json"] or "[]"),
         })
 
+    # Trust metadata (FX integrity + fee valuation) is stored in calc_runs.summary_json by calc_runner.
+    # We include it in the manifest for human/audit review, but we do NOT include it in manifest_hash
+    # to preserve backward compatibility of stored digests.
+    trust: Dict[str, Any] = {}
+    try:
+        raw_summary = run.get("summary_json") if isinstance(run, dict) else None
+        summary_obj: Any = raw_summary
+
+        if isinstance(summary_obj, str) and summary_obj.strip():
+            summary_obj = json.loads(summary_obj)
+
+        if isinstance(summary_obj, dict):
+            for k in (
+                "strict_fx_configured",
+                "strict_fx_effective",
+                "strict_fx_source",
+                "fx_batch_id",
+                "fx_fallback_used",
+                "fx_fallback_days_count",
+                "fx_fallback_days_sample",
+                "fx_fallback_pairs",
+            ):
+                if k in summary_obj:
+                    trust[k] = summary_obj.get(k)
+
+            fx_ctx = summary_obj.get("fx_context")
+            if isinstance(fx_ctx, dict) and fx_ctx:
+                trust["fx_context"] = fx_ctx
+
+            fee_val = summary_obj.get("fee_valuation")
+            if isinstance(fee_val, dict) and fee_val:
+                trust["fee_valuation"] = fee_val
+    except Exception:
+        trust = {}
+
     manifest: Dict[str, Any] = {
         "timestamp_built": _now_iso_z(),
         "run_id": run["id"],
@@ -171,6 +206,9 @@ def build_run_manifest(run_id: int) -> Dict[str, Any]:
         },
         "outputs": outputs,
     }
+
+    if trust:
+        manifest["trust"] = trust
 
     # Write debug manifest JSON for traceability
     try:
@@ -217,6 +255,7 @@ def compute_digests(manifest: Dict[str, Any]) -> Dict[str, str]:
     # Manifest hash must ignore volatile build timestamp
     manifest_copy = dict(manifest)
     manifest_copy.pop("timestamp_built", None)
+    manifest_copy.pop("trust", None)
     manifest_hash = _sha256_hex(_json_c14n(manifest_copy))
 
     digests = {

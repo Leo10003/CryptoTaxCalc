@@ -1,0 +1,150 @@
+2026-03-04T09:01:06.949388Z [ERROR] demo.launch: (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+Traceback (most recent call last):
+  File "sqlalchemy\engine\base.py", line 146, in __init__
+  File "sqlalchemy\engine\base.py", line 3302, in raw_connection
+  File "sqlalchemy\pool\base.py", line 449, in connect
+  File "sqlalchemy\pool\base.py", line 1263, in _checkout
+  File "sqlalchemy\pool\base.py", line 712, in checkout
+  File "sqlalchemy\pool\impl.py", line 179, in _do_get
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\impl.py", line 177, in _do_get
+  File "sqlalchemy\pool\base.py", line 390, in _create_connection
+  File "sqlalchemy\pool\base.py", line 674, in __init__
+  File "sqlalchemy\pool\base.py", line 900, in __connect
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\base.py", line 896, in __connect
+  File "sqlalchemy\engine\create.py", line 643, in connect
+  File "sqlalchemy\engine\default.py", line 621, in connect
+sqlite3.OperationalError: unable to open database file
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "cryptotaxcalc\demo_launcher.py", line 107, in <module>
+  File "cryptotaxcalc\demo_launcher.py", line 63, in main
+  File "cryptotaxcalc\demo_assets.py", line 118, in ensure_demo_env
+  File "sqlalchemy\sql\schema.py", line 5866, in create_all
+  File "sqlalchemy\engine\base.py", line 3252, in _run_ddl_visitor
+  File "contextlib.py", line 137, in __enter__
+  File "sqlalchemy\engine\base.py", line 3242, in begin
+  File "sqlalchemy\engine\base.py", line 3278, in connect
+  File "sqlalchemy\engine\base.py", line 148, in __init__
+  File "sqlalchemy\engine\base.py", line 2442, in _handle_dbapi_exception_noconnection
+  File "sqlalchemy\engine\base.py", line 146, in __init__
+  File "sqlalchemy\engine\base.py", line 3302, in raw_connection
+  File "sqlalchemy\pool\base.py", line 449, in connect
+  File "sqlalchemy\pool\base.py", line 1263, in _checkout
+  File "sqlalchemy\pool\base.py", line 712, in checkout
+  File "sqlalchemy\pool\impl.py", line 179, in _do_get
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\impl.py", line 177, in _do_get
+  File "sqlalchemy\pool\base.py", line 390, in _create_connection
+  File "sqlalchemy\pool\base.py", line 674, in __init__
+  File "sqlalchemy\pool\base.py", line 900, in __connect
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\base.py", line 896, in __connect
+  File "sqlalchemy\engine\create.py", line 643, in connect
+  File "sqlalchemy\engine\default.py", line 621, in connect
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-03-04T09:01:17.283231Z [ERROR] demo.launch: (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+Traceback (most recent call last):
+  File "sqlalchemy\engine\base.py", line 146, in __init__
+  File "sqlalchemy\engine\base.py", line 3302, in raw_connection
+  File "sqlalchemy\pool\base.py", line 449, in connect
+  File "sqlalchemy\pool\base.py", line 1263, in _checkout
+  File "sqlalchemy\pool\base.py", line 712, in checkout
+  File "sqlalchemy\pool\impl.py", line 179, in _do_get
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\impl.py", line 177, in _do_get
+  File "sqlalchemy\pool\base.py", line 390, in _create_connection
+  File "sqlalchemy\pool\base.py", line 674, in __init__
+  File "sqlalchemy\pool\base.py", line 900, in __connect
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\base.py", line 896, in __connect
+  File "sqlalchemy\engine\create.py", line 643, in connect
+  File "sqlalchemy\engine\default.py", line 621, in connect
+sqlite3.OperationalError: unable to open database file
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "cryptotaxcalc\demo_launcher.py", line 107, in <module>
+  File "cryptotaxcalc\demo_launcher.py", line 63, in main
+  File "cryptotaxcalc\demo_assets.py", line 118, in ensure_demo_env
+  File "sqlalchemy\sql\schema.py", line 5866, in create_all
+  File "sqlalchemy\engine\base.py", line 3252, in _run_ddl_visitor
+  File "contextlib.py", line 137, in __enter__
+  File "sqlalchemy\engine\base.py", line 3242, in begin
+  File "sqlalchemy\engine\base.py", line 3278, in connect
+  File "sqlalchemy\engine\base.py", line 148, in __init__
+  File "sqlalchemy\engine\base.py", line 2442, in _handle_dbapi_exception_noconnection
+  File "sqlalchemy\engine\base.py", line 146, in __init__
+  File "sqlalchemy\engine\base.py", line 3302, in raw_connection
+  File "sqlalchemy\pool\base.py", line 449, in connect
+  File "sqlalchemy\pool\base.py", line 1263, in _checkout
+  File "sqlalchemy\pool\base.py", line 712, in checkout
+  File "sqlalchemy\pool\impl.py", line 179, in _do_get
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\impl.py", line 177, in _do_get
+  File "sqlalchemy\pool\base.py", line 390, in _create_connection
+  File "sqlalchemy\pool\base.py", line 674, in __init__
+  File "sqlalchemy\pool\base.py", line 900, in __connect
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\base.py", line 896, in __connect
+  File "sqlalchemy\engine\create.py", line 643, in connect
+  File "sqlalchemy\engine\default.py", line 621, in connect
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-03-04T09:10:57.937194Z [ERROR] demo.launch: (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+Traceback (most recent call last):
+  File "sqlalchemy\engine\base.py", line 146, in __init__
+  File "sqlalchemy\engine\base.py", line 3302, in raw_connection
+  File "sqlalchemy\pool\base.py", line 449, in connect
+  File "sqlalchemy\pool\base.py", line 1263, in _checkout
+  File "sqlalchemy\pool\base.py", line 712, in checkout
+  File "sqlalchemy\pool\impl.py", line 179, in _do_get
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\impl.py", line 177, in _do_get
+  File "sqlalchemy\pool\base.py", line 390, in _create_connection
+  File "sqlalchemy\pool\base.py", line 674, in __init__
+  File "sqlalchemy\pool\base.py", line 900, in __connect
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\base.py", line 896, in __connect
+  File "sqlalchemy\engine\create.py", line 643, in connect
+  File "sqlalchemy\engine\default.py", line 621, in connect
+sqlite3.OperationalError: unable to open database file
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "cryptotaxcalc\demo_launcher.py", line 107, in <module>
+  File "cryptotaxcalc\demo_launcher.py", line 63, in main
+  File "cryptotaxcalc\demo_assets.py", line 118, in ensure_demo_env
+  File "sqlalchemy\sql\schema.py", line 5866, in create_all
+  File "sqlalchemy\engine\base.py", line 3252, in _run_ddl_visitor
+  File "contextlib.py", line 137, in __enter__
+  File "sqlalchemy\engine\base.py", line 3242, in begin
+  File "sqlalchemy\engine\base.py", line 3278, in connect
+  File "sqlalchemy\engine\base.py", line 148, in __init__
+  File "sqlalchemy\engine\base.py", line 2442, in _handle_dbapi_exception_noconnection
+  File "sqlalchemy\engine\base.py", line 146, in __init__
+  File "sqlalchemy\engine\base.py", line 3302, in raw_connection
+  File "sqlalchemy\pool\base.py", line 449, in connect
+  File "sqlalchemy\pool\base.py", line 1263, in _checkout
+  File "sqlalchemy\pool\base.py", line 712, in checkout
+  File "sqlalchemy\pool\impl.py", line 179, in _do_get
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\impl.py", line 177, in _do_get
+  File "sqlalchemy\pool\base.py", line 390, in _create_connection
+  File "sqlalchemy\pool\base.py", line 674, in __init__
+  File "sqlalchemy\pool\base.py", line 900, in __connect
+  File "sqlalchemy\util\langhelpers.py", line 146, in __exit__
+  File "sqlalchemy\pool\base.py", line 896, in __connect
+  File "sqlalchemy\engine\create.py", line 643, in connect
+  File "sqlalchemy\engine\default.py", line 621, in connect
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) unable to open database file
+(Background on this error at: https://sqlalche.me/e/20/e3q8)

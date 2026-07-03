@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-07-03T00:18:22Z",
+  "actor": "local-user",
+  "action": "import:file",
+  "target_type": "raw_events",
+  "target_id": 1022,
+  "details": {
+    "filename": "ledgerwallet-operations-2025.12.03.csv",
+    "sha256": "cf98f52344cccb418a5683f39ad11f11577bb87e1d4e6a6f08bbecb3e7d798f3"
+  },
+  "ip": null
+}

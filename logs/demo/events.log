@@ -1,0 +1,2 @@
+2025-11-06T12:34:54Z [WARNING] cryptotaxcalc.demo: DB check failed: Not an executable object: 'SELECT 1'
+2025-11-06T16:06:28Z [WARNING] cryptotaxcalc.demo: ExportOptions signature mismatch: ExportOptions.__init__() got an unexpected keyword argument 'include_env'; using minimal options.

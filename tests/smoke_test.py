@@ -433,14 +433,24 @@ def test_support_bundle_contains_evolve_artifacts():
         root = pathlib.Path(__file__).resolve().parents[1]
         script = root / "automation" / "collect_support_bundle.py"
         assert script.exists(), f"collector missing: {script}"
+        env = os.environ.copy()
+        env.setdefault("PYTHONUTF8", "1")
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+
         proc = subprocess.run(
             [os.sys.executable, "-u", str(script),
              "--api-base", os.getenv("API_BASE", "http://127.0.0.1:8000"),
              "--tail-lines", "200",
              "--keep-zips", "5"],
             cwd=str(script.parent),
-            capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=600
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+            env=env,
         )
+
         # parse ::zip:: marker
         zip_path = None
         for line in (proc.stdout or "").splitlines():
@@ -455,12 +465,26 @@ def test_support_bundle_contains_evolve_artifacts():
         else:
             zip_path = pathlib.Path(zip_path)
 
-        assert zip_path and pathlib.Path(zip_path).exists(), (
+            # Windows locale/encoding guard: stdout decoding may drop non-ASCII chars in the absolute path.
+            # Re-resolve by filename inside the known support_bundles directory.
+            if not zip_path.exists():
+                candidate = (root / "support_bundles" / zip_path.name)
+                if candidate.exists():
+                    zip_path = candidate
+
+            # Final fallback: newest zip in support_bundles
+            if not zip_path.exists():
+                time.sleep(1.0)
+                latest = _latest_zip_in_support_dir()
+                if latest and latest.exists():
+                    zip_path = latest
+
+        assert zip_path and zip_path.exists(), (
             "No bundle zip was produced by API or CLI.\n"
             f"API tries: {tried}\n"
             f"CLI rc={proc.returncode}\nSTDOUT:\n{proc.stdout[-500:]}\nSTDERR:\n{proc.stderr[-500:]}"
         )
-        _validate_evolve_and_diagnostics(pathlib.Path(zip_path))
+        _validate_evolve_and_diagnostics(zip_path)
         return
 
     # API success path

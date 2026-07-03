@@ -74,7 +74,38 @@ def compute_fifo(
     start_ts = _now_iso_z()
     logger.info(f"FIFO run started at {start_ts}, transactions={len(transactions)}")
 
-    txs = sorted(transactions, key=lambda t: t.timestamp)
+    def _tx_sort_key(t: Transaction) -> tuple:
+        """
+        Stable, deterministic ordering for FIFO.
+        If multiple rows share the same timestamp, we fall back to a composite key
+        so results do not depend on input list order.
+        """
+        try:
+            ts = t.timestamp.isoformat()
+        except Exception:
+            ts = str(getattr(t, "timestamp", "") or "")
+
+        def _s(v) -> str:
+            # Normalize for deterministic comparisons (avoid None, Decimal ordering quirks, etc.)
+            if v is None:
+                return ""
+            return str(v)
+
+        return (
+            ts,
+            _s(getattr(t, "type", "")).strip().lower(),
+            _s(getattr(t, "base_asset", "")).strip().upper(),
+            _s(getattr(t, "base_amount", "")),
+            _s(getattr(t, "quote_asset", "")).strip().upper(),
+            _s(getattr(t, "quote_amount", "")),
+            _s(getattr(t, "fee_asset", "")).strip().upper(),
+            _s(getattr(t, "fee_amount", "")),
+            _s(getattr(t, "exchange", "")).strip(),
+            _s(getattr(t, "memo", "")).strip(),
+            _s(getattr(t, "fair_value", "")),
+        )
+
+    txs = sorted(transactions, key=_tx_sort_key)
     lots: Dict[str, Deque[Lot]] = {}
     events: List[Realization] = []
     warnings: List[str] = []
@@ -162,10 +193,10 @@ def compute_fifo(
             acquired_at,
         )
 
-    def consume_lots(asset: str, qty_to_sell: Decimal) -> Tuple[Decimal, List[Match], List[str]]:
+    def consume_lots(asset: str, qty_to_sell: Decimal, event_ts: str) -> Tuple[Decimal, List[Match], List[object]]:
         cost_total = Decimal("0")
         matches: List[Match] = []
-        local_warnings: List[str] = []
+        local_warnings: List[object] = []
 
         remaining = qty_to_sell
         asset_lots = lots.get(asset)
@@ -195,9 +226,21 @@ def compute_fifo(
                 asset_lots.popleft()
 
         if remaining > 0:
-            local_warnings.append(
-                f"Selling {qty_to_sell} {asset} but only {qty_to_sell - remaining} available. Zero basis for {remaining}."
-            )
+            local_warnings.append({
+                "type": "missing_history",
+                "severity": "blocker",
+                "asset": asset,
+                "missing_qty": str(remaining),
+                "sold_qty": str(qty_to_sell),
+                "timestamp": event_ts,
+                "message": (
+                    f"Sold {qty_to_sell} {asset} but no acquisition history was found "
+                    f"for {remaining} {asset}."
+                ),
+                "action_required": (
+                    "Import earlier trades, deposits, or transfers before exporting."
+                ),
+            })
             matches.append(
                 Match(
                     from_qty=remaining,
@@ -391,7 +434,7 @@ def compute_fifo(
                 # Base-asset fee is modeled as additional disposed quantity with zero proceeds.
                 qty_disposed = qty_sold + fee_in_base
 
-                cost_total, matches, local_w = consume_lots(asset, qty_disposed)
+                cost_total, matches, local_w = consume_lots(asset, qty_disposed, t.timestamp.isoformat())
                 warnings.extend(local_w)
                 gain = proceeds - cost_total
 

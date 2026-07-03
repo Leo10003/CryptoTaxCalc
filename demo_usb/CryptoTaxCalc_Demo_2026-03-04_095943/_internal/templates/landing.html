@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}CryptoTaxCalc — Smart, Compliant, Clear{% endblock %}
+
+{% block head_extra %}
+  <style>
+
+    .hero-shell {
+      position:relative;
+      overflow:hidden;
+      border-radius:24px;
+      margin:38px auto 0;
+      max-width: 100%;
+      border:1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-inner {
+      padding: 80px 16px 56px; text-align:center;
+    }
+
+    .cta { display:flex; gap:12px; justify-content:center; }
+
+    .glow-line {
+      margin:36px auto 0; height:2px; width:min(720px,80%);
+      background: linear-gradient(90deg, var(--brand), var(--accent));
+      filter: blur(.3px); opacity:.7;
+    }
+
+    section { margin-top: 64px; }
+
+    h2 { font-size: 28px; margin: 0 0 16px; }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .card {
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      border: 1px solid var(--border); border-radius: 20px; padding: 16px;
+      box-shadow: var(--shadow);
+      transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 14px 34px rgba(12,230,200,.16);
+    }
+
+    .muted { color: var(--muted); }
+
+    .trust-row {
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+      justify-content:flex-start;
+    }
+
+    .trust-row .badge {
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .preview-card {
+      margin-top:18px;
+      border-radius:20px;
+      overflow:hidden;
+      border: 1px dashed var(--border);
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+    }
+    .preview-card img {
+      display:block;
+      width:100%;
+      height:auto;
+    }
+
+    @keyframes floaty {
+      from { transform: translate3d(0, 0, 0); }
+      to   { transform: translate3d(-2%, 2%, 0); }
+    }
+
+    /* Responsive adjustments for landing */
+
+    @media (max-width: 768px) {
+      .hero-inner {
+        padding: 56px 14px 36px;
+      }
+      section {
+        margin-top: 40px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero-shell {
+        margin-top: 28px;
+        border-radius: 20px;
+      }
+
+      /* Stack CTAs vertically on small screens */
+      .cta {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .cta .btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .card {
+        padding: 14px;
+      }
+    }
+
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="wrap">
+    <!-- HERO -->
+    <section class="hero-shell">
+      <!-- Soft background glows (psychology: calm, non-gamified motion) -->
+      <div aria-hidden="true" style="
+        position:absolute; inset:-20%;
+        background:
+          radial-gradient(60% 60% at 30% 20%, color-mix(in srgb, var(--brand) 30%, transparent), transparent),
+          radial-gradient(50% 50% at 80% 30%, color-mix(in srgb, var(--accent) 30%, transparent), transparent);
+        filter: blur(60px);
+        animation: floaty 14s ease-in-out infinite alternate;
+      "></div>
+
+      <!-- Cursor glow (attention subtly guided to center) -->
+      <div id="cursor-glow" aria-hidden="true" style="
+        position:absolute; width:280px; height:280px; border-radius:50%;
+        background: radial-gradient(closest-side, color-mix(in srgb, var(--brand), transparent 70%), transparent);
+        pointer-events:none; mix-blend-mode: screen; opacity:.45; transform: translate(-50%, -50%);
+      "></div>
+
+      <div class="hero-inner">
+        <h1 style="font-size: clamp(28px, 5vw, 48px); margin: 0 0 12px;">
+          Your crypto taxes — calculated, compliant, and clear.
+        </h1>
+        <p style="color: var(--text-soft); margin: 0 0 20px;">
+          Clear, informational reports to help you prepare — not tax advice.
+          Everything here runs fully offline in Demo Mode.
+        </p>
+        <div class="cta">
+          <a class="btn btn-cta btn-primary" href="/demo/dashboard" aria-label="Open the interactive demo dashboard">
+            Try the Demo
+          </a>
+          <a class="btn" href="/docs" aria-label="Open API documentation">
+            API Docs
+          </a>
+        </div>
+        <div class="glow-line"></div>
+      </div>
+    </section>
+
+    <!-- TRUST STRIP + PREVIEW -->
+    <section id="trust">
+      <div class="trust-row">
+        <div class="badge">No account required</div>
+        <div class="badge">Local-first demo</div>
+        <div class="badge">Open schema</div>
+        <div class="badge">HR &amp; IT flows</div>
+      </div>
+
+      <div class="preview-card">
+        <img src="/static/demo_preview.png" alt="Demo dashboard preview" loading="lazy"
+             onerror="this.closest('.preview-card').remove();">
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="reveal">
+      <h2>Why CryptoTaxCalc</h2>
+      <div class="grid">
+        <div class="card">
+          <strong>🔒 Security-focused</strong>
+          <p class="muted">Local processing and optional encryption.</p>
+        </div>
+        <div class="card">
+          <strong>💹 Accurate insights</strong>
+          <p class="muted">Clear summaries of proceeds, costs and gains.</p>
+        </div>
+        <div class="card">
+          <strong>⚙️ Compliance-ready</strong>
+          <p class="muted">HR &amp; IT flows demonstrated in demo mode.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how" class="reveal">
+      <h2>How it works</h2>
+      <div class="grid">
+        <div class="card"><strong>1️⃣ Import</strong><p class="muted">Upload multiple CSVs or load demo data.</p></div>
+        <div class="card"><strong>2️⃣ Calculate</strong><p class="muted">FIFO engine with FX normalization.</p></div>
+        <div class="card"><strong>3️⃣ Export</strong><p class="muted">Generate PDF / CSV + diagnostics bundle.</p></div>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (function() {
+      // Cursor-reactive background (psychology: keeps user engaged but not overwhelmed)
+      const body = document.body;
+      const glow = document.getElementById('cursor-glow');
+      body.addEventListener('mousemove', (e) => {
+        if (!glow) return;
+        glow.style.left = e.clientX + 'px';
+        glow.style.top = e.clientY + 'px';
+      }, { passive: true });
+
+      // Build badge: non-critical trust signal
+      fetch('/demo/build_info')
+        .then(r => r.ok ? r.json() : null)
+        .then(info => {
+          if (!info) return;
+          const el = document.getElementById('footerStatus');
+          if (!el) return;
+          const v = info.version || 'dev';
+          const c = info.commit || 'local';
+          const b = info.build || 'n/a';
+          const s = info.status || 'ready';
+          el.textContent = `Version: ${v} • Commit: ${c} • Build: ${b} • Status: ${s}`;
+        })
+        .catch(() => {});
+    })();
+
+    // Gentle CTA pulse using glow.js (if loaded)
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.glow) glow.pulse('.btn-primary');
+    });
+  </script>
+{% endblock %}

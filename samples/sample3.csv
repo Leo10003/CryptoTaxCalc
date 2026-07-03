@@ -1,0 +1,11 @@
+timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo,fair_value
+2019-01-01T12:00:00,BUY,BTC,1,EUR,4000,,,Binance,Old BTC long term buy,
+2024-01-01T12:00:00,BUY,BTC,1,EUR,30000,,,Binance,Recent BTC buy,
+2024-06-01T12:00:00,SELL,BTC,1.5,EUR,52500,,,Binance,Sell 1.5 BTC mix old new,
+2024-02-01T10:00:00,BUY,ETH,10,EUR,20000,,,Binance,ETH buy 10 @ 2000,
+2024-10-01T10:00:00,SELL,ETH,10,EUR,70000,,,Binance,ETH sell 10 @ 7000,
+2024-03-01T09:00:00,TRANSFER_IN,BTC,0.2,,,,,Wallet,Wallet transfer in ignored,
+2024-03-02T09:00:00,TRANSFER_OUT,BTC,0.2,,,,,Wallet,Wallet transfer out ignored,
+2024-04-01T08:00:00,INCOME,SOL,5,EUR,500,,,Binance,Staking reward SOL,
+2024-12-01T08:00:00,SELL,SOL,5,EUR,800,,,Binance,Sell staking SOL,
+2025-01-01T10:00:00,BUY,BTC,0.3,EUR,15000,,,Binance,New BTC position still open,

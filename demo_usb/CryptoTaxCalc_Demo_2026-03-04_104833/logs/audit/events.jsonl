@@ -1,0 +1,6 @@
+{"timestamp": "2026-03-04T09:49:38Z", "level": "INFO", "component": "audit", "message": "AUDIT local-user → import:file [raw_events:1]", "logger": "cryptotaxcalc.audit"}
+{"timestamp": "2026-03-04T09:49:39Z", "level": "INFO", "component": "audit", "message": "AUDIT local-user → import:file [raw_events:2]", "logger": "cryptotaxcalc.audit"}
+{"timestamp": "2026-03-04T09:49:39Z", "level": "INFO", "component": "audit", "message": "AUDIT local-user → import:file [raw_events:3]", "logger": "cryptotaxcalc.audit"}
+{"timestamp": "2026-03-04T09:49:39Z", "level": "INFO", "component": "audit", "message": "AUDIT local-user → import:file [raw_events:4]", "logger": "cryptotaxcalc.audit"}
+{"timestamp": "2026-03-04T09:49:39Z", "level": "INFO", "component": "audit", "message": "AUDIT local-user → import:file [raw_events:5]", "logger": "cryptotaxcalc.audit"}
+{"timestamp": "2026-03-04T09:49:40Z", "level": "INFO", "component": "audit", "message": "AUDIT local-user → import:file [raw_events:6]", "logger": "cryptotaxcalc.audit"}

@@ -1,17 +1,53 @@
 # === BEGIN: autosync safety additions ===
-support_bundles/
-support_bundles/_meta/*.log
-support_bundles/_meta/export_error_*.txt
-artifacts/
-logs/
-*.log
-*.zip
-*.rar
-__pycache__/
-.venv/
+
+# Secrets
+env/
 .env
 .env.*
-*.env
+!.env.example
+
+# Local/runtime databases
+cryptotaxcalc.db
+cryptotaxcalc.db-wal
+cryptotaxcalc.db-shm
 *.sqlite
 *.db
+
+# Raw uploads, run artifacts, and support bundles (can contain sensitive data)
+storage_raw/
+artifacts/
+support_bundles/
+backups/
+
+# Build outputs
+dist/
+build/
+pyinstaller/
+*.spec
+
+# Python packaging metadata
+*.egg-info/
+
+# Caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+
+# Virtual env / IDE
+.venv/
+.vs/
+.vscode/
+.idea/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Large demo dumps (keep repo lean; keep only small curated samples tracked)
+samples/*_3500.csv
+samples/ledgerwallet-operations-*.csv
+
 # === END: autosync safety additions ===

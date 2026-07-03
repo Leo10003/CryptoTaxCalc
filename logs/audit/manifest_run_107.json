@@ -1,0 +1,879 @@
+{
+  "timestamp_built": "2026-02-08T21:07:09Z",
+  "run_id": 107,
+  "run": {
+    "id": 107,
+    "started_at": "2026-02-08 21:07:07.267686",
+    "finished_at": "2026-02-08 21:07:09.657295",
+    "jurisdiction": "HR",
+    "rule_version": "2025.1",
+    "lot_method": "FIFO",
+    "fx_set_id": 152,
+    "params": "{\"jurisdiction\":\"HR\",\"rule_version\":\"2025.1\",\"lot_method\":\"FIFO\",\"fx_source\":\"HNB\",\"holding_exemption_days\":730,\"it_threshold_eur\":null,\"round_dp\":2,\"include_tax_helpers\":true,\"include_audit_appendix\":true,\"strict_fx\":false}"
+  },
+  "fx_batch": {
+    "id": 152,
+    "imported_at": "2026-02-07T23:06:06.050295+00:00",
+    "source": "runtime-self-heal",
+    "rates_hash": null
+  },
+  "inputs": {
+    "mode": "snapshot",
+    "cutoff_finished_at": null,
+    "transactions_hashes_ordered": [
+      "0082d4932b6a440abd4b20046a126957a036bd8490521cbbe8cae19fd8d06fdb",
+      "01b21d7c74fecd9ac5dce53f2b25ab9d585005e7c623bb74a86414ca9cc6d85e",
+      "032d7e987e318c8146a421d6d679bff3e953087fa26e7ea49d4f3225ea36cb5c",
+      "05ba2c051943f1a7cdfd12ba39a27e1fef9767cd0abd09f2d683ca7c1cb5c748",
+      "0a8a9e9d48bf4a7a5df004fc5ed289fa9f0004be68e3793e87570e19c5ede30f",
+      "0bbc657f54074272cc03ad1ef9e4f127ff49b5dbca3035565e21203aee49c27c",
+      "0cd827a2f6bc4c24b004433cd0da78e7d7635130e35351f666e6783b0f1de162",
+      "12f90af41db5b999379562d2489537f912e7cf7df7de72c8f78e3c9f686bead0",
+      "1791dba8897e8aff6f5ecff48b82393654d0baa3b0adcb6b8bb166ca409827f4",
+      "17f568f478bbb7aaea952e32495b11bb5333955b832050bf015d8228f3cad8e8",
+      "1accc0b7a6a55f7b8202b6e765f39298b25fee2a37b372cdfd61b28c88982ce4",
+      "1bd0ce735f58f9d4568eaa6d48dff1706efa4dd305a0ec2c21fb2f37fa63c140",
+      "1c06ae8dd36a8a4a85aea9523461c063a871bfc4d11179faa2d5b0a6dfd824e4",
+      "1dcfb2aa16c63de93277ee3133b34aa0945bac86474096d84b6e3c15134edb0f",
+      "1e117bf884ba227a43ef51a40aae31cc312d8d9d5477900d62ea1f7e8c926067",
+      "208ccceae8aa27edf349279f3c97ffd48c5b5bd8a78f245d503128da2c141ee5",
+      "20aac0ecc43ec7f772923da707222a9b875d143ecfdeeda6080107f5b87c22a7",
+      "2343d30690d551f184fc16f2a8574e15a3c773977f5802b8c2d8b18cb5456e65",
+      "2440f62b3ab5e26eedc0f7b4ac9268536c7ecea1eec0c0261f5a5f128783452c",
+      "25abe522d9522d599fd9cba237ca249687d479cdaf07dac02fa18daecd286d1a",
+      "27a42e7a484a701f6fb359495332bab066d6b026e1d446f693f0d2c38c075623",
+      "3060323c57d9d353f7a0e84cb9ead001418eb3748a2df70887d058c2f6c87250",
+      "3192ad5aa7712c5ac4b325e7abd34dd5d1d67f96126904555ca7635d2ac195c3",
+      "355acf60e2264bedb1d7793b8153568232a4b636f879197fee0e858b005bc53d",
+      "36266d91367a2a27ea10626ed45f6c704b808ccef43546fcabcfe1530c191b78",
+      "37b0e0b9b5508f3d00e7ac2cda6df5adbe500ec7618bc1c86966b40684139df9",
+      "3995188798bd257a19c3e7794133bd9829246ed32d672f642b808d6062071c38",
+      "39edfa219a7edaf90dd4b7d6259aa4e94cb291d1aaeda3473887b3bf231f5ca1",
+      "40156439e87c06808192cca940be63b1d8d359dbe9fa63423710bf1fb499fdaf",
+      "403bbaa6ea559701daa5cad6b781f0648303fe900cafc515a077f56e0de3cc6d",
+      "43bef1e98e8439cc7fa9f4bb06b0981895d2e4e42bdea1fe1371bf1725035416",
+      "44e98fb76c7b45f9d1dd392bdef9cf8dce8c71b1c287392bd02c69a75f4ac601",
+      "46f65251298dc4ad2aaa0dbfa0843420db9567d42e8398c240d8d5d599ecf2bd",
+      "478fbe5138b55cea10d8ce3c25419aab4c71c82a052ac8cba357e8daed4ba7cc",
+      "47fa052acb5e219b082ebd7b08fbc5ef8e450fb0f33a55dc93a9e08e6a0f581c",
+      "4a3e33c8b71a62c01c7b920f0085be4915ab8e814bf64586919d9c9bd4eccd00",
+      "4ccfe3f615d21bf40316c4e5f47e583ebde0b8e91d11249be160aff100c09ee0",
+      "4d1dc4c4b26c4783dfd080ed811066f93903e63c00df85feb5252f346d508fa1",
+      "4eb2f7202764fc834351811b31b53cc96076c260c0f93eeaecf53ae7979a63d8",
+      "4f6ff77a12f2f1e94d7f096a61946f4376c1be2ad609f7633fd60d0b9776b363",
+      "500fe078c89472fbce9a927535b9abb878fd27606a02c09424e564fda647e79e",
+      "502116397d4e9557a03a9ed7179a16ecbbd5363ca266594de32693913626dc82",
+      "51eacc2d7153c11779ab6d0a762b2c7c09cd2274e1ff50c9afcdcf0a88242704",
+      "556d115a1a774af7ecab42a93efbeffc78395c5a1241947211237ae31673cdc5",
+      "559d163ad8d322aae50627b40fb07e1c20d01fd4b94fc9a733b0e7bf898f6895",
+      "55c53e83453571c963173dc65e9146127c3fc95e46038981488071b73f028e74",
+      "57b595f7aaf8981584618fb346bed3d750601b939e85ea756def3b9d0013ef52",
+      "583cdbeac88dc72d0c9c304d127c2802f458318cd3d44c23d8a6a8a8d9f5f4d4",
+      "5b2f518f92fed1a22abf2117c60237979d85dc99599fe44cf3a913b082b6a751",
+      "5d3533f3dd2a642118564509006a81273d73366bade5e123843923dd488eaaba",
+      "63433127c26f32e4b8776e65073aea951da29d244418fc521202d781ccff6eb8",
+      "671e221e697405bb00adfe85465618d5bf55853fbf372fcc90d6f42808d8755b",
+      "67507da7a201aab5d7bbc4fc4791e310401c747ac2a77e2beae68585a170b9d1",
+      "67545e7c54cbdc2118da0da9f01b9036ad62bcc045acf066c819768c6280296a",
+      "678ca2ae3f2217fb0287872e9aa86ce42a5e0e48846aa72ac7fdbb38fe901b78",
+      "6ebb5bb14c72d6351cb0f0f13a176c68dfcce00e3ee7b96803cbe4af9a7c70e8",
+      "6ec93d1fc7e6c18899fa63e14c7fc66393d1264009958d0c384bc4253b8b3f41",
+      "72667aa56c167b7c5e08be8748b1fdd6389c64405eef2b43251f5dfa64b2e0ff",
+      "76ae77fcdda701e4b99a4644db8c792e3373e6bbe8dad13abbe2d878b074a7a2",
+      "7807ca309706a52ae7dee2cb5166377b75995a273df631ad57faeee589ab8610",
+      "786f88ed68b9c1f51062efc7469dbeb00db2284c5b32918721d3e6d3073a805a",
+      "7e6f0900476e4b58158830659f6df0d4eaa3369849c275baecacd3aaa0ab19a6",
+      "7e812d3a0e59c47c79d4230aa7d2b3982510aef831b29055c7c90b892a74c90d",
+      "7f6428eb6ce59ab24e1b3a1d01ab6ea2784e0c411a563a7f66a421f5d0b644b9",
+      "82c309b4b1a79e00474d23f1c1dfe7d5007257145bceafed40cc57837310ad04",
+      "84d4d2fc58ead054f5335bbd6ebbb021f58fdad4303c730ed2402982027aa360",
+      "8588d4921bd63510f759f6a708660e2f4e09c873bb76a89afc8b2d12985a9739",
+      "8a3f5b3f0d276802ddd39ec715300916b06920af8b1a801e4d27de6556f629c8",
+      "8caee4b415c2a33659fd2524fce5fbaef9c2d56eb62474b6a566a0ce19fc97da",
+      "8d66fccbf7e14de05398fb9082b141cfb71247646c7a53b2653d2e258da38482",
+      "8e839978d914a4fa6e58d6d6bba7c0f7819faf2b5af1b34f33b355340321e18b",
+      "90158fc086b107fb6db95ace2146c6804349528808b04f2ec63813bd2399df86",
+      "901df96866f5ca2d18c05b9e9586078014c82293f928a70faedbc227942954f2",
+      "9150c54d501b04a54be59b31b3b32ac9b00c2d81e3ba88bdc8c747f48d185e8a",
+      "92bf0e60bd527bc1fcac61a6ed00312977848edaf4e7f6cc533b8fb16192a337",
+      "96a731d7796480a6e50f034ba2d8d88edfa4d6915e3132954445c3efb225cf31",
+      "977778a5c5d0c578b80a7131cddac9efd46aea1c397f70a23afdbfed3f7ce52c",
+      "9a98e5b6d4bcc576022b2f983fba28112e689e1ff44b8551907273f4f02fa8c1",
+      "9b5af4f4f3a2aa27281a0b96eaaa95a56f4d5c083543226b53789bee2c813250",
+      "9d4ed11d5a5910e991b2cf12d8a3455db08504d493447269ff38334fd8eeb300",
+      "9e1fb76dfbe8d93b912905941003587a41ceeee5b50729f4e7d0f4ccf8059b5c",
+      "a2173ac77c52cf6a1425006643708d4e5dad3514569544821bf67a4028281f96",
+      "a2dfd97db7664953abe39120c5ac19808cc9136f80bd68d51259fb45fcbe82ca",
+      "a55e161574ca3dd2b78163de51d45ef9b2161b5ce340eaa83018307931a0458b",
+      "a6b075816a6ce2d7ca9bf46cdb489f38c1ab5aaf854992f449c1a1b5f7b50b93",
+      "a750a2dbbbdcab26b5f4793a44b8eedb5bc61544cc4e666257e21a79e42dcc02",
+      "aa60c35f9fdff842aeee58676c2f28f505acd87928ad343c7ec60fd0803ab1e6",
+      "ab9bddaef25eb8523e843905b0480b77f84754c0bdecc4ab65d1323c759cc332",
+      "ad8f84d506ce18f0a491d0cdffcef9d1760769d4c2c94e930f13f126723b29fa",
+      "adacd9e24a663986441dfa411afa6639f65c3b4992120dfb49aa28fdf3acba50",
+      "aff78b591cc894c7cf98fc746d66a759e178873df2005b0c996d9f6650dd11c3",
+      "b4f388e0c647d9670c10bdb625b9fef67c771c50d35d97984a021273fbdb8f01",
+      "bd1f5eb28b41e389c01f3515d6e6ece301282ae1a3b4255aa0c35dc971de5495",
+      "bd3c2336689c64a06d1ec6ba37c2b96892e51541cead5101534f0c32d0b18cfa",
+      "bdbf81566b9552e17e3bc9aa283692557ab3f0043745b68ba9c48f4e3b32a33c",
+      "be89510ca38da902b644c9827d559409e2c6c9d4965a6fb2511bf7c0f34984b4",
+      "c0cc5c04221fc45a19c816ac96b7f8bfd734c5b5a43d287cbb489756e105c433",
+      "c184a17df40b93c977ab8997f1e681bd7ab9b5f7a252d2853c734406c22bb36c",
+      "c2586954bf793835615cc65512841e260fdf560d691e878280292275b912c892",
+      "c303f89e522f264d3c6efc3aa14c366065af0cfa1e651c867894e1657dfa39e0",
+      "ca5252fdca34473b7f8f57b8b05c6088f0cd08bc1cdfd81381eb958cdb7bb742",
+      "cae851c488294fe4cdb2c70ebedbcacc1c7943cd1d75b51661a6b3b9754f939d",
+      "cdead66ef765c755b2c36fd6e943ecafa0978903f2903ebd779ce6faa22c5f1c",
+      "cec22126e77a10c2008114255e1c9db459b6add5dfbc652f30109495882a8e03",
+      "d101088926127620bc7e628c3ad06940d8fe17675efa01188c250db125d813ac",
+      "d1b07587448bd0177f2f1adb1b125c2e826b5efd7c4def17c92b25cf7ded939d",
+      "d1ef6e63faf7b509c50688908b0c377a36d4c09502531c0a60155fae17c2751d",
+      "d21764e2a0176ca5141f9b7f1f849cbe9509c4bcc090eecc1c2be6d705e997c3",
+      "d3fc7aebbf126a4519329d728e9fa8b3d3f707bb82f62f678f7e79e6aa65d8a3",
+      "d5675b7c7ed18fe0b59d255ab2c93af82a99cb153e9b5e58c6eadd0d61a2cd63",
+      "d650438c7eea3be3b5f4b6954465bd1df3c13ce148d074326c8a4305ee31ec27",
+      "d87829dec2bc9c87ade4282f3f4b7c88cf6018a55403118fec44b2a6f748cf85",
+      "da6e2d35c7c1f6ed334882bb92b166abbdf3c27d4c2108548758727ef33d20b0",
+      "dcf4124a3d02a0f05b2e89e3ab084437547d8a5a01f29cffa51ef6f74cac2a6a",
+      "ddaec402ce28ebf324f613e565bcb0f1d0bcf83af5f153f56665f3cc9582486b",
+      "ddf54e38e2b4fe23420a058369b978986c025e6bde7dd09651e0996b910a434b",
+      "de3ec4e16e7fed5e52e9cb3ca78b18e6bb146c356c258cee016fe790280187be",
+      "df429646f489e15b85b1593795110bec995f1bd5094e1ff24c10aa946103d890",
+      "e25b87efb6682e23a9a9aa3cde217b3497dd869d10c58fcc9243902c470f932b",
+      "e2c9a35e00a32c122d9456d40bc708c5141067103bd4e3c3cfa286c7eabbfdda",
+      "e354249569c93d330e4d547834a8038469212f298449c489fce40964f6bf5ca5",
+      "e4e310ff253f402cf6ceb65c787d6ceba1ba0799cf892f89156b51041e7d835f",
+      "e572fbef741321244c0d636018a93c491a341c7e90048433692e760c0cc603af",
+      "e6e5941e7f19d3114212be56f339bc1a1c4e6e8170dc1c49e972af4996daac52",
+      "e71828aeef4207df87d083dd979117582255939c24c265f6f666e0403c4c1366",
+      "e9e97b02f43b8de0c25922dd0449205699f7ea83815855230c2d294cb7629666",
+      "ec1515f240c0115baeee3c6d96f829b1e613a10e5cd4c49dff1423d81bf534a1",
+      "ecbb4297941312fcb7521ae28d835794dda41a12ef0240291981ccb4a932758a",
+      "f56a8350327b2f5340c020cc86fc7af50a7b233a599f945856252e55aa46662e",
+      "f7a06b4b739622b84c1a79427f70ae9aeda827f594bb34d798806053537adf24",
+      "f805f0e73909c814020a3b87bcd6302dfd0fc833bba28fed16a6ab5f0528293a",
+      "f813b6cbbbf2fdc4ad178784d511267fc75f63277aac4c0d2b8908b1ac69ff84",
+      "f83f8f4e2fbd707f94da8e184e25800377102e8445abedc3e13d723e730a4869",
+      "f8bf097c9f6ab61951c1c2dbfffd8489773531d7f8a00e70977616cb4c960baf",
+      "f9607f83c75cf8935f074580526346a0fff7c5b13addeb9eb86ebc10d0713592",
+      "fa197d94424ce47c9d1f0ec561a62ffecd5e979fd12cd39b5ba8dd43275abdc7",
+      "fbe503ebb212bf408f00d5e4bf2ea0d3dcf8ca27d63ac00686c43a5d239e1f7d"
+    ]
+  },
+  "outputs": [
+    {
+      "timestamp": "2022-03-18T13:50:47",
+      "asset": "BTC",
+      "qty_sold": "0.00010594",
+      "proceeds": "2.43000000",
+      "cost_basis": "4.653395979020979020979020979",
+      "gain": "-2.223395979020979020979020979",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "2.43000000",
+          "cost_eur": "4.653395979020979020979020979",
+          "acquired_at": "2022-03-18T12:41:48",
+          "disposed_at": "2022-03-18T13:50:47"
+        }
+      ]
+    },
+    {
+      "timestamp": "2022-06-14T20:33:12",
+      "asset": "BTC",
+      "qty_sold": "0.00050164",
+      "proceeds": "2.43000000",
+      "cost_basis": "36.18799854878131577160703374",
+      "gain": "-33.75799854878131577160703374",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "1.703480184993222231082050873",
+          "cost_eur": "15.44660402097902097902097902",
+          "acquired_at": "2022-03-18T12:41:48",
+          "disposed_at": "2022-06-14T20:33:12"
+        },
+        {
+          "proceeds_eur": "0.3203410812534885575312973448",
+          "cost_eur": "20.10000000000000000000000000",
+          "acquired_at": "2022-03-18T12:47:00",
+          "disposed_at": "2022-06-14T20:33:12"
+        },
+        {
+          "proceeds_eur": "0.4061787337532892113866517823",
+          "cost_eur": "0.6413945278022947925860547220",
+          "acquired_at": "2022-04-16T05:51:53",
+          "disposed_at": "2022-06-14T20:33:12"
+        }
+      ]
+    },
+    {
+      "timestamp": "2022-11-12T18:39:35",
+      "asset": "ETH",
+      "qty_sold": "0.003",
+      "proceeds": "1024.21000000",
+      "cost_basis": "0",
+      "gain": "1024.21000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "1024.21000000",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2022-11-12T18:39:35"
+        }
+      ]
+    },
+    {
+      "timestamp": "2022-11-13T08:14:11",
+      "asset": "ETH",
+      "qty_sold": "0.0208",
+      "proceeds": "4599.37000000",
+      "cost_basis": "0",
+      "gain": "4599.37000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "4599.37000000",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2022-11-13T08:14:11"
+        }
+      ]
+    },
+    {
+      "timestamp": "2023-01-01T10:43:23",
+      "asset": "ETH",
+      "qty_sold": "0.025962623855511084",
+      "proceeds": "9.11000000",
+      "cost_basis": "7.880000000000000000000000001",
+      "gain": "1.229999999999999999999999999",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "8.140625584541461073898465256",
+          "cost_eur": "7.880000000000000000000000001",
+          "acquired_at": "2022-12-03T07:30:35",
+          "disposed_at": "2023-01-01T10:43:23"
+        },
+        {
+          "proceeds_eur": "0.9693744154585389261015347440",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2023-01-01T10:43:23"
+        }
+      ]
+    },
+    {
+      "timestamp": "2023-03-08T09:36:30",
+      "asset": "BTC",
+      "qty_sold": "0.00051162",
+      "proceeds": "50.42000000",
+      "cost_basis": "6.724373959389585342745023093",
+      "gain": "43.69562604061041465725497691",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "41.98217426996599038348774481",
+          "cost_eur": "3.258605472197705207413945278",
+          "acquired_at": "2022-04-16T05:51:53",
+          "disposed_at": "2023-03-08T09:36:30"
+        },
+        {
+          "proceeds_eur": "8.437825730034009616512255189",
+          "cost_eur": "3.465768487191880135331077815",
+          "acquired_at": "2022-05-13T20:22:29",
+          "disposed_at": "2023-03-08T09:36:30"
+        }
+      ]
+    },
+    {
+      "timestamp": "2023-04-01T08:55:59",
+      "asset": "ETH",
+      "qty_sold": "0.0164",
+      "proceeds": "50.38000000",
+      "cost_basis": "1.326502039817218367888539046",
+      "gain": "49.05349796018278163211146095",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "50.38000000",
+          "cost_eur": "1.326502039817218367888539046",
+          "acquired_at": "2023-01-01T11:53:11",
+          "disposed_at": "2023-04-01T08:55:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2023-06-01T04:55:11",
+      "asset": "ETH",
+      "qty_sold": "0.016126513685373309",
+      "proceeds": "44.52000000",
+      "cost_basis": "1.304381298706584271851830210",
+      "gain": "43.21561870129341572814816979",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "44.52000000",
+          "cost_eur": "1.304381298706584271851830210",
+          "acquired_at": "2023-01-01T11:53:11",
+          "disposed_at": "2023-06-01T04:55:11"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-05-08T16:28:41",
+      "asset": "SOL",
+      "qty_sold": "0.025602",
+      "proceeds": "1095.42000000",
+      "cost_basis": "0",
+      "gain": "1095.42000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "1095.42000000",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2025-05-08T16:28:41"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-05-09T16:59:47",
+      "asset": "SOL",
+      "qty_sold": "19.89925222",
+      "proceeds": "500.38000000",
+      "cost_basis": "0",
+      "gain": "500.38000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "500.38000000",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2025-05-09T16:59:47"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-07-01T07:16:11",
+      "asset": "ETH",
+      "qty_sold": "0.141392356844495424",
+      "proceeds": "3934.94000000",
+      "cost_basis": "176.1874726453159972197675913",
+      "gain": "3758.752527354684002780232409",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "350.6485187961779551066376475",
+          "cost_eur": "1.019116661476197360259630744",
+          "acquired_at": "2023-01-01T11:53:11",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "proceeds_eur": "553.5123423218462985683558849",
+          "cost_eur": "24.83000000000000000000000001",
+          "acquired_at": "2023-02-01T13:29:47",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "proceeds_eur": "862.2614522681780155635092821",
+          "cost_eur": "27.98000000000000000000000001",
+          "acquired_at": "2023-02-01T13:35:35",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "proceeds_eur": "502.7667334035050480756685412",
+          "cost_eur": "28.99000000000000000000000000",
+          "acquired_at": "2023-03-01T12:39:11",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "proceeds_eur": "423.0150011982668087425402494",
+          "cost_eur": "28.58000000000000000000000001",
+          "acquired_at": "2023-05-02T05:36:23",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "proceeds_eur": "457.4391433392144277370506227",
+          "cost_eur": "27.98000000000000000000000001",
+          "acquired_at": "2023-07-01T14:59:35",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "proceeds_eur": "457.5222168587587773975741529",
+          "cost_eur": "27.51999999999999999999999999",
+          "acquired_at": "2023-07-01T15:00:23",
+          "disposed_at": "2025-07-01T07:16:11"
+        },
+        {
+          "proceeds_eur": "327.7745918140526688086636190",
+          "cost_eur": "9.288355983839799859507960541",
+          "acquired_at": "2023-11-01T18:30:11",
+          "disposed_at": "2025-07-01T07:16:11"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-01T11:28:47",
+      "asset": "ETH",
+      "qty_sold": "0.091045901507339712",
+      "proceeds": "295.42000000",
+      "cost_basis": "49.62168297092702198166851005",
+      "gain": "245.7983170290729780183314900",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "66.08360734105566700172182522",
+          "cost_eur": "16.06164401616020014049203946",
+          "acquired_at": "2023-11-01T18:30:11",
+          "disposed_at": "2025-08-01T11:28:47"
+        },
+        {
+          "proceeds_eur": "193.7859213276977528957746755",
+          "cost_eur": "27.91000000000000000000000000",
+          "acquired_at": "2023-12-02T09:06:11",
+          "disposed_at": "2025-08-01T11:28:47"
+        },
+        {
+          "proceeds_eur": "35.55047133124658010250349931",
+          "cost_eur": "5.650038954766821841176470587",
+          "acquired_at": "2024-01-01T08:00:11",
+          "disposed_at": "2025-08-01T11:28:47"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-07T20:25:47",
+      "asset": "SD",
+      "qty_sold": "14.169366488542",
+      "proceeds": "1121.31000000",
+      "cost_basis": "0",
+      "gain": "1121.31000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "1121.31000000",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2025-08-07T20:25:47"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-14T07:33:59",
+      "asset": "ETH",
+      "qty_sold": "0.00224549121049948",
+      "proceeds": "295.22000000",
+      "cost_basis": "1.157968996786986745098039216",
+      "gain": "294.0620310032130132549019608",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "295.22000000",
+          "cost_eur": "1.157968996786986745098039216",
+          "acquired_at": "2024-01-01T08:00:11",
+          "disposed_at": "2025-08-14T07:33:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-14T07:33:59",
+      "asset": "SD",
+      "qty_sold": "14.16936648",
+      "proceeds": "1179.00000000",
+      "cost_basis": "0",
+      "gain": "1179.00000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "1179.00000000",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2025-08-14T07:33:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-14T07:37:11",
+      "asset": "ETH",
+      "qty_sold": "0.270979115138673669",
+      "proceeds": "284.46000000",
+      "cost_basis": "307.3529424643969510442843112",
+      "gain": "-22.8929424643969510442843112",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "45.03229129308844632447290561",
+          "cost_eur": "22.12199204844619141372549020",
+          "acquired_at": "2024-01-01T08:00:11",
+          "disposed_at": "2025-08-14T07:37:11"
+        },
+        {
+          "proceeds_eur": "57.26372549284603572713789023",
+          "cost_eur": "28.94000000000000000000000000",
+          "acquired_at": "2024-02-02T16:10:59",
+          "disposed_at": "2025-08-14T07:37:11"
+        },
+        {
+          "proceeds_eur": "79.98755017306159262938017930",
+          "cost_eur": "54.95000000000000000000000001",
+          "acquired_at": "2024-03-01T14:25:35",
+          "disposed_at": "2025-08-14T07:37:11"
+        },
+        {
+          "proceeds_eur": "34.88115510222941067785160322",
+          "cost_eur": "115.4000000000000000000000000",
+          "acquired_at": "2024-03-20T07:28:11",
+          "disposed_at": "2025-08-14T07:37:11"
+        },
+        {
+          "proceeds_eur": "67.29527793877451464115742164",
+          "cost_eur": "85.94095041595075963055882102",
+          "acquired_at": "2024-04-01T04:47:59",
+          "disposed_at": "2025-08-14T07:37:11"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-18T14:57:59",
+      "asset": "ETH",
+      "qty_sold": "0.000448514646648075",
+      "proceeds": "1055.05000000",
+      "cost_basis": "0.6012811324292681836990128980",
+      "gain": "1054.448718867570731816300987",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "1055.05000000",
+          "cost_eur": "0.6012811324292681836990128980",
+          "acquired_at": "2024-04-01T04:47:59",
+          "disposed_at": "2025-08-18T14:57:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-18T17:04:53",
+      "asset": "BTC",
+      "qty_sold": "0.01101044",
+      "proceeds": "3071.62000000",
+      "cost_basis": "153.5868319177820946966544127",
+      "gain": "2918.033168082217905303345587",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "114.6413333890380402599714453",
+          "cost_eur": "16.63423151280811986466892218",
+          "acquired_at": "2022-05-13T20:22:29",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "138.2006379218269206316913765",
+          "cost_eur": "3.900000000000000000000000000",
+          "acquired_at": "2022-08-04T15:14:10",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "139.2774752870911607528854433",
+          "cost_eur": "19.06000000000000000000000000",
+          "acquired_at": "2022-10-18T20:27:12",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "139.0208197492561605167459248",
+          "cost_eur": "14.44000000000000000000000000",
+          "acquired_at": "2022-12-09T07:16:42",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "910.5664227587635008228553992",
+          "cost_eur": "10.67000000000000000000000000",
+          "acquired_at": "2023-01-01T11:40:20",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "139.6038741775987154010193961",
+          "cost_eur": "11.06000000000000000000000000",
+          "acquired_at": "2023-01-03T21:46:35",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "496.3411230977145327525512150",
+          "cost_eur": "9.879999999999999999999999999",
+          "acquired_at": "2023-02-01T14:30:02",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "137.4195123718943112173537116",
+          "cost_eur": "8.120000000000000000000000002",
+          "acquired_at": "2023-02-10T15:57:33",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "138.0220949389851813369856245",
+          "cost_eur": "7.910000000000000000000000001",
+          "acquired_at": "2023-04-04T10:33:52",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "131.9348951177246322581113924",
+          "cost_eur": "37.30000000000000000000000001",
+          "acquired_at": "2023-06-19T07:11:08",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "298.1444634728494047467676133",
+          "cost_eur": "10.04000000000000000000000000",
+          "acquired_at": "2023-08-02T15:01:14",
+          "disposed_at": "2025-08-18T17:04:53"
+        },
+        {
+          "proceeds_eur": "288.4473477172574393030614580",
+          "cost_eur": "4.572600404973974831985490503",
+          "acquired_at": "2023-09-01T07:21:59",
+          "disposed_at": "2025-08-18T17:04:53"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-20T16:26:23",
+      "asset": "ETH",
+      "qty_sold": "0.274416659025274661",
+      "proceeds": "1186.00000000",
+      "cost_basis": "816.9958530330656688790916219",
+      "gain": "369.0041469669343311209083781",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "98.35211679363852017237911000",
+          "cost_eur": "30.50776845161997218574216611",
+          "acquired_at": "2024-04-01T04:47:59",
+          "disposed_at": "2025-08-20T16:26:23"
+        },
+        {
+          "proceeds_eur": "136.4845131089166671525655269",
+          "cost_eur": "116.4400000000000000000000000",
+          "acquired_at": "2024-04-03T04:34:23",
+          "disposed_at": "2025-08-20T16:26:23"
+        },
+        {
+          "proceeds_eur": "62.04700197641169197012876863",
+          "cost_eur": "242.1599999999999999999999999",
+          "acquired_at": "2024-04-12T18:06:23",
+          "disposed_at": "2025-08-20T16:26:23"
+        },
+        {
+          "proceeds_eur": "436.0792104424616793651697402",
+          "cost_eur": "96.77999999999999999999999998",
+          "acquired_at": "2024-05-01T05:51:23",
+          "disposed_at": "2025-08-20T16:26:23"
+        },
+        {
+          "proceeds_eur": "308.5833064974406730096443949",
+          "cost_eur": "292.0100000000000000000000000",
+          "acquired_at": "2024-05-22T16:02:23",
+          "disposed_at": "2025-08-20T16:26:23"
+        },
+        {
+          "proceeds_eur": "144.4538511811307683301124595",
+          "cost_eur": "39.09808458144569669334945587",
+          "acquired_at": "2024-06-02T05:34:11",
+          "disposed_at": "2025-08-20T16:26:23"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-08-20T16:32:59",
+      "asset": "ETH",
+      "qty_sold": "0.280037069828845",
+      "proceeds": "1022.52000000",
+      "cost_basis": "639.4705535777374147309288495",
+      "gain": "383.0494464222625852690711505",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "179.9260794656888705057154705",
+          "cost_eur": "57.64191541855430330665054415",
+          "acquired_at": "2024-06-02T05:34:11",
+          "disposed_at": "2025-08-20T16:32:59"
+        },
+        {
+          "proceeds_eur": "324.9722619066848095740990241",
+          "cost_eur": "44.80000000000000000000000000",
+          "acquired_at": "2024-07-01T18:04:35",
+          "disposed_at": "2025-08-20T16:32:59"
+        },
+        {
+          "proceeds_eur": "348.7061911470606664531062561",
+          "cost_eur": "281.5900000000000000000000000",
+          "acquired_at": "2024-07-30T14:39:59",
+          "disposed_at": "2025-08-20T16:32:59"
+        },
+        {
+          "proceeds_eur": "155.3659521812296477233473424",
+          "cost_eur": "247.7600000000000000000000000",
+          "acquired_at": "2024-08-05T08:29:47",
+          "disposed_at": "2025-08-20T16:32:59"
+        },
+        {
+          "proceeds_eur": "13.54951529933600574373190686",
+          "cost_eur": "7.678638159183111424278305297",
+          "acquired_at": "2024-09-09T06:09:35",
+          "disposed_at": "2025-08-20T16:32:59"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-11-03T22:09:00",
+      "asset": "SOL",
+      "qty_sold": "1.34729",
+      "proceeds": "5116.61000000",
+      "cost_basis": "198.4000000000000000000000000",
+      "gain": "4918.210000000000000000000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "4347.536755858055800904036993",
+          "cost_eur": "198.4000000000000000000000000",
+          "acquired_at": "2025-09-26T00:10:31",
+          "disposed_at": "2025-11-03T22:09:00"
+        },
+        {
+          "proceeds_eur": "769.0732441419441990959630073",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2025-11-03T22:09:00"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-12-03T08:22:35",
+      "asset": "ETH",
+      "qty_sold": "0.000033730304303796",
+      "proceeds": "0.08000000",
+      "cost_basis": "0.06979703740111528345589599931",
+      "gain": "0.01020296259888471654410400069",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "0.08000000",
+          "cost_eur": "0.06979703740111528345589599931",
+          "acquired_at": "2024-09-09T06:09:35",
+          "disposed_at": "2025-12-03T08:22:35"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-12-03T08:28:59",
+      "asset": "ETH",
+      "qty_sold": "1.763024118310617",
+      "proceeds": "4620.08000000",
+      "cost_basis": "3058.354038439008451089132284",
+      "gain": "1561.725961560991548910867716",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "357.6996355042383495425897495",
+          "cost_eur": "282.4515648034157732922657987",
+          "acquired_at": "2024-09-09T06:09:35",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "265.6915649809840364858251369",
+          "cost_eur": "288.2400000000000000000000000",
+          "acquired_at": "2024-10-01T05:50:59",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "261.6755713855200834737893859",
+          "cost_eur": "293.3000000000000000000000000",
+          "acquired_at": "2024-11-14T15:25:47",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "206.3075536511443959310955275",
+          "cost_eur": "90.49999999999999999999999999",
+          "acquired_at": "2024-12-12T06:58:47",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "254.0846974844428723764258841",
+          "cost_eur": "289.2800000000000000000000000",
+          "acquired_at": "2025-01-13T16:05:23",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "306.3121039302747542116890353",
+          "cost_eur": "241.7099999999999999999999999",
+          "acquired_at": "2025-02-12T13:47:35",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "378.4816633489886507920858700",
+          "cost_eur": "292.1900000000000000000000000",
+          "acquired_at": "2025-02-28T09:16:35",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "144.4929348152266023951572275",
+          "cost_eur": "294.6200000000000000000000000",
+          "acquired_at": "2025-03-12T12:17:47",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "91.08520823196604553479591299",
+          "cost_eur": "286.3200000000000000000000000",
+          "acquired_at": "2025-04-07T05:31:11",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "188.4110459792792954469691509",
+          "cost_eur": "292.4900000000000000000000000",
+          "acquired_at": "2025-04-09T04:57:59",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "176.0388158948479985088383228",
+          "cost_eur": "297.2900000000000000000000000",
+          "acquired_at": "2025-04-15T15:20:59",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "480.9483102208565079117359041",
+          "cost_eur": "97.24000000000000000000000000",
+          "acquired_at": "2025-05-01T06:27:23",
+          "disposed_at": "2025-12-03T08:28:59"
+        },
+        {
+          "proceeds_eur": "1508.850894572230407389002893",
+          "cost_eur": "12.72247363559267779686648454",
+          "acquired_at": "2025-05-08T14:32:35",
+          "disposed_at": "2025-12-03T08:28:59"
+        }
+      ]
+    }
+  ]
+}
