@@ -190,6 +190,94 @@ def test_init_db_repairs_legacy_calc_runs_schema(tmp_path):
     missing = required_columns - columns
     assert not missing, f"init_db did not repair calc_runs columns: {sorted(missing)}"
 
+
+@pytest.mark.smoke
+def test_init_db_rebuilds_legacy_run_digests_schema(tmp_path):
+    """
+    Regression guard for old SQLite databases.
+
+    Older deployments may have created run_digests with run_id as the primary key
+    and no synthetic id column. init_db(engine) must rebuild that table into the
+    modern ORM-compatible shape while preserving existing digest rows.
+    """
+    from sqlalchemy import create_engine
+
+    legacy_db = tmp_path / "legacy_run_digests.sqlite"
+    legacy_engine = create_engine(
+        f"sqlite:///{legacy_db}",
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
+    )
+
+    with legacy_engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE run_digests (
+                run_id INTEGER PRIMARY KEY,
+                input_hash TEXT,
+                output_hash TEXT,
+                manifest_hash TEXT,
+                manifest_json TEXT,
+                created_at TEXT
+            );
+        """))
+        conn.execute(
+            text("""
+                INSERT INTO run_digests (
+                    run_id,
+                    input_hash,
+                    output_hash,
+                    manifest_hash,
+                    manifest_json,
+                    created_at
+                )
+                VALUES (
+                    42,
+                    'input-hash-smoke',
+                    'output-hash-smoke',
+                    'manifest-hash-smoke',
+                    '{"ok": true}',
+                    '2026-01-01T00:00:00'
+                );
+            """)
+        )
+
+    init_db(legacy_engine)
+
+    with legacy_engine.connect() as conn:
+        cols = conn.execute(text("PRAGMA table_info(run_digests);")).fetchall()
+        rows = conn.execute(text("""
+            SELECT id, run_id, input_hash, output_hash, manifest_hash, manifest_json, created_at
+            FROM run_digests
+            WHERE run_id = 42
+        """)).fetchall()
+
+    columns = {str(col[1]) for col in cols}
+
+    required_columns = {
+        "id",
+        "run_id",
+        "input_hash",
+        "output_hash",
+        "manifest_hash",
+        "manifest_json",
+        "created_at",
+    }
+
+    missing = required_columns - columns
+    assert not missing, f"init_db did not rebuild run_digests columns: {sorted(missing)}"
+
+    assert len(rows) == 1, f"Expected one preserved run_digests row, got {rows!r}"
+
+    row = rows[0]
+    assert row[0] is not None, "rebuilt run_digests.id should be populated"
+    assert row[1] == 42
+    assert row[2] == "input-hash-smoke"
+    assert row[3] == "output-hash-smoke"
+    assert row[4] == "manifest-hash-smoke"
+    assert row[5] == '{"ok": true}'
+    assert row[6] == "2026-01-01T00:00:00"
+
+
 @pytest.mark.smoke
 def test_engine_connectivity_and_select_1():
     """
