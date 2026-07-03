@@ -1147,6 +1147,8 @@ def parse_csv_stream_with_meta(
             base_amount = _dec(row.get(header_map.get("base_amount", "")))
             if base_amount is None:
                 raise ValueError("base_amount is required")
+            if ttype in {"buy", "sell"} and base_amount <= 0:
+                raise ValueError("base_amount must be positive for BUY/SELL rows")
 
             quote_asset = _upper_or_none(row.get(header_map.get("quote_asset", "")))
             quote_amount = _dec(row.get(header_map.get("quote_amount", "")))
@@ -1156,6 +1158,8 @@ def parse_csv_stream_with_meta(
                     raise ValueError("quote_asset is required for BUY/SELL rows")
                 if quote_amount is None:
                     raise ValueError("quote_amount is required for BUY/SELL rows")
+                if quote_amount <= 0:
+                    raise ValueError("quote_amount must be positive for BUY/SELL rows")
 
             fee_asset = _upper_or_none(row.get(header_map.get("fee_asset", "")))
             fee_amount = _dec(row.get(header_map.get("fee_amount", "")))
@@ -1267,6 +1271,8 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             base_amount = _dec(row.get(header_map.get("base_amount", "")))
             if base_amount is None:
                 raise ValueError("base_amount is required")
+            if ttype in {"buy", "sell"} and base_amount <= 0:
+                raise ValueError("base_amount must be positive for BUY/SELL rows")
 
             quote_asset = _upper_or_none(row.get(header_map.get("quote_asset", "")))
             quote_amount = _dec(row.get(header_map.get("quote_amount", "")))
@@ -1276,6 +1282,8 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
                     raise ValueError("quote_asset is required for BUY/SELL rows")
                 if quote_amount is None:
                     raise ValueError("quote_amount is required for BUY/SELL rows")
+                if quote_amount <= 0:
+                    raise ValueError("quote_amount must be positive for BUY/SELL rows")
 
             fee_asset = _upper_or_none(row.get(header_map.get("fee_asset", "")))
             fee_amount = _dec(row.get(header_map.get("fee_amount", "")))
