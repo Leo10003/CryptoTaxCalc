@@ -1,4 +1,4 @@
-# === BEGIN: autosync safety additions ===
+﻿# === BEGIN: autosync safety additions ===
 
 # Secrets
 env/
@@ -49,5 +49,14 @@ Thumbs.db
 # Large demo dumps (keep repo lean; keep only small curated samples tracked)
 samples/*_3500.csv
 samples/ledgerwallet-operations-*.csv
+
+# SQLite temp files
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
+tmp_smoke.db
+tmp_smoke.db-shm
+tmp_smoke.db-wal
 
 # === END: autosync safety additions ===
