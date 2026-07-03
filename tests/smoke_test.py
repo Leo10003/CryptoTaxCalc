@@ -12,6 +12,7 @@ import json
 import re
 import uuid
 import zipfile
+import csv
 from typing import List, Tuple
 import pytest
 from cryptotaxcalc.db import SessionLocal, init_db, engine
@@ -242,16 +243,21 @@ def _is_uuid(value: str) -> bool:
         return False
 
 
-def _call_calculate_v2_and_get_payload(jurisdiction: str = "HR") -> Tuple[int, dict]:
-    # Ensure demo data exists for deterministic smoke runs (best-effort)
-    try:
-        token = os.getenv("ADMIN_TOKEN") or os.getenv("BUNDLE_TOKEN") or ""
-        headers = {"X-Admin-Token": token} if token else None
-        r_demo = client.post("/demo/load", headers=headers)
-        if r_demo.status_code not in (200, 204, 404, 401, 403):
-            raise AssertionError(f"/demo/load returned {r_demo.status_code}: {r_demo.text}")
-    except Exception:
-        pass
+def _call_calculate_v2_and_get_payload(
+    jurisdiction: str = "HR",
+    load_demo: bool = True,
+) -> Tuple[int, dict]:
+    # Ensure demo data exists for normal smoke runs.
+    # Deterministic tests can disable this so their expected values are not polluted.
+    if load_demo:
+        try:
+            token = os.getenv("ADMIN_TOKEN") or os.getenv("BUNDLE_TOKEN") or ""
+            headers = {"X-Admin-Token": token} if token else None
+            r_demo = client.post("/demo/load", headers=headers)
+            if r_demo.status_code not in (200, 204, 404, 401, 403):
+                raise AssertionError(f"/demo/load returned {r_demo.status_code}: {r_demo.text}")
+        except Exception:
+            pass
 
     res = client.post("/calculate/v2", json={"jurisdiction": jurisdiction})
     assert res.status_code == 200, f"/calculate/v2 failed: {res.text}"
@@ -311,6 +317,87 @@ def _insert_deterministic_btc_buy_sell_rows(memo_tag: str) -> None:
         db.close()
 
 
+def _decimal_from_csv_row(row: dict, *names: str) -> Decimal | None:
+    for name in names:
+        if name not in row:
+            continue
+
+        raw = row.get(name)
+        if raw is None:
+            continue
+
+        text_value = str(raw).strip()
+        if not text_value:
+            continue
+
+        # Accept common CSV formatting variants.
+        text_value = text_value.replace("€", "").replace(",", "").strip()
+
+        try:
+            return Decimal(text_value)
+        except Exception:
+            continue
+
+    return None
+
+
+def _assert_csv_contains_expected_btc_fifo_result(csv_text: str) -> None:
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    assert rows, "events.csv should contain at least one parsed data row"
+
+    btc_rows = [
+        row for row in rows
+        if str(row.get("asset") or row.get("base_asset") or "").strip().upper() == "BTC"
+    ]
+    assert btc_rows, f"events.csv should contain at least one BTC row, got rows={rows!r}"
+
+    expected_proceeds = Decimal("600")
+    expected_cost = Decimal("400")
+    expected_gain = Decimal("200")
+
+    matching_rows = []
+
+    for row in btc_rows:
+        proceeds = _decimal_from_csv_row(
+            row,
+            "proceeds_eur",
+            "proceeds",
+            "sell_value_eur",
+            "value_eur",
+        )
+        cost = _decimal_from_csv_row(
+            row,
+            "cost_eur",
+            "cost_basis_eur",
+            "basis_eur",
+            "cost_basis",
+        )
+        gain = _decimal_from_csv_row(
+            row,
+            "gain_eur",
+            "gain",
+            "taxable_gain_eur",
+            "realized_gain_eur",
+        )
+
+        if gain == expected_gain:
+            matching_rows.append(row)
+
+        if proceeds is not None:
+            assert proceeds == expected_proceeds, f"Expected proceeds 600 EUR, got {proceeds} in row {row!r}"
+
+        if cost is not None:
+            assert cost == expected_cost, f"Expected cost basis 400 EUR, got {cost} in row {row!r}"
+
+        if gain is not None:
+            assert gain == expected_gain, f"Expected gain 200 EUR, got {gain} in row {row!r}"
+
+    assert matching_rows, (
+        "events.csv should contain a BTC row with gain 200 EUR for the deterministic "
+        f"BUY 0.10 BTC / SELL 0.04 BTC scenario. BTC rows were: {btc_rows!r}"
+    )
+
+
 def _try_download_zip(run_id: str):
     """Try both legacy and compact endpoints, return (content, url_used, status_code, text)."""
     paths = [f"/history/{run_id}/download", f"/history/run/{run_id}/download"]
@@ -326,11 +413,11 @@ def _try_download_zip(run_id: str):
 # --------------------------------------------------------------------------------------
 # Tests
 # --------------------------------------------------------------------------------------
-def test_populated_buy_sell_calculation_produces_event_csv_row():
+def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
     memo_tag = f"smoke-deterministic-{uuid.uuid4().hex}"
     _insert_deterministic_btc_buy_sell_rows(memo_tag)
 
-    run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR")
+    run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
 
     assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
     assert run_id > 0, "run_id should be a positive integer"
@@ -351,13 +438,11 @@ def test_populated_buy_sell_calculation_produces_event_csv_row():
     )
 
     header = lines[0].lower()
-    body = "\n".join(lines[1:]).lower()
-
     assert "timestamp" in header
     assert "asset" in header
     assert "gain" in header or "gain_eur" in header
 
-    assert "btc" in body, "events.csv should contain the deterministic BTC sale event"
+    _assert_csv_contains_expected_btc_fifo_result(r.text)
 
 def test_calculate_creates_run_and_persists():
     run_id, payload = _call_calculate_v2_and_get_payload()
