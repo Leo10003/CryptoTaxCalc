@@ -344,6 +344,66 @@ def _insert_deterministic_btc_buy_sell_rows(memo_tag: str) -> None:
         db.close()
 
 
+def _insert_deterministic_multilot_fifo_rows(asset: str, memo_tag: str) -> None:
+    """
+    Insert a deterministic multi-lot FIFO dataset.
+
+    Scenario:
+      BUY  0.10 asset for 1000 EUR
+      BUY  0.20 asset for 3000 EUR
+      SELL 0.25 asset for 5000 EUR
+
+    Expected FIFO:
+      cost basis = 1000 + 2250 = 3250 EUR
+      proceeds   = 5000 EUR
+      gain       = 1750 EUR
+    """
+    db = SessionLocal()
+    try:
+        rows = [
+            Transaction(
+                timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                type=TxType.BUY,
+                base_asset=asset,
+                base_amount=Decimal("0.10"),
+                quote_asset="EUR",
+                quote_amount=Decimal("1000"),
+                fee_asset="EUR",
+                fee_amount=Decimal("0"),
+                exchange="SmokeDeterministic",
+                memo=f"{memo_tag}: buy lot 1",
+            ),
+            Transaction(
+                timestamp=datetime(2024, 2, 1, 12, 0, 0, tzinfo=timezone.utc),
+                type=TxType.BUY,
+                base_asset=asset,
+                base_amount=Decimal("0.20"),
+                quote_asset="EUR",
+                quote_amount=Decimal("3000"),
+                fee_asset="EUR",
+                fee_amount=Decimal("0"),
+                exchange="SmokeDeterministic",
+                memo=f"{memo_tag}: buy lot 2",
+            ),
+            Transaction(
+                timestamp=datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
+                type=TxType.SELL,
+                base_asset=asset,
+                base_amount=Decimal("0.25"),
+                quote_asset="EUR",
+                quote_amount=Decimal("5000"),
+                fee_asset="EUR",
+                fee_amount=Decimal("0"),
+                exchange="SmokeDeterministic",
+                memo=f"{memo_tag}: sell across lots",
+            ),
+        ]
+        db.add_all(rows)
+        db.commit()
+    finally:
+        db.close()
+
+
 def _decimal_from_csv_row(row: dict, *names: str) -> Decimal | None:
     for name in names:
         if name not in row:
@@ -425,6 +485,70 @@ def _assert_csv_contains_expected_btc_fifo_result(csv_text: str) -> None:
     )
 
 
+def _assert_csv_contains_expected_asset_gain(
+    csv_text: str,
+    asset: str,
+    expected_gain: Decimal,
+    expected_proceeds: Decimal | None = None,
+    expected_cost: Decimal | None = None,
+) -> None:
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    assert rows, "events.csv should contain at least one parsed data row"
+
+    asset_upper = asset.upper()
+    asset_rows = [
+        row for row in rows
+        if str(row.get("asset") or row.get("base_asset") or "").strip().upper() == asset_upper
+    ]
+
+    assert asset_rows, f"events.csv should contain at least one {asset_upper} row, got rows={rows!r}"
+
+    matching_gain_rows = []
+
+    for row in asset_rows:
+        proceeds = _decimal_from_csv_row(
+            row,
+            "proceeds_eur",
+            "proceeds",
+            "sell_value_eur",
+            "value_eur",
+        )
+        cost = _decimal_from_csv_row(
+            row,
+            "cost_eur",
+            "cost_basis_eur",
+            "basis_eur",
+            "cost_basis",
+        )
+        gain = _decimal_from_csv_row(
+            row,
+            "gain_eur",
+            "gain",
+            "taxable_gain_eur",
+            "realized_gain_eur",
+        )
+
+        if gain == expected_gain:
+            matching_gain_rows.append(row)
+
+        if expected_proceeds is not None and proceeds is not None:
+            assert proceeds == expected_proceeds, (
+                f"Expected proceeds {expected_proceeds} EUR for {asset_upper}, "
+                f"got {proceeds} in row {row!r}"
+            )
+
+        if expected_cost is not None and cost is not None:
+            assert cost == expected_cost, (
+                f"Expected cost basis {expected_cost} EUR for {asset_upper}, "
+                f"got {cost} in row {row!r}"
+            )
+
+    assert matching_gain_rows, (
+        f"events.csv should contain a {asset_upper} row with gain {expected_gain} EUR. "
+        f"{asset_upper} rows were: {asset_rows!r}"
+    )
+
+
 def _try_download_zip(run_id: str):
     """Try both legacy and compact endpoints, return (content, url_used, status_code, text)."""
     paths = [f"/history/{run_id}/download", f"/history/run/{run_id}/download"]
@@ -470,6 +594,34 @@ def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
     assert "gain" in header or "gain_eur" in header
 
     _assert_csv_contains_expected_btc_fifo_result(r.text)
+
+def test_multilot_fifo_calculation_matches_expected_gain():
+    asset = f"SMKEDGE{uuid.uuid4().hex[:8].upper()}"
+    memo_tag = f"smoke-multilot-{uuid.uuid4().hex}"
+
+    _insert_deterministic_multilot_fifo_rows(asset=asset, memo_tag=memo_tag)
+
+    run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
+
+    assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
+    assert run_id > 0, "run_id should be a positive integer"
+
+    r = client.get(f"/history/run/{run_id}/events.csv")
+    if r.status_code in (404, 405, 422):
+        pytest.skip("events.csv endpoint not available")
+
+    assert r.status_code == 200, f"events.csv failed for multi-lot FIFO run: {r.text}"
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
+
+    _assert_csv_contains_expected_asset_gain(
+        csv_text=r.text,
+        asset=asset,
+        expected_gain=Decimal("1750"),
+        expected_proceeds=Decimal("5000"),
+        expected_cost=Decimal("3250"),
+    )
 
 def test_calculate_creates_run_and_persists():
     run_id, payload = _call_calculate_v2_and_get_payload()
