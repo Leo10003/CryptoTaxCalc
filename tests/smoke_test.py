@@ -50,6 +50,33 @@ def test_version_smoke():
     assert "version" in data
 
 @pytest.mark.smoke
+def test_core_ui_pages_render_without_server_error():
+    """
+    Smoke-check user-facing HTML routes.
+
+    This catches template/rendering failures where the API imports successfully
+    but browser pages crash with 500 errors.
+    """
+    paths = [
+        "/",
+    ]
+
+    for path in paths:
+        r = client.get(path)
+
+        if r.status_code in (404, 405):
+            pytest.skip(f"UI route {path!r} is not available in this build")
+
+        assert r.status_code < 500, (
+            f"UI route {path!r} returned server error {r.status_code}:\n{r.text[:1000]}"
+        )
+
+        ct = r.headers.get("content-type", "").lower()
+        assert "text/html" in ct or "application/json" in ct or "text/plain" in ct, (
+            f"Unexpected content type for {path!r}: {ct}"
+        )
+
+@pytest.mark.smoke
 def test_support_bundle_endpoint_if_token():
     """
     Runs only if an admin token is configured.
