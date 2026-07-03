@@ -1134,6 +1134,9 @@ def parse_csv_stream_with_meta(
             ts = _parse_ts(row[header_map["timestamp"]])
 
             ttype = (row.get(header_map.get("type", ""), "") or "").strip().lower()
+            if not ttype:
+                raise ValueError("type is required")
+
             if ttype in {"transfer_in", "transfer_out", "transfer-in", "transfer-out"}:
                 ttype = "transfer"
 
@@ -1244,6 +1247,9 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             ts = _parse_ts(row[header_map["timestamp"]])
 
             ttype = (row.get(header_map.get("type", ""), "") or "").strip().lower()
+            if not ttype:
+                raise ValueError("type is required")
+
             # Normalize transfer variants to a single canonical type.
             if ttype in {"transfer_in", "transfer_out", "transfer-in", "transfer-out"}:
                 ttype = "transfer"
