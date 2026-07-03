@@ -1164,6 +1164,13 @@ def parse_csv_stream_with_meta(
             fee_asset = _upper_or_none(row.get(header_map.get("fee_asset", "")))
             fee_amount = _dec(row.get(header_map.get("fee_amount", "")))
 
+            if fee_amount is not None and fee_amount < 0:
+                raise ValueError("fee_amount must be zero or positive")
+            if fee_amount is not None and fee_amount > 0 and not fee_asset:
+                raise ValueError("fee_asset is required when fee_amount is positive")
+            if fee_asset and fee_amount is None:
+                raise ValueError("fee_amount is required when fee_asset is provided")
+
             exchange = (row.get(header_map.get("exchange", ""), "") or "").strip()
             memo = (row.get(header_map.get("memo", ""), "") or "").strip()
             fair_value = _dec(row.get(header_map.get("fair_value", "")))
@@ -1287,6 +1294,13 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
 
             fee_asset = _upper_or_none(row.get(header_map.get("fee_asset", "")))
             fee_amount = _dec(row.get(header_map.get("fee_amount", "")))
+
+            if fee_amount is not None and fee_amount < 0:
+                raise ValueError("fee_amount must be zero or positive")
+            if fee_amount is not None and fee_amount > 0 and not fee_asset:
+                raise ValueError("fee_asset is required when fee_amount is positive")
+            if fee_asset and fee_amount is None:
+                raise ValueError("fee_amount is required when fee_asset is provided")
 
             exchange = (row.get(header_map.get("exchange", ""), "") or "").strip()
             memo = (row.get(header_map.get("memo", ""), "") or "").strip()
