@@ -404,6 +404,36 @@ def _insert_deterministic_multilot_fifo_rows(asset: str, memo_tag: str) -> None:
         db.close()
 
 
+def _insert_deterministic_oversell_row(asset: str, memo_tag: str) -> None:
+    """
+    Insert a deterministic invalid/edge-case dataset.
+
+    Scenario:
+      SELL asset without any prior BUY lot.
+
+    A robust tax engine should not crash. It should either reject the run
+    with a client/business error or return a warning/error in the payload.
+    """
+    db = SessionLocal()
+    try:
+        sell = Transaction(
+            timestamp=datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
+            type=TxType.SELL,
+            base_asset=asset,
+            base_amount=Decimal("1.00"),
+            quote_asset="EUR",
+            quote_amount=Decimal("100"),
+            fee_asset="EUR",
+            fee_amount=Decimal("0"),
+            exchange="SmokeDeterministic",
+            memo=f"{memo_tag}: oversell without buy",
+        )
+        db.add(sell)
+        db.commit()
+    finally:
+        db.close()
+
+
 def _decimal_from_csv_row(row: dict, *names: str) -> Decimal | None:
     for name in names:
         if name not in row:
@@ -549,6 +579,53 @@ def _assert_csv_contains_expected_asset_gain(
     )
 
 
+def _payload_mentions_problem(payload: dict, asset: str) -> bool:
+    """
+    Best-effort recursive scan for warning/error text in a response payload.
+
+    This intentionally accepts multiple shapes because API versions may expose
+    errors under warnings, errors, issues, diagnostics, precheck, summary, etc.
+    """
+    asset_upper = asset.upper()
+    problem_words = (
+        "insufficient",
+        "missing",
+        "negative",
+        "oversell",
+        "over-sell",
+        "no lot",
+        "no lots",
+        "cost basis",
+        "basis",
+        "unmatched",
+        "short",
+        "cannot",
+        "error",
+        "warning",
+    )
+
+    def walk(value) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            out = []
+            for k, v in value.items():
+                out.extend(walk(k))
+                out.extend(walk(v))
+            return out
+        if isinstance(value, list):
+            out = []
+            for item in value:
+                out.extend(walk(item))
+            return out
+        return [str(value)]
+
+    text = "\n".join(walk(payload)).lower()
+    return asset_upper.lower() in text and any(word in text for word in problem_words)
+
+
 def _try_download_zip(run_id: str):
     """Try both legacy and compact endpoints, return (content, url_used, status_code, text)."""
     paths = [f"/history/{run_id}/download", f"/history/run/{run_id}/download"]
@@ -621,6 +698,33 @@ def test_multilot_fifo_calculation_matches_expected_gain():
         expected_gain=Decimal("1750"),
         expected_proceeds=Decimal("5000"),
         expected_cost=Decimal("3250"),
+    )
+
+def test_oversell_without_prior_buy_does_not_crash_or_silent_pass():
+    asset = f"SMKSHORT{uuid.uuid4().hex[:8].upper()}"
+    memo_tag = f"smoke-oversell-{uuid.uuid4().hex}"
+
+    _insert_deterministic_oversell_row(asset=asset, memo_tag=memo_tag)
+
+    res = client.post("/calculate/v2", json={"jurisdiction": "HR"})
+
+    assert res.status_code < 500, (
+        f"/calculate/v2 must not crash on oversell edge case. "
+        f"status={res.status_code}, body={res.text[:1000]}"
+    )
+
+    if res.status_code in (400, 409, 422):
+        # Accept explicit business/validation rejection.
+        return
+
+    assert res.status_code == 200, f"Unexpected oversell response: {res.status_code} {res.text[:1000]}"
+
+    payload = res.json()
+    assert isinstance(payload, dict), "Oversell response should be a JSON object"
+
+    assert _payload_mentions_problem(payload, asset), (
+        "Oversell run returned 200 but did not visibly report a warning/error "
+        f"for asset {asset}. Payload was: {payload!r}"
     )
 
 def test_calculate_creates_run_and_persists():
