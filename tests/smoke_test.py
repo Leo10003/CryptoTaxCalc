@@ -14,8 +14,8 @@ import uuid
 import zipfile
 from typing import List, Tuple
 import pytest
-from cryptotaxcalc.db import SessionLocal
-from cryptotaxcalc.models import Transaction, TxType
+from cryptotaxcalc.db import SessionLocal, init_db, engine
+from cryptotaxcalc.models import Base, Transaction, TxType
 from cryptotaxcalc.schemas import TransactionRead
 from decimal import Decimal
 from datetime import datetime, timezone
@@ -162,6 +162,11 @@ except Exception as e:
         raise RuntimeError(f"Failed to import app: {e2}") from e
 
 from fastapi.testclient import TestClient  # noqa: E402
+
+# Ensure smoke tests have a usable schema even when TestClient startup/lifespan
+# hooks are not entered before the first request.
+init_db()
+Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
 pytestmark = pytest.mark.smoke
