@@ -49,7 +49,7 @@ async def favicon():
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 def landing_page(request: Request):
-    return templates.TemplateResponse("landing.html", {"request": request})
+    return templates.TemplateResponse(request, "landing.html", {"request": request})
 
 
 @router.get("/workspace", response_class=HTMLResponse, include_in_schema=False)
