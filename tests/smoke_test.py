@@ -212,6 +212,55 @@ def _call_calculate_v2_and_get_payload(jurisdiction: str = "HR") -> Tuple[int, d
     return run_id, data
 
 
+def _insert_deterministic_btc_buy_sell_rows(memo_tag: str) -> None:
+    """
+    Insert a tiny deterministic BUY -> SELL dataset for populated smoke tests.
+
+    Scenario:
+      BUY  0.10 BTC for 1000 EUR
+      SELL 0.04 BTC for  600 EUR
+
+    Expected economic result under FIFO:
+      cost basis for sold 0.04 BTC = 400 EUR
+      proceeds = 600 EUR
+      gain = 200 EUR
+
+    The test below does not hard-code the exact gain yet because response/event
+    shapes can vary by endpoint version. It first proves that a populated run
+    produces at least one realized/exportable event.
+    """
+    db = SessionLocal()
+    try:
+        buy = Transaction(
+            timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            type=TxType.BUY,
+            base_asset="BTC",
+            base_amount=Decimal("0.10"),
+            quote_asset="EUR",
+            quote_amount=Decimal("1000"),
+            fee_asset="EUR",
+            fee_amount=Decimal("0"),
+            exchange="SmokeDeterministic",
+            memo=f"{memo_tag}: buy",
+        )
+        sell = Transaction(
+            timestamp=datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
+            type=TxType.SELL,
+            base_asset="BTC",
+            base_amount=Decimal("0.04"),
+            quote_asset="EUR",
+            quote_amount=Decimal("600"),
+            fee_asset="EUR",
+            fee_amount=Decimal("0"),
+            exchange="SmokeDeterministic",
+            memo=f"{memo_tag}: sell",
+        )
+        db.add_all([buy, sell])
+        db.commit()
+    finally:
+        db.close()
+
+
 def _try_download_zip(run_id: str):
     """Try both legacy and compact endpoints, return (content, url_used, status_code, text)."""
     paths = [f"/history/{run_id}/download", f"/history/run/{run_id}/download"]
@@ -227,6 +276,39 @@ def _try_download_zip(run_id: str):
 # --------------------------------------------------------------------------------------
 # Tests
 # --------------------------------------------------------------------------------------
+def test_populated_buy_sell_calculation_produces_event_csv_row():
+    memo_tag = f"smoke-deterministic-{uuid.uuid4().hex}"
+    _insert_deterministic_btc_buy_sell_rows(memo_tag)
+
+    run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR")
+
+    assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
+    assert run_id > 0, "run_id should be a positive integer"
+
+    r = client.get(f"/history/run/{run_id}/events.csv")
+    if r.status_code in (404, 405, 422):
+        pytest.skip("events.csv endpoint not available")
+
+    assert r.status_code == 200, f"events.csv failed for populated run: {r.text}"
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
+
+    lines = r.text.splitlines()
+    assert len(lines) >= 2, (
+        "A populated BUY -> SELL smoke calculation should produce "
+        "a CSV header plus at least one realized event row"
+    )
+
+    header = lines[0].lower()
+    body = "\n".join(lines[1:]).lower()
+
+    assert "timestamp" in header
+    assert "asset" in header
+    assert "gain" in header or "gain_eur" in header
+
+    assert "btc" in body, "events.csv should contain the deterministic BTC sale event"
+
 def test_calculate_creates_run_and_persists():
     run_id, payload = _call_calculate_v2_and_get_payload()
     # Minimal structural checks on response payload
