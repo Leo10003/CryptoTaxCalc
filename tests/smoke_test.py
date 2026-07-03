@@ -279,6 +279,53 @@ def test_init_db_rebuilds_legacy_run_digests_schema(tmp_path):
 
 
 @pytest.mark.smoke
+def test_init_db_repairs_legacy_fx_rates_schema(tmp_path):
+    """
+    Regression guard for old SQLite databases.
+
+    Older local DBs may have an incomplete fx_rates table. init_db(engine) must
+    add the required columns before FX lookups/calculations run.
+    """
+    from sqlalchemy import create_engine
+
+    legacy_db = tmp_path / "legacy_fx_rates.sqlite"
+    legacy_engine = create_engine(
+        f"sqlite:///{legacy_db}",
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
+    )
+
+    with legacy_engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE fx_rates (
+                date TEXT
+            );
+        """))
+        conn.execute(text("""
+            INSERT INTO fx_rates (date)
+            VALUES ('2024-01-01');
+        """))
+
+    init_db(legacy_engine)
+
+    with legacy_engine.connect() as conn:
+        cols = conn.execute(text("PRAGMA table_info(fx_rates);")).fetchall()
+
+    columns = {str(col[1]) for col in cols}
+
+    required_columns = {
+        "date",
+        "base",
+        "quote",
+        "rate",
+        "batch_id",
+    }
+
+    missing = required_columns - columns
+    assert not missing, f"init_db did not repair fx_rates columns: {sorted(missing)}"
+
+
+@pytest.mark.smoke
 def test_engine_connectivity_and_select_1():
     """
     Minimal 'can we talk to the DB?' check using the SQLAlchemy engine,
