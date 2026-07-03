@@ -926,6 +926,44 @@ def _csv_response_reports_success(data: dict) -> bool:
     return False
 
 
+def _csv_response_reports_errors(data: dict) -> bool:
+    """
+    Accept multiple response shapes from CSV preview/import validation.
+
+    We want malformed CSVs to be visibly rejected or reported with errors.
+    """
+    numeric_error_fields = (
+        "total_errors",
+        "errors_count",
+        "error_count",
+        "skipped_errors",
+        "invalid_rows",
+        "rows_invalid",
+    )
+
+    for field in numeric_error_fields:
+        value = data.get(field)
+        if isinstance(value, int) and value >= 1:
+            return True
+
+    errors = data.get("errors")
+    if isinstance(errors, list) and len(errors) >= 1:
+        return True
+
+    issues = data.get("issues")
+    if isinstance(issues, list) and len(issues) >= 1:
+        return True
+
+    detail = data.get("detail")
+    if isinstance(detail, list) and len(detail) >= 1:
+        return True
+
+    if isinstance(detail, str) and detail.strip():
+        return True
+
+    return False
+
+
 # --------------------------------------------------------------------------------------
 # Tests
 # --------------------------------------------------------------------------------------
@@ -969,6 +1007,55 @@ def test_csv_upload_or_import_accepts_valid_buy_sell_file():
         f"CSV endpoint {endpoint} returned success status but did not report valid/imported rows. "
         f"Response was: {data!r}"
     )
+
+
+def test_csv_upload_or_import_rejects_malformed_file_without_crashing():
+    csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+not-a-date,BUY,BTC,not-a-number,EUR,1000,EUR,0,SmokeCSV,bad amount and timestamp
+2024-06-01T12:00:00Z,SELL,,0.04,EUR,600,EUR,0,SmokeCSV,missing asset
+2024-06-02T12:00:00Z,SELL,ETH,,EUR,700,EUR,0,SmokeCSV,missing amount
+"""
+
+    r, endpoint = _try_csv_upload_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV endpoint {endpoint} must not crash on malformed CSV. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        # Explicit validation/business rejection is acceptable.
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected malformed CSV endpoint status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    if "application/json" not in ct:
+        pytest.fail(
+            f"CSV endpoint {endpoint} accepted malformed CSV with non-JSON response: "
+            f"status={r.status_code}, content-type={ct}, body={r.text[:1000]}"
+        )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV endpoint {endpoint} accepted malformed CSV but did not report errors. "
+        f"Response was: {data!r}"
+    )
+
+    total_errors = data.get("total_errors")
+    if isinstance(total_errors, int):
+        assert total_errors >= 1, (
+            f"CSV endpoint {endpoint} should report at least one malformed row. "
+            f"Response was: {data!r}"
+        )
 
 
 def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
