@@ -50,13 +50,16 @@ class ItRule(TaxRule):
 
     def finalize_taxable_gain(self, gain_eur: Decimal, ctx: RunContext) -> Decimal:
         """
-        Italy – simplified threshold model (config-driven placeholder).
+        Italy – threshold model (simplified, deterministic).
 
-        If `cfg.it_threshold_eur` is set:
-          - gains <= threshold -> taxable = 0
-          - gains > threshold  -> taxable = gain
-
-        Losses always reduce the taxable base.
+        Rules:
+          - Losses (<= 0) always reduce taxable base.
+          - If cfg.it_threshold_eur is set and > 0:
+              gains <= threshold -> taxable = 0
+              gains > threshold  -> taxable = gain
+          - Else default year-aware threshold:
+              tax_year <= 2024 -> threshold = €2,000
+              tax_year >= 2025 -> no threshold
         """
         gain_rounded = normalize_gain(gain_eur, ctx)
 
@@ -65,18 +68,17 @@ class ItRule(TaxRule):
             logger.debug(f"[IT] Loss/non-positive gain taxable (reduces base), rounded={gain_rounded}")
             return gain_rounded
 
-        # Explicit override via config (kept for UI/tests)
-        thr_raw = getattr(getattr(ctx, "cfg", None), "it_threshold_eur", None)
-
+        # Config override (kept for UI/tests)
         thr: Decimal | None = None
+        thr_raw = getattr(getattr(ctx, "cfg", None), "it_threshold_eur", None)
         try:
             if thr_raw is not None and str(thr_raw).strip() != "":
                 thr = Decimal(str(thr_raw))
         except Exception:
             thr = None
 
+        # Default year-aware threshold (only if override not set)
         if thr is None:
-            # Default year-aware threshold
             try:
                 tax_year = int(getattr(ctx, "tax_year", 0) or 0)
             except Exception:
@@ -90,20 +92,5 @@ class ItRule(TaxRule):
         if thr is not None and thr > 0 and gain_rounded <= thr:
             logger.debug(f"[IT] Gain under threshold: taxable=0 (gain={gain_rounded} thr={thr})")
             return Decimal("0")
-
-        # Losses always reduce taxable base
-        if gain_rounded <= 0:
-            return gain_rounded
-
-        thr = getattr(getattr(ctx, "cfg", None), "it_threshold_eur", None)
-        if thr is not None:
-            try:
-                thr_dec = Decimal(str(thr))
-                if gain_rounded <= thr_dec:
-                    logger.debug(f"[IT] Gain under threshold ({thr_dec}); taxable=0")
-                    return Decimal("0")
-            except Exception:
-                # If threshold is malformed, fall back to taxable
-                pass
 
         return gain_rounded

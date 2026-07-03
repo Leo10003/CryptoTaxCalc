@@ -1,0 +1,179 @@
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+198 INFO: PyInstaller: 6.10.0, contrib hooks: 2025.9
+198 INFO: Python: 3.12.10
+223 INFO: Platform: Windows-11-10.0.26200-SP0
+223 INFO: Python environment: C:\Users\picci\Desktop\CryptoTaxCalc\.venv
+223 INFO: wrote C:\Users\picci\Desktop\CryptoTaxCalc\CryptoTaxCalc_Demo.spec
+225 INFO: Removing temporary files and cleaning cache in C:\Users\picci\AppData\Local\pyinstaller
+235 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\picci\\Desktop\\CryptoTaxCalc',
+ 'C:\\Users\\picci\\AppData\\Local\\Programs\\Python\\Python312\\python312.zip',
+ 'C:\\Users\\picci\\AppData\\Local\\Programs\\Python\\Python312\\DLLs',
+ 'C:\\Users\\picci\\AppData\\Local\\Programs\\Python\\Python312\\Lib',
+ 'C:\\Users\\picci\\AppData\\Local\\Programs\\Python\\Python312',
+ 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv',
+ 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages',
+ 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\src',
+ 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\setuptools\\_vendor',
+ 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\src',
+ 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\src']
+493 INFO: Appending 'datas' from .spec
+497 INFO: checking Analysis
+498 INFO: Building Analysis because Analysis-00.toc is non existent
+498 INFO: Running Analysis Analysis-00.toc
+498 INFO: Target bytecode optimization level: 0
+498 INFO: Initializing module dependency graph...
+499 INFO: Caching module graph hooks...
+513 INFO: Analyzing base_library.zip ...
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+1872 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+3427 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+4459 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+4790 INFO: Caching module dependency graph...
+4906 INFO: Looking for Python shared library...
+4942 INFO: Using Python shared library: C:\Users\picci\AppData\Local\Programs\Python\Python312\python312.dll
+4942 INFO: Analyzing C:\Users\picci\Desktop\CryptoTaxCalc\src\cryptotaxcalc\demo_launcher.py
+4976 INFO: Processing standard module hook 'hook-uvicorn.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+5532 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5668 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6479 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+6480 INFO: SetuptoolsInfo: initializing cached setuptools info...
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+10267 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+10327 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+10744 INFO: Processing standard module hook 'hook-websockets.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+11583 INFO: Processing standard module hook 'hook-anyio.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+12519 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+12993 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+12993 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+12998 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+13014 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13054 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+13058 INFO: Processing pre-safe-import-module hook 'hook-jaraco.functools.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13059 INFO: Setuptools: 'jaraco.functools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.functools'!
+13066 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13067 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+13255 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13263 INFO: Processing standard module hook 'hook-packaging.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+13412 INFO: Processing pre-safe-import-module hook 'hook-jaraco.text.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13412 INFO: Setuptools: 'jaraco.text' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.text'!
+13420 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13421 INFO: Processing pre-safe-import-module hook 'hook-jaraco.context.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13422 INFO: Setuptools: 'jaraco.context' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco.context'!
+13429 INFO: Processing pre-safe-import-module hook 'hook-backports.tarfile.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13429 INFO: Setuptools: 'backports.tarfile' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.backports.tarfile'!
+13540 INFO: Processing standard module hook 'hook-backports.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+13767 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13767 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+14176 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14335 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14335 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+17305 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+18014 INFO: Processing standard module hook 'hook-pydantic.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+18743 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+20120 INFO: Processing standard module hook 'hook-jinja2.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+20839 INFO: Processing standard module hook 'hook-reportlab.lib.utils.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+20877 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+20965 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+21348 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\numpy\\_pyinstaller'
+22544 INFO: Processing standard module hook 'hook-psutil.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+23278 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+23569 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23724 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+24030 INFO: Processing standard module hook 'hook-reportlab.pdfbase._fontdata.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+25813 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25949 INFO: Processing standard module hook 'hook-matplotlib.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26267 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+27103 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28107 INFO: Processing standard module hook 'hook-dateutil.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+28181 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29400 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+29436 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+30149 INFO: Processing module hooks (post-graph stage)...
+30550 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30550 INFO: Matplotlib backend selection method: automatic discovery of used backends
+30578 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'cryptotaxcalc.report_pdf': ['Agg']
+30578 INFO: The following Matplotlib backends were discovered by scanning for `matplotlib.use()` calls: ['Agg']. If your backend of choice is not in this list, either add a `matplotlib.use()` call to your code, or configure the backend collection via hook options (see: https://pyinstaller.org/en/stable/hooks-config.html#matplotlib-hooks).
+30578 INFO: Selected matplotlib backends: ['Agg']
+30669 INFO: Processing standard module hook 'hook-pkg_resources.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+30980 INFO: Processing pre-safe-import-module hook 'hook-platformdirs.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+30987 INFO: Processing standard module hook 'hook-platformdirs.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+31270 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+31421 INFO: Processing pre-safe-import-module hook 'hook-autocommand.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+31421 INFO: Setuptools: 'autocommand' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.autocommand'!
+31507 INFO: Processing pre-safe-import-module hook 'hook-typeguard.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+31507 INFO: Setuptools: 'typeguard' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.typeguard'!
+32110 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+32442 WARNING: Hidden import "pysqlite2" not found!
+32443 WARNING: Hidden import "MySQLdb" not found!
+32444 WARNING: Hidden import "psycopg2" not found!
+33331 INFO: Processing standard module hook 'hook-tzdata.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\altgraph\__init__.py:142: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+33938 INFO: Performing binary vs. data reclassification (980 entries)
+70452 INFO: Looking for ctypes DLLs
+70520 INFO: Analyzing run-time hooks ...
+70528 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+70530 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+70532 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+70534 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+70535 INFO: Including run-time hook 'pyi_rth_pkgres.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+70538 INFO: Including run-time hook 'pyi_rth_mplconfig.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+70539 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+70540 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+70602 INFO: Looking for dynamic libraries
+C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\PyInstaller\building\build_main.py:207: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  __import__(package)
+73902 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\picci\\Desktop\\CryptoTaxCalc\\.venv\\Lib\\site-packages\\numpy.libs']
+73902 INFO: Extra DLL search directories (PATH): []
+90482 INFO: Warnings written to C:\Users\picci\Desktop\CryptoTaxCalc\build\CryptoTaxCalc_Demo\warn-CryptoTaxCalc_Demo.txt
+90645 INFO: Graph cross-reference written to C:\Users\picci\Desktop\CryptoTaxCalc\build\CryptoTaxCalc_Demo\xref-CryptoTaxCalc_Demo.html
+90719 INFO: checking PYZ
+90719 INFO: Building PYZ because PYZ-00.toc is non existent
+90719 INFO: Building PYZ (ZlibArchive) C:\Users\picci\Desktop\CryptoTaxCalc\build\CryptoTaxCalc_Demo\PYZ-00.pyz
+93644 INFO: Building PYZ (ZlibArchive) C:\Users\picci\Desktop\CryptoTaxCalc\build\CryptoTaxCalc_Demo\PYZ-00.pyz completed successfully.
+93854 INFO: checking PKG
+93854 INFO: Building PKG because PKG-00.toc is non existent
+93854 INFO: Building PKG (CArchive) CryptoTaxCalc_Demo.pkg
+93886 INFO: Building PKG (CArchive) CryptoTaxCalc_Demo.pkg completed successfully.
+93887 INFO: Bootloader C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+93887 INFO: checking EXE
+93887 INFO: Building EXE because EXE-00.toc is non existent
+93887 INFO: Building EXE from EXE-00.toc
+93887 INFO: Copying bootloader EXE to C:\Users\picci\Desktop\CryptoTaxCalc\build\CryptoTaxCalc_Demo\CryptoTaxCalc_Demo.exe
+93891 INFO: Copying icon to EXE
+93895 INFO: Copying 0 resources to EXE
+93895 INFO: Embedding manifest in EXE
+93898 INFO: Appending PKG archive to EXE
+93914 INFO: Fixing EXE headers
+94113 INFO: Building EXE from EXE-00.toc completed successfully.
+94123 INFO: checking COLLECT
+94123 INFO: Building COLLECT because COLLECT-00.toc is non existent
+94124 INFO: Removing dir C:\Users\picci\Desktop\CryptoTaxCalc\dist\CryptoTaxCalc_Demo
+94421 INFO: Building COLLECT COLLECT-00.toc
+95815 INFO: Building COLLECT COLLECT-00.toc completed successfully.

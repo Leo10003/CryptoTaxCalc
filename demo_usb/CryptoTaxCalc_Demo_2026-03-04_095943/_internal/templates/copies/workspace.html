@@ -1,0 +1,3586 @@
+{% extends "base.html" %}
+
+{% block title %}CryptoTaxCalc — Workspace{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* Upload modal overlay */
+
+  .ws-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.32);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity 0.18s var(--ease);
+    z-index: 40;
+  }
+
+  .ws-modal-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .ws-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 41;
+  }
+
+  .ws-modal-inner {
+    width: min(520px, 100% - 32px);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    box-shadow: 0 18px 58px rgba(0,0,0,0.26);
+    padding: 18px 18px 16px;
+    pointer-events: auto;
+    transform: translateY(12px) scale(0.96);
+    opacity: 0;
+    transition:
+      opacity 0.22s var(--ease),
+      transform 0.22s var(--ease);
+  }
+
+  /* Wizard-style stepper for the upload flow */
+
+  .ws-modal-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 0 2px 4px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+
+  .ws-modal-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--muted);
+    position: relative;
+  }
+
+  .ws-modal-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -6px;
+    left: calc(24px + 8px);
+    height: 1px;
+    transform: translateY(-50%);
+    background: color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .ws-modal-step-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+  }
+
+  .ws-modal-step.is-active .ws-modal-step-dot,
+  .ws-modal-step.is-complete .ws-modal-step-dot {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+    color: var(--accent);
+  }
+
+  .ws-modal-step-labels {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .ws-modal-step-count {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .ws-modal-step-title {
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Active vs completed step labels (progress psychology) */
+  .ws-modal-step.is-active .ws-modal-step-count,
+  .ws-modal-step.is-active .ws-modal-step-title {
+    color: var(--text);
+  }
+
+  .ws-modal-step.is-complete .ws-modal-step-count,
+  .ws-modal-step.is-complete .ws-modal-step-title {
+    color: color-mix(in srgb, var(--muted) 80%, var(--text));
+  }
+
+  /* Upload step 1 layout */
+
+  .ws-upload-intro {
+    margin-bottom: 10px;
+  }
+
+  .ws-upload-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .ws-upload-sub {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .ws-upload-dropzone {
+    margin-top: 10px;
+    border-radius: 12px;
+    border: 1px dashed color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition:
+      border-color 0.16s var(--ease),
+      background 0.16s var(--ease),
+      box-shadow 0.16s var(--ease);
+  }
+
+  .ws-upload-dropzone.is-dragover {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+    background: color-mix(in srgb, var(--accent-soft) 24%, transparent);
+    box-shadow: 0 12px 36px rgba(0,0,0,0.38);
+  }
+
+  .ws-upload-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    opacity: 0.85;
+  }
+
+  .ws-upload-drop-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+  }
+
+  .ws-upload-drop-primary {
+    font-weight: 600;
+  }
+
+  .ws-upload-drop-secondary {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-upload-browse-link {
+    border: none;
+    background: none;
+    padding: 0;
+    margin: 0;
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .ws-upload-files-summary {
+    margin-top: 12px;
+  }
+
+  .ws-upload-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .ws-upload-table th,
+  .ws-upload-table td {
+    padding: 4px 6px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .ws-upload-table th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .ws-upload-empty-row td {
+    padding: 6px 6px 4px;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .ws-upload-note {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-modal.is-open .ws-modal-inner {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .ws-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .ws-modal-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .ws-modal-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .ws-modal-close {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 999px;
+    transition:
+      background 0.16s var(--ease),
+      transform 0.08s var(--ease);
+  }
+
+  .ws-modal-close:hover {
+    background: color-mix(in srgb, var(--border) 24%, transparent);
+  }
+
+  .ws-modal-close:active {
+    transform: translateY(1px);
+  }
+
+  .ws-modal-body {
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ws-modal-field-label {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .ws-modal-file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ws-modal-file-label {
+    flex: 1 1 auto;
+    min-height: 32px;
+    border-radius: 10px;
+    border: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 97%, transparent);
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ws-modal-file-browse {
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    background: color-mix(in srgb, var(--accent-soft) 20%, transparent);
+    font-size: 12px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition:
+      background 0.16s var(--ease),
+      transform 0.08s var(--ease);
+  }
+
+  .ws-modal-file-browse:hover {
+    background: color-mix(in srgb, var(--accent-soft) 32%, transparent);
+  }
+
+  .ws-modal-file-browse:active {
+    transform: translateY(1px);
+  }
+
+  .ws-modal-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .ws-modal-row > * {
+    flex: 1 1 0;
+  }
+
+  .ws-modal-select,
+  .ws-modal-input {
+    width: 100%;
+    padding: 6px 9px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    font-size: 12px;
+  }
+
+  .ws-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .ws-modal-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .ws-modal-error {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #d9534f;
+  }
+
+  :root {
+    --ws-max-width: 880px;
+  }
+
+  .ws-shell {
+    position: relative;
+    min-height: 100vh;
+    background: var(--bg);
+  }
+
+  .ws-shell.is-collapsed .ws-sidebar {
+    width: 72px;
+  }
+
+  .ws-preview-icon {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ws-preview-icon img {
+    width: 32px;
+    height: 32px;
+    display: block;
+  }
+
+  /* reuse dark/light logic for card icons */
+  .ws-preview-icon .icon-light {
+    display: none;
+  }
+
+  html[data-theme="light"] .ws-preview-icon .icon-dark {
+    display: none;
+  }
+
+  html[data-theme="light"] .ws-preview-icon .icon-light {
+    display: block;
+  }
+
+  html[data-theme="dark"] .ws-preview-icon .icon-dark {
+    display: block;
+  }
+
+  html[data-theme="dark"] .ws-preview-icon .icon-light {
+    display: none;
+  }
+
+  /* Sidebar */
+
+  .ws-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 210px;
+    border-right: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    padding: 0 14px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    z-index: 20;
+    transition: width 0.22s var(--ease);
+  }
+
+  /* Slide the sidebar content on collapse / expand (stays aligned under header) */
+  .ws-sidebar-inner {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-top: 56px;          /* header height offset */
+  }
+
+  .ws-sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    padding-left: 8px;
+  }
+
+  .ws-sidebar-logo-mark {
+    box-sizing: border-box;
+    width: 32px;                      /* slightly smaller, easier to center */
+    aspect-ratio: 1 / 1;              /* guarantees a perfect circle */
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--accent);
+    background: transparent;
+    cursor: pointer;
+    transition:
+      background-color 0.16s var(--ease),
+      border-color 0.16s var(--ease),
+      transform 0.08s var(--ease);
+  }
+
+  .ws-sidebar-logo-mark:hover {
+    background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+  }
+
+  .ws-sidebar-logo-mark:active {
+    transform: translateY(1px);
+  }
+
+  .ws-sidebar-logo-text {
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      transform 0.28s cubic-bezier(0.19, 1, 0.22, 1),
+      opacity   0.28s cubic-bezier(0.19, 1, 0.22, 1);
+    will-change: transform, opacity;
+  }
+
+  .ws-shell.is-collapsed .ws-sidebar-logo-text {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  .ws-sidebar-section-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 12px;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      transform 0.28s cubic-bezier(0.19, 1, 0.22, 1),
+      opacity   0.28s cubic-bezier(0.19, 1, 0.22, 1);
+    will-change: transform, opacity;
+  }
+
+  .ws-shell.is-collapsed .ws-sidebar-section-label {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  .ws-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .ws-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+    appearance: none;
+    position: relative;
+    transition:
+      background-color 0.16s var(--ease),
+      color 0.16s var(--ease),
+      transform 0.12s var(--ease);
+  }
+
+  .ws-nav-item .label-text {
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 1;
+    margin-left: 4px;
+    transform: translateX(0);
+    transition:
+      transform 0.28s cubic-bezier(0.19, 1, 0.22, 1),
+      opacity   0.28s cubic-bezier(0.19, 1, 0.22, 1);
+    will-change: transform, opacity;
+  }
+
+  .ws-shell.is-collapsed .ws-nav-item .label-text {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  .ws-nav-item.is-active {
+    background: color-mix(in srgb, var(--accent-soft) 24%, transparent);
+    color: var(--text);
+  }
+
+  .ws-nav-item.is-active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .ws-nav-item:hover {
+    background: color-mix(in srgb, var(--accent-soft) 18%, transparent);
+    color: var(--text);
+  }
+
+  .ws-sidebar-footer {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* Sidebar nav intro + hover motion */
+  @keyframes ws-nav-item-intro {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .ws-sidebar-nav .ws-nav-item,
+  .ws-sidebar-footer .ws-nav-item {
+    animation: ws-nav-item-intro 0.22s var(--ease) both;
+  }
+
+  .ws-sidebar-nav .ws-nav-item:nth-child(1) { animation-delay: 0.03s; }
+  .ws-sidebar-nav .ws-nav-item:nth-child(2) { animation-delay: 0.06s; }
+  .ws-sidebar-footer .ws-nav-item:nth-child(1) { animation-delay: 0.09s; }
+  .ws-sidebar-footer .ws-nav-item:nth-child(2) { animation-delay: 0.12s; }
+
+  .ws-nav-item:hover {
+    background: color-mix(in srgb, var(--accent-soft) 18%, transparent);
+    color: var(--text);
+    transform: translateX(1px);
+  }
+
+  .ws-nav-icon {
+    width: 35px;
+    height: 35px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;          /* NEW: icon column stays fixed */
+  }
+
+  .ws-nav-icon img {
+    width: 35px;
+    height: 35px;
+    display: block;
+  }
+
+  /* dark/light icon handling */
+  .ws-nav-icon .icon-light {
+    display: none;
+  }
+
+  html[data-theme="light"] .ws-nav-icon .icon-dark {
+    display: none;
+  }
+
+  html[data-theme="light"] .ws-nav-icon .icon-light {
+    display: block;
+  }
+
+  html[data-theme="dark"] .ws-nav-icon .icon-dark {
+    display: block;
+  }
+
+  html[data-theme="dark"] .ws-nav-icon .icon-light {
+    display: none;
+  }
+
+  /* Main */
+
+  .ws-main {
+    position: relative; 
+    min-width: 0;
+    padding: 18px 20px 28px;
+    margin-left: 210px;
+    transition: margin-left 0.22s var(--ease);
+  }
+
+  .ws-shell.is-collapsed .ws-main {
+    margin-left: 72px;
+  }
+
+  .ws-main-inner {
+    max-width: var(--ws-max-width);
+    margin: 0 auto;
+    padding-top: 80px;      /* generous, but constant */
+    padding-bottom: 80px;
+  }
+
+  .ws-main-inner::before {
+    content: "";
+    position: absolute;
+    left: 210px;                     /* matches expanded sidebar edge */
+    right: 0;
+    top: 0;
+    height: 260px;                   /* height of hero band */
+    background: radial-gradient(
+      circle at top center,
+      rgba(255,255,255,0.06),
+      transparent 65%
+    );
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* Top header band */
+
+  .ws-header-band {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  /* Shared fade+slide-in animation for results sections */
+  .ws-fade-slide {
+    opacity: 0;
+    transform: translateY(6px);
+    transition:
+      opacity 0.22s var(--ease),
+      transform 0.22s var(--ease);
+  }
+
+  .ws-fade-slide.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .ws-header-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .ws-header-title {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .ws-header-sub {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-run-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+  }
+
+  .ws-run-status-badge.is-running {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
+    color: var(--accent);
+    animation: ws-status-pulse 0.9s var(--ease) infinite alternate;
+  }
+
+  .ws-run-status-badge.is-success {
+    border-color: #3cb371;
+    background: color-mix(in srgb, #3cb371 22%, var(--surface));
+    color: #e8fff4;
+    animation: none;
+  }
+
+  .ws-run-status-badge.is-error {
+    border-color: #d9534f;
+    background: color-mix(in srgb, #d9534f 20%, var(--surface));
+    color: #fff;
+    animation: none;
+  }
+
+  @keyframes ws-status-pulse {
+    from {
+      transform: translateY(0);
+      box-shadow: 0 0 0 0 rgba(75, 155, 255, 0.0);
+    }
+    to {
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 3px rgba(75, 155, 255, 0.18);
+    }
+  }
+
+  /* Fresh KPI glow after a successful run */
+  .ws-kpi-stack.is-fresh .ws-kpi-card {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent-soft) 50%, var(--border)),
+      0 10px 30px rgba(0,0,0,0.35);
+    transform: translateY(-1px);
+    transition:
+      box-shadow 0.3s var(--ease),
+      transform 0.3s var(--ease);
+  }
+
+  .ws-header-actions {
+    flex: 0 0 auto;
+  }
+
+  .ws-header-actions .btn-primary {
+    min-width: 170px;
+  }
+
+  /* Hero states */
+
+  .ws-context-strip {
+    max-width: var(--ws-max-width);
+    margin: 4px auto 14px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ws-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 18px;             /* slightly more breathing internally */
+    margin-bottom: 48px;   /* clearer separation from cards */
+  }
+
+  .ws-hero-title {
+    font-size: 38px;       /* a bit larger, but not cartoonish */
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 0;      /* handled by gap above */
+  }
+
+  .ws-hero-sub {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 520px;
+    margin-bottom: 0;      /* rely on gap */
+  }
+
+  @media (max-width: 960px) {
+    .ws-hero {
+      align-items: center;
+    }
+  }
+
+  .ws-hero-cta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ws-hero-primary {
+    min-width: 190px;
+    padding-inline: 20px;
+    transition:
+      transform 0.16s var(--ease),
+      box-shadow 0.16s var(--ease),
+      filter 0.16s var(--ease);
+    animation: ws-hero-cta-intro 0.55s var(--ease) 0.12s both;
+  }
+
+  .ws-hero-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    filter: brightness(1.03);
+  }
+
+  .ws-hero-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  }
+
+  @keyframes ws-hero-cta-intro {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .ws-hero-small-note {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-hero-checklist {
+    margin: 4px 0 10px;
+    padding-left: 16px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-hero-checklist li {
+    margin-bottom: 2px;
+  }
+
+  /* Preview row */
+
+  .ws-preview-row {
+    margin-top: -8px;    /* pulls cards a bit closer to the hero */
+    margin-bottom: 32px;
+  }
+
+  .ws-preview-heading {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .ws-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    max-width: 840px;      /* narrower band, matches hero width */
+    margin: 0 auto;        /* centre under the hero */
+  }
+
+  @media (max-width: 900px) {
+    .ws-preview-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .ws-preview-card {
+    box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 97%, transparent);
+    padding: 16px 18px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      transform 0.16s var(--ease),
+      box-shadow 0.16s var(--ease),
+      border-color 0.16s var(--ease),
+      background 0.16s var(--ease);
+  }
+
+  .ws-preview-card-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .ws-preview-card-sub {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .ws-preview-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.36);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+  }
+
+  /* Filters row */
+
+  .ws-filters-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+    font-size: 12px;
+  }
+
+  .ws-action-strip {
+    max-width: var(--ws-max-width);
+    margin: 2px auto 18px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-action-strip-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ws-action-strip-buttons {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .ws-action-chip {
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    color: var(--text);
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition:
+      background-color 0.16s var(--ease),
+      box-shadow 0.16s var(--ease),
+      transform 0.08s var(--ease);
+  }
+
+  .ws-action-chip:hover {
+    background: color-mix(in srgb, var(--accent-soft) 18%, transparent);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  .ws-action-chip:active {
+    transform: translateY(1px);
+    box-shadow: none;
+  }
+
+  @media (max-width: 800px) {
+    .ws-action-strip {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .ws-action-strip-buttons {
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+  }
+
+  .ws-filter-select {
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  /* Main grid: table + KPIs */
+
+  .ws-main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  @media (max-width: 1024px) {
+    .ws-main-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .ws-card {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    padding: 14px 14px 16px;
+    font-size: 13px;
+  }
+
+  /* Focus highlight when user clicks “Inspect events” */
+  .ws-card-focus {
+    animation: ws-card-focus 1.2s var(--ease);
+  }
+
+  @keyframes ws-card-focus {
+    0% {
+      box-shadow:
+        0 0 0 0 rgba(75, 155, 255, 0.32),
+        0 10px 30px rgba(0, 0, 0, 0.35);
+      border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+      transform: translateY(-1px);
+    }
+    100% {
+      box-shadow: none;
+      border-color: var(--border);
+      transform: translateY(0);
+    }
+  }
+
+  .ws-card h2 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .ws-card p.sub {
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .ws-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .ws-table th,
+  .ws-table td {
+    padding: 6px 8px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .ws-table th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 11px;
+  }
+
+  .ws-table-empty {
+    padding: 8px 0 2px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-kpi-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ws-kpi-card {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    padding: 10px 12px 11px;
+  }
+
+  .ws-kpi-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+
+  .ws-kpi-value {
+    font-size: 18px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ws-kpi-highlight {
+    color: color-mix(in srgb, var(--accent) 70%, var(--text));
+  }
+
+  /* Lower grid: charts, warnings, notes */
+
+  .ws-lower-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  @media (max-width: 1024px) {
+    .ws-lower-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .ws-lower-left {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  @media (max-width: 700px) {
+    .ws-lower-left {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .ws-chart-placeholder {
+    height: 240px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px 12px;
+    font-size: 12px;
+  }
+
+  .ws-chart-placeholder h3 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .ws-chart-sub {
+    margin: 0 0 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-chart-insight {
+    margin: 6px 0 0;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-warning-list {
+    margin: 6px 0 0;
+    padding-left: 16px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .ws-warning-list li {
+    margin-bottom: 2px;
+  }
+
+  .ws-review-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-top: 4px;
+    color: var(--muted);
+  }
+
+  .ws-review-pill {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+  }
+
+  .ws-review-pill.ready {
+    border-color: #3cb371;
+    background: color-mix(in srgb, #3cb371 18%, var(--surface));
+    color: #e8fff4;
+  }
+
+  .ws-review-pill.attention {
+    border-color: #d9534f;
+    background: color-mix(in srgb, #d9534f 20%, var(--surface));
+    color: #fff;
+  }
+
+  .ws-country-notes ul {
+    margin: 6px 0 0;
+    padding-left: 16px;
+    font-size: 11px;
+  }
+
+  .ws-country-notes p.sub {
+    margin-bottom: 4px;
+  }
+
+  @media (max-width: 800px) {
+    .ws-header-band {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .ws-header-actions {
+      width: 100%;
+    }
+    .ws-header-actions .btn-primary {
+      width: 100%;
+      text-align: center;
+    }
+  }
+
+  /* Temporarily hide the preset/save setup system from the UI */
+  #wsPresetsBar,
+  #wsPresetSave {
+    display: none !important;
+  }
+
+  /* Make all primary buttons obviously clickable */
+  .btn,
+  button {
+    cursor: pointer;
+  }
+
+  /* Extra emphasis for the hero CTA and header CTA */
+  .btn.btn-primary,
+  .ws-hero-primary {
+    cursor: pointer;
+  }
+
+  /* Make all buttons clearly interactive */
+  button,
+  .btn {
+    cursor: pointer;
+  }
+</style>
+{% endblock %}
+
+{% set workspace_name = user_display_name|default(None) %}
+
+{% block content %}
+<div class="ws-shell">
+  <!-- Sidebar -->
+  <aside class="ws-sidebar">
+    <div class="ws-sidebar-inner">
+      <div class="ws-sidebar-logo">
+        <button
+          id="btnSidebarToggle"
+          class="ws-sidebar-logo-mark"
+          type="button"
+          aria-label="Toggle sidebar"
+        >
+          ☰
+        </button>
+        <span class="ws-sidebar-logo-text">CryptoTaxCalc</span>
+      </div>
+
+      <div class="ws-sidebar-section-label">Navigation</div>
+
+      <nav class="ws-sidebar-nav" aria-label="Workspace navigation">
+        <a href="/workspace" class="ws-nav-item is-active">
+          <span class="ws-nav-icon ws-nav-icon--workspace">
+            <img src="/static/img/icons/workspace_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/workspace_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">Workspace</span>
+        </a>
+        <a href="/history?format=html" class="ws-nav-item">
+          <span class="ws-nav-icon ws-nav-icon--history">
+            <img src="/static/img/icons/recent_runs_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/recent_runs_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">History</span>
+        </a>
+      </nav>
+
+      <div class="ws-sidebar-footer">
+        <button type="button" class="ws-nav-item">
+          <span class="ws-nav-icon ws-nav-icon--settings">
+            <img src="/static/img/icons/settings_icon_white.png" alt="" class="icon-dark">
+            <img src="/static/img/icons/settings_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">Settings</span>
+        </button>
+        <button type="button" class="ws-nav-item">
+          <span class="ws-nav-icon ws-nav-icon--help">
+            <img src="/static/img/icons/help_icon_white.png" alt="" class="icon-dark">
+            <!-- if you add a black variant later, swap this -->
+            <img src="/static/img/icons/help_icon_black.png" alt="" class="icon-light">
+          </span>
+          <span class="label-text">Help</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="ws-main">
+    <div class="ws-main-inner">
+      <!-- Top header band -->
+      <div class="ws-header-band">
+        <div class="ws-header-title-block">
+          <div class="ws-header-title">Tax Calculation Workspace</div>
+          <div class="ws-header-sub">
+            <span id="headerLastRun">No calculations yet</span>
+            <span id="wsRunStatus" class="ws-run-status-badge" style="display:none;">
+              Ready
+            </span>
+          </div>
+        </div>
+        <div class="ws-header-actions" id="headerRunActions">
+          <button id="btnRun" class="btn btn-primary" type="button">
+            New calculation
+          </button>
+        </div>
+      </div>
+
+      <div id="wsEngineContext" class="ws-context-strip">
+        No calculations yet. After your first run, this area will summarise the latest calculation for your account.
+      </div>
+
+      <!-- Saved setups bar (per-device presets) -->
+      <div id="wsPresetsBar" class="ws-action-strip" style="display:none; margin-top:6px; margin-bottom:14px;">
+        <span id="wsPresetsSummary" class="ws-action-strip-text">
+          No saved setups yet.
+        </span>
+        <div class="ws-action-strip-buttons">
+          <select id="wsPresetSelect" class="ws-filter-select" style="max-width:220px; display:none;">
+          </select>
+          <button id="wsPresetSave" class="ws-action-chip" type="button">
+            Save this setup
+          </button>
+        </div>
+      </div>
+
+      <!-- First-time (and returning) hero -->
+      <section id="heroFirst" class="ws-hero">
+        <div style="max-width: 540px;">
+          <div class="ws-hero-title">
+            Tax Calculation Workspace
+          </div>
+
+          <div class="ws-hero-sub" style="font-weight:600;">
+            {% if workspace_name %}
+              Welcome back, {{ workspace_name }}.
+            {% else %}
+              Welcome to your crypto tax workspace.
+            {% endif %}
+          </div>
+
+          <div class="ws-hero-sub">
+            Upload your CSV files and generate a clear EUR tax summary in one guided, three-step flow.
+          </div>
+
+          <div class="ws-hero-cta" style="align-items: center;">
+            <button
+              id="btnStartFirstReport"
+              class="btn btn-primary ws-hero-primary"
+              type="button"
+            >
+              New calculation
+            </button>
+          </div>
+
+          <div class="ws-hero-small-note" id="wsHeroPresetHint" style="text-align:center;">
+            When you’re finished, your calculations and PDFs are available under <strong>History</strong>.
+          </div>
+        </div>
+      </section>
+
+      <!-- Returning hero (seen after the first visit, before new run) -->
+      <section id="heroReturning" class="ws-hero" style="display:none;">
+        <div>
+          <div class="ws-hero-title">
+            {% if workspace_name %}
+              Welcome back, {{ workspace_name }}
+            {% else %}
+              Welcome back to your workspace
+            {% endif %}
+          </div>
+          <div class="ws-hero-sub">
+            Refresh your numbers with the latest CSVs and generate an updated EUR tax summary for this year.
+          </div>
+          <ul class="ws-hero-checklist">
+            <li>Upload new exchange and wallet exports for the current tax year.</li>
+            <li>Reuse your HR / IT setup and let CryptoTaxCalc recalculate the run.</li>
+            <li>Export a fresh PDF and review it with your accountant.</li>
+          </ul>
+          <div class="ws-hero-cta">
+            <button
+              id="btnUploadCsvReturning"
+              class="btn btn-primary ws-hero-primary"
+              type="button"
+            >
+              New calculation
+            </button>
+          </div>
+          <div class="ws-hero-small-note">
+            Recent runs and previous PDFs are available under <strong>Recent runs</strong>.
+          </div>
+        </div>
+      </section>
+
+      <!-- “What you’ll see here after your run” row -->
+      <section id="previewRow" class="ws-preview-row">
+        <div class="ws-preview-grid">
+          <div class="ws-preview-card">
+            <span class="ws-preview-icon">
+              <img src="/static/img/icons/gain&loses_icon_white.png" alt="" class="icon-dark">
+              <img src="/static/img/icons/gain&loses_icon_black.png" alt="" class="icon-light">
+            </span>
+            <div class="ws-preview-card-title">Gains &amp; Losses</div>
+            <div class="ws-preview-card-sub">
+              Review your net gains and losses by asset and date.
+            </div>
+          </div>
+
+          <div class="ws-preview-card">
+            <span class="ws-preview-icon">
+              <img src="/static/img/icons/country_rules_icon_white.png" alt="" class="icon-dark">
+              <img src="/static/img/icons/country_rules_icon_black.png" alt="" class="icon-light">
+            </span>
+            <div class="ws-preview-card-title">Country Rules</div>
+            <div class="ws-preview-card-sub">
+              Relate your tax treatment to your HR / IT jurisdiction.
+            </div>
+          </div>
+
+          <div class="ws-preview-card">
+            <span class="ws-preview-icon">
+              <img src="/static/img/icons/data_quality_icon_white.png" alt="" class="icon-dark">
+              <img src="/static/img/icons/data_quality_icon_black.png" alt="" class="icon-light">
+            </span>
+            <div class="ws-preview-card-title">Data Quality</div>
+            <div class="ws-preview-card-sub">
+              Check for any data quality issues before exporting reports.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p id="filtersHint" style="font-size:11px; color:var(--muted); margin:0 0 4px;">
+        Use filters to slice this run by asset and year.
+      </p>
+
+      <!-- Filters row (hidden until we have a run) -->
+      <div id="filtersRow" class="ws-filters-row ws-fade-slide" style="display:none;">
+        <select id="fltAsset" class="ws-filter-select" aria-label="Filter by asset">
+          <option value="ALL">All assets</option>
+        </select>
+        <select id="fltYear" class="ws-filter-select" aria-label="Filter by tax year">
+          <option value="ALL">All years</option>
+        </select>
+      </div>
+
+      <!-- Main grid: Gains & Losses + KPI stack (results mode) -->
+      <section id="sectionMainGrid" class="ws-main-grid ws-fade-slide" style="display:none;">
+        <div class="ws-card" id="glCard">
+          <h2>Gains &amp; Losses</h2>
+          <p class="sub">Final realised events for the latest calculation.</p>
+          <p id="glContext" class="sub" style="font-size:11px; color:var(--muted); display:none;">
+            Current filter: All assets • All years
+          </p>
+
+          <div id="glEmpty" class="ws-table-empty">
+            No calculation yet. Run a calculation to see realised events here.
+          </div>
+
+          <table id="glTable" class="ws-table" style="display:none;">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Asset</th>
+                <th>Quantity</th>
+                <th>Proceeds (EUR)</th>
+                <th>Gain / Loss (EUR)</th>
+              </tr>
+            </thead>
+            <tbody id="glBody"></tbody>
+          </table>
+          <p id="glSummary" class="sub" style="font-size:11px; color:var(--muted); display:none; margin-top:4px;">
+            <span id="glSummaryText"></span>
+            <button
+              id="btnDownloadEvents"
+              type="button"
+              style="margin-left:8px; border:none; background:none; padding:0; font-size:11px; color:var(--accent); cursor:pointer; text-decoration:underline; text-underline-offset:2px; display:none;"
+            >
+              Download full events CSV
+            </button>
+          </p>
+        </div>
+
+        <div class="ws-card ws-kpi-shell">
+          <h2>Key metrics for this view</h2>
+          <p class="sub">
+            These totals automatically follow the filters above. Use them as your headline numbers for this run.
+          </p>
+          <div class="ws-kpi-stack" id="wsKpiStack">
+            <div class="ws-kpi-card">
+              <div class="ws-kpi-label">Total Proceeds (EUR — current filter)</div>
+              <div id="kpiProceeds" class="ws-kpi-value ws-kpi-highlight">–</div>
+            </div>
+            <div class="ws-kpi-card">
+              <div class="ws-kpi-label">Total Realised Gain (EUR — current filter)</div>
+              <div id="kpiGain" class="ws-kpi-value">–</div>
+            </div>
+            <div class="ws-kpi-card">
+              <div class="ws-kpi-label">Taxable Gain (EUR — current filter)</div>
+              <div id="kpiTaxable" class="ws-kpi-value">–</div>
+            </div>
+            <div class="ws-kpi-card">
+              <div class="ws-kpi-label">Exempt Gain (EUR — current filter)</div>
+              <div id="kpiExempt" class="ws-kpi-value">–</div>
+            </div>
+            <div class="ws-kpi-card">
+              <div class="ws-kpi-label">Estimated Tax (EUR)</div>
+              <div id="kpiTax" class="ws-kpi-value">–</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Action strip: next steps after a successful run -->
+      <div id="wsActionStrip" class="ws-action-strip ws-fade-slide" style="display:none;">
+        <span class="ws-action-strip-text">
+          Next steps • Review this run, then export or inspect it as needed.
+        </span>
+        <div class="ws-action-strip-buttons">
+          <button id="btnActionAdjust" class="ws-action-chip" type="button">
+            Upload new files
+          </button>
+          <button id="btnActionExport" class="ws-action-chip" type="button">
+            Export PDF summary
+          </button>
+          <button id="btnActionInspect" class="ws-action-chip" type="button">
+            Inspect events
+          </button>
+        </div>
+      </div>
+
+      <!-- Lower grid: charts, warnings, country notes (results mode) -->
+      <section id="sectionLowerGrid" class="ws-lower-grid ws-fade-slide" style="margin-top:18px; display:none;">
+        <div class="ws-lower-left">
+          <div class="ws-chart-placeholder">
+            <h3>When did you realise gains?</h3>
+            <p class="ws-chart-sub" id="wsPerfSubtitle">
+              Realised gain by month for the current filter.
+            </p>
+            <canvas id="wsChartPerformance"></canvas>
+            <p class="ws-chart-insight" id="wsPerfInsight">
+              Once you run a calculation and apply filters, this chart will highlight your strongest months.
+            </p>
+          </div>
+          <div class="ws-chart-placeholder">
+            <h3>Which assets drive your gains?</h3>
+            <p class="ws-chart-sub" id="wsAllocSubtitle">
+              Realised gain per asset for the current filter.
+            </p>
+            <canvas id="wsChartAllocation"></canvas>
+            <p class="ws-chart-insight" id="wsAllocInsight">
+              After your first run, this chart shows which assets contribute most to realised gain.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <div class="ws-card">
+            <h2>Warnings &amp; data quality</h2>
+            <p id="warnEmpty" class="sub">
+              No issues detected for the latest run.
+            </p>
+            <div class="ws-review-status">
+              <span id="wsReviewPill" class="ws-review-pill ready">Ready to share</span>
+              <span id="wsReviewText">
+                This run looks clean. You can export it or send it to your accountant.
+              </span>
+            </div>
+            <p class="sub" style="font-size:11px; margin-top:4px;">
+              For a complete record, combine this workspace view with the PDF summary and the events CSV export.
+            </p>
+            <ul id="warnList" class="ws-warning-list" style="display:none;"></ul>
+          </div>
+
+          <div class="ws-card ws-country-notes" id="wsCountryNotesCard">
+            <h2 id="wsCountryNotesTitle">Country notes – HR / IT</h2>
+            <p id="wsCountryNotesSubtitle" class="sub">
+              High-level notes to help you brief your accountant or commercialista. The PDF includes a more complete section.
+            </p>
+            <ul id="wsCountryNotesList">
+              <li><strong>HR:</strong> focuses on capital gains on disposals; assets held 2+ years may be treated differently.</li>
+              <li><strong>IT:</strong> designed to support quadro RT/RW discussions with your commercialista.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Upload modal (wizard-style) -->
+      <div id="uploadBackdrop" class="ws-modal-backdrop"></div>
+      <div id="uploadModal" class="ws-modal" aria-hidden="true">
+        <div class="ws-modal-inner" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+          <!-- Stepper -->
+          <div class="ws-modal-stepper" aria-label="Upload and calculation progress">
+            <div class="ws-modal-step is-active">
+              <div class="ws-modal-step-dot">1</div>
+              <div class="ws-modal-step-labels">
+                <span class="ws-modal-step-count">Step 1 of 3</span>
+                <span class="ws-modal-step-title">Upload files</span>
+              </div>
+            </div>
+            <div class="ws-modal-step">
+              <div class="ws-modal-step-dot">2</div>
+              <div class="ws-modal-step-labels">
+                <span class="ws-modal-step-count">Step 2 of 3</span>
+                <span class="ws-modal-step-title">Choose jurisdiction</span>
+              </div>
+            </div>
+            <div class="ws-modal-step">
+              <div class="ws-modal-step-dot">3</div>
+              <div class="ws-modal-step-labels">
+                <span class="ws-modal-step-count">Step 3 of 3</span>
+                <span class="ws-modal-step-title">Run calculation</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ws-modal-header">
+            <div class="ws-modal-title" id="uploadModalTitle">
+              Upload files
+            </div>
+            <button id="btnUploadClose" class="ws-modal-close" type="button" aria-label="Close upload dialog">
+              ✕
+            </button>
+          </div>
+
+          <div class="ws-upload-intro">
+            <div class="ws-upload-title">Upload transaction CSVs</div>
+            <div class="ws-upload-sub">
+              Add exports from your exchanges and wallets. Nothing is final until you run the calculation.
+            </div>
+          </div>
+
+          <form id="uploadForm" class="ws-modal-body">
+            <!-- STEP 1: Upload files -->
+            <div id="wsStep1">
+              <!-- Drag & drop area -->
+              <div>
+                <div class="ws-modal-field-label">Transaction CSV files</div>
+                <div id="uploadDropZone" class="ws-upload-dropzone">
+                  <div class="ws-upload-icon">☁</div>
+                  <div class="ws-upload-drop-main">
+                    <div class="ws-upload-drop-primary">Drag &amp; drop CSV files here</div>
+                    <div class="ws-upload-drop-secondary">
+                      or
+                      <button id="btnUploadBrowse" class="ws-upload-browse-link" type="button">
+                        Browse files
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <input
+                  id="uploadFiles"
+                  type="file"
+                  name="files"
+                  accept=".csv"
+                  multiple
+                  hidden
+                >
+              </div>
+
+              <!-- Files summary table -->
+              <div class="ws-upload-files-summary">
+                <div class="ws-modal-field-label">Files added</div>
+                <table class="ws-upload-table" aria-live="polite">
+                  <thead>
+                    <tr>
+                      <th>File name</th>
+                      <th>Type</th>
+                      <th id="uploadTableLastHeader" style="text-align:right;">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody id="uploadFilesTableBody">
+                    <tr class="ws-upload-empty-row">
+                      <td colspan="3">No files added yet.</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div id="uploadFilesLabel" class="ws-upload-note">
+                  No files selected yet.
+                </div>
+              </div>
+
+              <div class="ws-upload-note">
+                We’ll merge all files safely and ignore duplicates where possible.
+              </div>
+            </div>
+
+            <!-- STEP 2: Choose jurisdiction -->
+            <div id="wsStep2" style="display:none;">
+              <div class="ws-upload-intro">
+                <div class="ws-upload-title">Choose jurisdiction</div>
+                <div class="ws-upload-sub">
+                  Select your tax residency so we can apply the correct rules and helper notes to your report.
+                </div>
+                <div class="ws-upload-note">
+                  You’re halfway there — next we’ll run your calculation.
+                </div>
+              </div>
+
+              <div class="ws-modal-row" style="margin-top:4px;">
+                <div>
+                  <div class="ws-modal-field-label">Jurisdiction</div>
+                  <select id="uploadJurisdiction" class="ws-modal-select">
+                    <option value="HR">Croatia (HR)</option>
+                    <option value="IT">Italy (IT)</option>
+                  </select>
+                  <div class="ws-upload-note">
+                    You can change this again before you run the calculation.
+                  </div>
+                </div>
+                <div>
+                  <div class="ws-modal-field-label">Tax year</div>
+                  <input
+                    id="uploadTaxYear"
+                    type="number"
+                    class="ws-modal-input"
+                    min="2016"
+                    max="2100"
+                  >
+                  <div class="ws-upload-note">
+                    Typically the calendar year for which you’re filing (e.g. 2025).
+                  </div>
+                  <div id="uploadTaxYearHint" class="ws-upload-note"></div>
+                </div>
+              </div>
+              <div class="ws-upload-note" id="wsStep2Notes">
+                <strong id="wsStep2NotesTitle">Country notes preview – Croatia (HR)</strong>
+                <ul id="wsStep2NotesList" style="margin:4px 0 0 16px; padding-left:16px;">
+                  <li>Assets held for more than 2 years may be exempt from capital gains tax.</li>
+                  <li>Short-term gains are typically taxable; keep detailed records of trades.</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- STEP 3: Review & run -->
+            <div id="wsStep3" style="display:none;">
+              <div class="ws-upload-intro">
+                <div class="ws-upload-title">Run calculation</div>
+                <div class="ws-upload-sub">
+                  Review your selections below, then start your calculation. You can run it again later if you update your data.
+                </div>
+              </div>
+
+              <div class="ws-modal-row" style="margin-top:4px;">
+                <div class="ws-modal-field-label">Files added</div>
+              </div>
+              <div class="ws-modal-row">
+                <div class="ws-modal-file-label" id="wsStep3FilesSummary">
+                  No files added yet.
+                </div>
+              </div>
+
+              <div class="ws-modal-row" style="margin-top:8px;">
+                <div class="ws-modal-field-label">Jurisdiction</div>
+              </div>
+              <div class="ws-modal-row">
+                <div class="ws-modal-file-label" id="wsStep3JurisdictionSummary">
+                  Not selected yet.
+                </div>
+              </div>
+
+              <div class="ws-upload-note" style="margin-top:10px;">
+                Calculations are estimates only and do not constitute tax advice.
+              </div>
+            </div>
+
+            <!-- Footer shared across steps -->
+            <div class="ws-modal-footer">
+              <div class="ws-modal-actions">
+                <button id="btnUploadCancel" class="btn btn-outline" type="button">
+                  Back
+                </button>
+                <button id="btnUploadConfirm" class="btn btn-primary" type="submit">
+                  Import &amp; continue
+                </button>
+              </div>
+            </div>
+
+            <div id="uploadError" class="ws-modal-error" style="display:none;"></div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+  (function () {
+    const wsShell = document.querySelector('.ws-shell');
+    const headerBand = document.querySelector('.ws-header-band');
+    const btnSidebarToggle = document.getElementById('btnSidebarToggle');
+    const SIDEBAR_KEY = 'wsSidebarCollapsed';
+
+    const heroFirst      = document.getElementById('heroFirst');
+    // const heroReturning  = document.getElementById('heroReturning');
+    const previewRow     = document.getElementById('previewRow');
+    const wsHeroPresetHint = document.getElementById('wsHeroPresetHint');
+    const filtersHint    = document.getElementById('filtersHint');
+    const filtersRow     = document.getElementById('filtersRow');
+    const sectionMain    = document.getElementById('sectionMainGrid');
+    const sectionLower   = document.getElementById('sectionLowerGrid');
+
+    const fltAsset  = document.getElementById('fltAsset');
+    const fltYear   = document.getElementById('fltYear');
+
+    const wsRunStatus = document.getElementById('wsRunStatus');
+    const wsKpiStack  = document.getElementById('wsKpiStack');
+
+    // In-memory store of all realized events for the latest run
+    let allEventsRaw = [];
+    // In-memory store of last import results (for Step 1 summary)
+    let lastImportResults = [];
+    // In-memory store of saved setups on this device
+    let wsPresets = [];
+
+    const btnStartFirst  = document.getElementById('btnStartFirstReport');
+    const btnUploadCsvReturning = document.getElementById('btnUploadCsvReturning');
+
+    // Upload modal elements
+    const uploadBackdrop   = document.getElementById('uploadBackdrop');
+    const uploadModal      = document.getElementById('uploadModal');
+    const uploadForm       = document.getElementById('uploadForm');
+    const uploadFilesInput = document.getElementById('uploadFiles');
+    const uploadFilesLabel = document.getElementById('uploadFilesLabel');
+    const btnUploadBrowse  = document.getElementById('btnUploadBrowse');
+    const btnUploadClose   = document.getElementById('btnUploadClose');
+    const btnUploadCancel  = document.getElementById('btnUploadCancel');
+    const btnUploadConfirm = document.getElementById('btnUploadConfirm');
+    const uploadJurisdiction = document.getElementById('uploadJurisdiction');
+    const uploadTaxYear    = document.getElementById('uploadTaxYear');
+    const uploadTaxYearHint = document.getElementById('uploadTaxYearHint');
+    const uploadError      = document.getElementById('uploadError');
+    const uploadDropZone   = document.getElementById('uploadDropZone');
+    const uploadFilesTableBody = document.getElementById('uploadFilesTableBody');
+    const uploadTableLastHeader = document.getElementById('uploadTableLastHeader');
+
+    // Wizard DOM pieces
+    const wizardSteps = document.querySelectorAll('.ws-modal-step');
+    const wsStep1 = document.getElementById('wsStep1');
+    const wsStep2 = document.getElementById('wsStep2');
+    const wsStep3 = document.getElementById('wsStep3');
+    const wsStep3FilesSummary = document.getElementById('wsStep3FilesSummary');
+    const wsStep3JurisdictionSummary = document.getElementById('wsStep3JurisdictionSummary');
+    const uploadModalTitle = document.getElementById('uploadModalTitle');
+
+    function updateWizardStep() {
+      // Stepper dots + checkmarks
+      if (wizardSteps && wizardSteps.length) {
+        wizardSteps.forEach((node, idx) => {
+          const stepIndex = idx + 1;
+          const isActive = (stepIndex === wizardStep);
+          const isComplete = (stepIndex < wizardStep);
+
+          node.classList.toggle('is-active', isActive);
+          node.classList.toggle('is-complete', isComplete);
+
+          const dot = node.querySelector('.ws-modal-step-dot');
+          if (dot) {
+            if (isComplete) {
+              dot.textContent = '✓';
+            } else {
+              dot.textContent = String(stepIndex);
+            }
+          }
+        });
+      }
+
+      // Show / hide step bodies
+      if (wsStep1) wsStep1.style.display = (wizardStep === 1) ? '' : 'none';
+      if (wsStep2) wsStep2.style.display = (wizardStep === 2) ? '' : 'none';
+      if (wsStep3) wsStep3.style.display = (wizardStep === 3) ? '' : 'none';
+
+      // Title per step
+      if (uploadModalTitle) {
+        if (wizardStep === 1) uploadModalTitle.textContent = 'Upload files';
+        else if (wizardStep === 2) uploadModalTitle.textContent = 'Choose jurisdiction';
+        else uploadModalTitle.textContent = 'Run calculation';
+      }
+
+      // Primary button label per step
+      if (btnUploadConfirm) {
+        if (wizardStep === 1) btnUploadConfirm.textContent = 'Import & continue';
+        else if (wizardStep === 2) btnUploadConfirm.textContent = 'Continue';
+        else btnUploadConfirm.textContent = 'Run calculation';
+      }
+    }
+
+    function resetWizard() {
+      wizardStep = 1;
+      updateWizardStep();
+    }
+
+    let hasRunThisSession = false;
+    let hasResultsThisSession = false;  // NEW: true only when we have realized events
+    let hasEverRun = false;
+    let hasSeenFirstHero = false;
+
+    // Wizard state for the upload / run modal
+    let wizardStep = 1;                  // 1 = Upload, 2 = Jurisdiction, 3 = Run
+    let currentJurisdiction = 'HR';      // last selected jurisdiction
+    let currentTaxYear = new Date().getFullYear();  // last selected tax year
+
+    try {
+      hasEverRun = window.localStorage.getItem('wsHasEverRun') === '1';
+      hasSeenFirstHero = window.localStorage.getItem('wsHasSeenFirstHero') === '1';
+    } catch (_) {}
+
+    function setSidebarCollapsed(collapsed) {
+      if (!wsShell) return;
+      wsShell.classList.toggle('is-collapsed', !!collapsed);
+    }
+
+    function initSidebar() {
+      try {
+        const saved = window.localStorage.getItem(SIDEBAR_KEY);
+        setSidebarCollapsed(saved === '1');
+      } catch (_) {}
+
+      if (btnSidebarToggle) {
+        btnSidebarToggle.addEventListener('click', () => {
+          const collapsed = wsShell.classList.contains('is-collapsed');
+          const next = !collapsed;
+          setSidebarCollapsed(next);
+          try {
+            window.localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+          } catch (_) {}
+        });
+      }
+    }
+
+    function renderPresetsBar() {
+      if (!wsPresetsBar || !wsPresetsSummary || !wsPresetSelect) return;
+
+      const hasAnyPresets = Array.isArray(wsPresets) && wsPresets.length > 0;
+
+      // Hide bar completely if we’ve never run and there are no presets
+      if (!hasEverRun && !hasAnyPresets) {
+        wsPresetsBar.style.display = 'none';
+
+        // Default hero note for completely new users
+        if (wsHeroPresetHint) {
+          wsHeroPresetHint.innerHTML =
+            'Recent runs and previous PDFs are available under <strong>Recent runs</strong>.';
+        }
+        return;
+      }
+
+      wsPresetsBar.style.display = 'flex';
+
+      if (hasAnyPresets) {
+        wsPresetSelect.style.display = '';
+        wsPresetSelect.innerHTML = '';
+        wsPresets.forEach((p, idx) => {
+          const opt = document.createElement('option');
+          opt.value = String(idx);
+          opt.textContent = p.label;
+          wsPresetSelect.appendChild(opt);
+        });
+        wsPresetsSummary.textContent =
+          wsPresets.length === 1
+            ? '1 saved setup on this device.'
+            : `${wsPresets.length} saved setups on this device.`;
+
+        // Personalise returning hero note with last saved setup
+        if (wsHeroPresetHint) {
+          const last = wsPresets[wsPresets.length - 1];
+          const jurisShort = (last.jurisdiction || 'HR').toUpperCase();
+          const yearText = last.taxYear ? ` • ${last.taxYear}` : '';
+          const label = last.label || `${jurisShort}${yearText}`;
+          wsHeroPresetHint.textContent =
+            `Last saved setup: ${label}. Use “Saved setups” above to quickly re-run or update this year.`;
+        }
+      } else {
+        wsPresetSelect.style.display = 'none';
+        wsPresetsSummary.textContent = 'No saved setups yet. Save this run for next year.';
+
+        if (wsHeroPresetHint) {
+          wsHeroPresetHint.innerHTML =
+            'Recent runs and previous PDFs are available under <strong>Recent runs</strong>.';
+        }
+      }
+    }
+
+    function savePresetsToStorage() {
+      try {
+        window.localStorage.setItem('wsPresets', JSON.stringify(wsPresets));
+      } catch (_) {
+        // best-effort only
+      }
+    }
+
+    function loadPresets() {
+      wsPresets = [];
+      try {
+        const raw = window.localStorage.getItem('wsPresets');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) wsPresets = parsed;
+        }
+      } catch (_) {
+        wsPresets = [];
+      }
+      renderPresetsBar();
+    }
+
+    function updateLayoutForState() {
+      // Results mode is ONLY when we have realized events this session
+      const inResultsMode = hasRunThisSession && hasResultsThisSession;
+
+      // (We’ll stop using ws-empty for vertical centering; see section 2.)
+      if (wsShell) {
+        wsShell.classList.remove('ws-empty');
+      }
+
+      if (inResultsMode) {
+        // Show header + context strip when we actually have a run
+        if (headerBand) headerBand.style.display = 'flex';
+        if (elEngineContext) elEngineContext.style.display = 'flex';
+
+        if (heroFirst) heroFirst.style.display = 'none';
+        if (previewRow) previewRow.style.display = 'none';
+        if (filtersHint) filtersHint.style.display = 'block';
+
+        if (filtersRow) {
+          filtersRow.style.display = 'flex';
+          filtersRow.classList.add('is-visible');
+        }
+        if (sectionMain) {
+          sectionMain.style.display = 'grid';
+          sectionMain.classList.add('is-visible');
+        }
+        if (sectionLower) {
+          sectionLower.style.display = 'grid';
+          sectionLower.classList.add('is-visible');
+        }
+        if (actionStrip) {
+          actionStrip.style.display = 'flex';
+          actionStrip.classList.add('is-visible');
+        }
+        return;
+      }
+
+      // No results yet this session – keep header/context hidden and show hero only
+      if (headerBand) headerBand.style.display = 'none';
+      if (elEngineContext) elEngineContext.style.display = 'none';
+
+      if (filtersRow) {
+        filtersRow.style.display = 'none';
+        filtersRow.classList.remove('is-visible');
+      }
+      if (filtersHint) filtersHint.style.display = 'none';
+
+      if (sectionMain) {
+        sectionMain.style.display = 'none';
+        sectionMain.classList.remove('is-visible');
+      }
+      if (sectionLower) {
+        sectionLower.style.display = 'none';
+        sectionLower.classList.remove('is-visible');
+      }
+      if (actionStrip) {
+        actionStrip.style.display = 'none';
+        actionStrip.classList.remove('is-visible');
+      }
+
+      if (previewRow) previewRow.style.display = 'block';
+      if (heroFirst) heroFirst.style.display = 'grid';
+    }
+
+    function openUploadModal() {
+      if (!uploadModal || !uploadBackdrop) return;
+
+      // Reset any previous error state
+      if (uploadError) {
+        uploadError.style.display = 'none';
+        uploadError.textContent = '';
+      }
+
+      // Reset wizard to step 1
+      resetWizard();
+
+      // Reset basic fields
+      if (uploadJurisdiction) uploadJurisdiction.value = currentJurisdiction || 'HR';
+      if (uploadTaxYear) uploadTaxYear.value = String(currentTaxYear || new Date().getFullYear());
+
+      // Clear file input + table text
+      if (uploadFilesInput) {
+        uploadFilesInput.value = '';
+      }
+      if (uploadFilesLabel) {
+        uploadFilesLabel.textContent = 'No files selected yet.';
+      }
+      if (uploadFilesTableBody) {
+        uploadFilesTableBody.innerHTML = '';
+        const emptyRow = document.createElement('tr');
+        emptyRow.className = 'ws-upload-empty-row';
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.textContent = 'No files added yet.';
+        emptyRow.appendChild(td);
+        uploadFilesTableBody.appendChild(emptyRow);
+      }
+
+      // Open modal
+      uploadBackdrop.classList.add('is-open');
+      uploadModal.classList.add('is-open');
+      uploadModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeUploadModal() {
+      if (!uploadModal || !uploadBackdrop) return;
+      uploadBackdrop.classList.remove('is-open');
+      uploadModal.classList.remove('is-open');
+      uploadModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function formatFileSize(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return '–';
+      const kb = bytes / 1024;
+      if (kb < 900) return kb.toFixed(0) + ' KB';
+      const mb = kb / 1024;
+      if (mb < 900) return mb.toFixed(1) + ' MB';
+      const gb = mb / 1024;
+      return gb.toFixed(2) + ' GB';
+    }
+
+    function updateUploadFilesLabel() {
+      if (!uploadFilesInput || !uploadFilesLabel || !uploadFilesTableBody) return;
+      const files = uploadFilesInput.files;
+
+      if (uploadTableLastHeader) {
+        uploadTableLastHeader.textContent = 'Size';
+      }
+
+      // Reset table body
+      uploadFilesTableBody.innerHTML = '';
+
+      if (!files || files.length === 0) {
+        const emptyRow = document.createElement('tr');
+        emptyRow.className = 'ws-upload-empty-row';
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.textContent = 'No files added yet.';
+        emptyRow.appendChild(td);
+        uploadFilesTableBody.appendChild(emptyRow);
+        uploadFilesLabel.textContent = 'No files selected yet.';
+        return;
+      }
+
+      let totalSize = 0;
+      Array.from(files).forEach((f) => {
+        totalSize += f.size || 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${f.name}</td>
+          <td>CSV file</td>
+          <td style="text-align:right;">${formatFileSize(f.size || 0)}</td>
+        `;
+        uploadFilesTableBody.appendChild(tr);
+      });
+
+      const summaryText =
+        files.length === 1
+          ? `${files[0].name}`
+          : `${files.length} CSV files selected (${formatFileSize(totalSize)})`;
+      uploadFilesLabel.textContent = summaryText;
+    }
+
+    function renderImportSummaryTable(results) {
+      if (!uploadFilesTableBody || !uploadFilesLabel) return;
+
+      if (uploadTableLastHeader) {
+        uploadTableLastHeader.textContent = 'Rows imported';
+      }
+
+      // If we have structured results from the backend, show them.
+      if (Array.isArray(results) && results.length) {
+        uploadFilesTableBody.innerHTML = '';
+
+        let totalInserted = 0;
+        let totalDup      = 0;
+        let totalErrors   = 0;
+
+        results.forEach((r) => {
+          const inserted = Number(r.inserted || 0) || 0;
+          const dups     = Number(r.skipped_duplicates || 0) || 0;
+          const errs     = Number(r.skipped_errors || 0) || 0;
+
+          totalInserted += inserted;
+          totalDup      += dups;
+          totalErrors   += errs;
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${r.filename || '(unknown file)'}</td>
+            <td>CSV file</td>
+            <td style="text-align:right;">${inserted.toLocaleString('en-150')}</td>
+          `;
+          uploadFilesTableBody.appendChild(tr);
+        });
+
+        const fileCount = results.length;
+        let summary = `Import successful – ${fileCount} file${fileCount !== 1 ? 's' : ''} `;
+        summary += `• ${totalInserted.toLocaleString('en-150')} row${totalInserted !== 1 ? 's' : ''} ready for calculation`;
+        if (totalDup > 0) {
+          summary += ` • ${totalDup.toLocaleString('en-150')} duplicate row${totalDup !== 1 ? 's' : ''} ignored`;
+        }
+        if (totalErrors > 0) {
+          summary += ` • ${totalErrors.toLocaleString('en-150')} parse error${totalErrors !== 1 ? 's' : ''} skipped`;
+        }
+
+        uploadFilesLabel.textContent = summary;
+        return;
+      }
+
+      // Fallback: no results; keep the empty state
+      uploadFilesTableBody.innerHTML = '';
+      const emptyRow = document.createElement('tr');
+      emptyRow.className = 'ws-upload-empty-row';
+      const td = document.createElement('td');
+      td.colSpan = 3;
+      td.textContent = 'No files added yet.';
+      emptyRow.appendChild(td);
+      uploadFilesTableBody.appendChild(emptyRow);
+      uploadFilesLabel.textContent = 'No files selected yet.';
+    }
+
+    // First-time CTA -> mark hero as seen (future visits show returning hero)
+    if (btnStartFirst) {
+      btnStartFirst.addEventListener('click', () => {
+        hasSeenFirstHero = true;
+        try {
+          window.localStorage.setItem('wsHasSeenFirstHero', '1');
+        } catch (_) {}
+        openUploadModal();
+        updateLayoutForState();
+      });
+    }
+
+    // Returning hero CTA
+    if (btnUploadCsvReturning) {
+      btnUploadCsvReturning.addEventListener('click', () => {
+        openUploadModal();
+      });
+    }
+
+    const btnRun = document.getElementById('btnRun');
+    const headerLastRun = document.getElementById('headerLastRun');
+
+    const glEmpty = document.getElementById('glEmpty');
+    const glTable = document.getElementById('glTable');
+    const glBody  = document.getElementById('glBody');
+    const glContext = document.getElementById('glContext');
+    const glSummary = document.getElementById('glSummary');
+    const glSummaryText = document.getElementById('glSummaryText');
+    const btnDownloadEvents = document.getElementById('btnDownloadEvents');
+    const glCard = document.getElementById('glCard');
+
+
+    const kpiProceeds = document.getElementById('kpiProceeds');
+    const kpiGain     = document.getElementById('kpiGain');
+    const kpiTax      = document.getElementById('kpiTax');
+    const kpiTaxable  = document.getElementById('kpiTaxable');
+    const kpiExempt   = document.getElementById('kpiExempt');
+    const elEngineContext = document.getElementById('wsEngineContext');
+
+    const actionStrip       = document.getElementById('wsActionStrip');
+    const btnActionAdjust   = document.getElementById('btnActionAdjust');
+    const btnActionExport   = document.getElementById('btnActionExport');
+    const btnActionInspect  = document.getElementById('btnActionInspect');
+    const actionStripText   = document.querySelector('#wsActionStrip .ws-action-strip-text');
+    const wsPresetsBar      = document.getElementById('wsPresetsBar');
+    const wsPresetsSummary  = document.getElementById('wsPresetsSummary');
+    const wsPresetSelect    = document.getElementById('wsPresetSelect');
+    const wsPresetSave      = document.getElementById('wsPresetSave');
+
+    if (wsPresetSave) {
+      wsPresetSave.addEventListener('click', () => {
+        if (!currentRunId) {
+          alert('Run a calculation before saving a setup.');
+          return;
+        }
+
+        // Suggest a meaningful default label, e.g. "ledgerwallet-2025 • HR 2025"
+        let baseLabel = '';
+        try {
+          if (Array.isArray(lastImportResults) && lastImportResults.length > 0) {
+            const first = lastImportResults[0];
+            const fname = first && first.filename ? String(first.filename) : '';
+            if (fname) {
+              const dotIdx = fname.lastIndexOf('.');
+              baseLabel = dotIdx > 0 ? fname.slice(0, dotIdx) : fname;
+            }
+          }
+        } catch (_) {
+          baseLabel = '';
+        }
+
+        const jurisShort = (currentJurisdiction || 'HR').toUpperCase();
+        const yearPart = currentTaxYear ? ` ${currentTaxYear}` : '';
+        const defaultLabel = baseLabel
+          ? `${baseLabel} • ${jurisShort}${yearPart}`
+          : `${jurisShort}${yearPart} run`;
+
+        const name = window.prompt(
+          'Name this setup (e.g. "Ledger 2025 HR")',
+          defaultLabel
+        );
+        if (!name) return;
+
+        const preset = {
+          label: name,
+          runId: currentRunId,
+          jurisdiction: currentJurisdiction,
+          taxYear: currentTaxYear,
+          createdAt: new Date().toISOString(),
+        };
+        wsPresets.push(preset);
+        savePresetsToStorage();
+        renderPresetsBar();
+      });
+    }
+
+    if (wsPresetSelect) {
+      wsPresetSelect.addEventListener('change', () => {
+        const idx = parseInt(wsPresetSelect.value, 10);
+        if (Number.isNaN(idx) || !wsPresets[idx]) return;
+
+        const preset = wsPresets[idx];
+        currentJurisdiction = preset.jurisdiction || 'HR';
+        currentTaxYear = preset.taxYear || new Date().getFullYear();
+
+        // Reflect in Step 2 fields for when the wizard opens
+        if (uploadJurisdiction) uploadJurisdiction.value = currentJurisdiction;
+        if (uploadTaxYear) uploadTaxYear.value = String(currentTaxYear);
+
+        // Load appropriate country notes
+        loadCountryNotes(currentJurisdiction);
+      });
+    }
+
+    // Charts (workspace)
+    const wsChartPerformanceEl = document.getElementById('wsChartPerformance');
+    const wsChartAllocationEl  = document.getElementById('wsChartAllocation');
+    const wsPerfSubtitle  = document.getElementById('wsPerfSubtitle');
+    const wsPerfInsight   = document.getElementById('wsPerfInsight');
+    const wsAllocSubtitle = document.getElementById('wsAllocSubtitle');
+    const wsAllocInsight  = document.getElementById('wsAllocInsight');
+    let chartPerformance = null;
+    let chartAllocation  = null;
+
+    // Backend run id from /calculate/v2
+    let currentRunId = null;
+
+    // Backend totals from the latest run (all events)
+    let runTotalsProceeds = null;
+    let runTotalsGain = null;
+
+    const warnEmpty = document.getElementById('warnEmpty');
+    const warnList  = document.getElementById('warnList');
+    const wsReviewPill = document.getElementById('wsReviewPill');
+    const wsReviewText = document.getElementById('wsReviewText');
+
+    const eurFormatter = new Intl.NumberFormat('en-150', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+    function formatEur(val) {
+      const num = Number(val);
+      if (!Number.isFinite(num)) return '–';
+      return eurFormatter.format(num);
+    }
+
+    function setKpi(el, val, highlight) {
+      if (!el) return;
+      if (val == null) {
+        el.textContent = '–';
+      } else {
+        el.textContent = formatEur(val);
+      }
+      if (highlight) {
+        el.classList.add('ws-kpi-highlight');
+      }
+    }
+
+    function updateWarnings(warnings) {
+      if (!warnEmpty || !warnList) return;
+
+      const hasWarnings = Array.isArray(warnings) && warnings.length > 0;
+      warnList.innerHTML = '';
+
+      if (hasWarnings) {
+        warnEmpty.style.display = 'none';
+        warnList.style.display = '';
+        warnings.forEach((w) => {
+          const li = document.createElement('li');
+          li.textContent = String(w);
+          warnList.appendChild(li);
+        });
+      } else {
+        warnList.style.display = 'none';
+        warnEmpty.style.display = '';
+      }
+
+      // Review pill behaviour
+      if (wsReviewPill && wsReviewText) {
+        if (hasWarnings) {
+          wsReviewPill.classList.remove('ready');
+          wsReviewPill.classList.add('attention');
+          wsReviewPill.textContent = 'Needs review';
+          wsReviewText.textContent =
+            'We detected issues in this run. Review the warnings below before sharing the report.';
+        } else {
+          wsReviewPill.classList.remove('attention');
+          wsReviewPill.classList.add('ready');
+          wsReviewPill.textContent = 'Ready to share';
+          wsReviewText.textContent =
+            'This run looks clean. You can export it or send it to your accountant.';
+        }
+      }
+    }
+
+    async function loadCountryNotes(jurisdiction) {
+      const j = jurisdiction || 'HR';
+
+      try {
+        const res = await fetch(`/demo/country_notes?jurisdiction=${encodeURIComponent(j)}`);
+        if (!res.ok) return;
+
+        const data = await res.json();
+
+        // Main workspace card (results view)
+        const titleEl = document.getElementById('wsCountryNotesTitle');
+        const subEl   = document.getElementById('wsCountryNotesSubtitle');
+        const listEl  = document.getElementById('wsCountryNotesList');
+
+        if (titleEl) titleEl.textContent = data.title || 'Country notes';
+        if (subEl && data.subtitle) subEl.textContent = data.subtitle;
+
+        if (listEl && Array.isArray(data.bullets)) {
+          listEl.innerHTML = '';
+          data.bullets.forEach((b) => {
+            const li = document.createElement('li');
+            li.textContent = b;
+            listEl.appendChild(li);
+          });
+        }
+
+        // Step 2 modal preview (jurisdiction chooser)
+        const step2TitleEl = document.getElementById('wsStep2NotesTitle');
+        const step2ListEl  = document.getElementById('wsStep2NotesList');
+        if (step2TitleEl) {
+          // Use the same title, or a safe fallback
+          const label =
+            data.title ||
+            (j === 'IT'
+              ? 'Country notes preview – Italy (IT)'
+              : 'Country notes preview – Croatia (HR)');
+          step2TitleEl.textContent = label;
+        }
+        if (step2ListEl && Array.isArray(data.bullets)) {
+          step2ListEl.innerHTML = '';
+          data.bullets.forEach((b) => {
+            const li = document.createElement('li');
+            li.textContent = b;
+            step2ListEl.appendChild(li);
+          });
+        }
+      } catch (err) {
+        console.error('Workspace country notes load failed', err);
+      }
+    }
+
+    function updateEvents(events) {
+      if (!glEmpty || !glTable || !glBody) return;
+
+      glBody.innerHTML = '';
+
+      if (!Array.isArray(events) || !events.length) {
+        glEmpty.style.display = '';
+        glTable.style.display = 'none';
+        return;
+      }
+
+      glEmpty.style.display = 'none';
+      glTable.style.display = '';
+
+      events.slice(0, 20).forEach((ev) => {
+        const tr = document.createElement('tr');
+
+        const rawDate = ev.timestamp || ev.date || '';
+        const dateText = rawDate ? String(rawDate).slice(0, 10) : '–';
+
+        const asset = ev.asset || ev.base_asset || '–';
+        const qty =
+          ev.qty_sold ??
+          ev.quantity ??
+          ev.amount ??
+          ev.base_amount ??
+          null;
+
+        const proceeds = ev.proceeds_eur ?? ev.proceeds ?? null;
+        const gain = ev.gain_eur ?? ev.gain ?? ev.realized_gain_eur ?? null;
+
+        tr.innerHTML = `
+          <td>${dateText}</td>
+          <td>${asset}</td>
+          <td>${qty != null ? String(qty) : '–'}</td>
+          <td>${proceeds != null ? formatEur(proceeds) : '–'}</td>
+          <td>${gain != null ? formatEur(gain) : '–'}</td>
+        `;
+        glBody.appendChild(tr);
+      });
+    }
+
+    function updateFilterContext(selectedYear, selectedAsset) {
+      if (!glContext) return;
+
+      let assetLabel = 'All assets';
+      if (selectedAsset) {
+        assetLabel = `${String(selectedAsset).toUpperCase()} only`;
+      }
+
+      let yearLabel = 'All years';
+      if (selectedYear != null) {
+        yearLabel = `${selectedYear} only`;
+      }
+
+      glContext.textContent = `Current filter: ${assetLabel} • ${yearLabel}`;
+      glContext.style.display = '';
+    }
+
+    function updateCharts(events, totals) {
+      if (typeof Chart === 'undefined') return;
+
+      if (!Array.isArray(events) || events.length === 0) {
+        if (chartPerformance) {
+          chartPerformance.destroy();
+          chartPerformance = null;
+        }
+        if (chartAllocation) {
+          chartAllocation.destroy();
+          chartAllocation = null;
+        }
+        if (wsPerfSubtitle) {
+          wsPerfSubtitle.textContent = 'Realised gain by month for the current filter.';
+        }
+        if (wsAllocSubtitle) {
+          wsAllocSubtitle.textContent = 'Realised gain per asset for the current filter.';
+        }
+        if (wsPerfInsight) {
+          wsPerfInsight.textContent =
+            'Once you run a calculation and apply filters, this chart will highlight your strongest months.';
+        }
+        if (wsAllocInsight) {
+          wsAllocInsight.textContent =
+            'After your first run, this chart shows which assets contribute most to realised gain.';
+        }
+        return;
+      }
+
+      // Palette (aligned with demo dashboard)
+      const assetPalette = {
+        BTC: '#4B9BFF',  // blue
+        ETH: '#FF5C7A',  // pink
+        SD:  '#F6C453',  // soft gold
+        ETHX:'#F2A93B',  // warm yellow/orange
+        DEFAULT: '#7C8BA1'
+      };
+
+      // ----- Allocation by asset (donut) -----
+      const byAsset = {};
+      events.forEach((ev) => {
+        const asset = (ev.asset || ev.base_asset || '').toUpperCase();
+        if (!asset) return;
+        const gainRaw = ev.gain_eur ?? ev.gain ?? ev.realized_gain_eur ?? null;
+        if (gainRaw == null) return;
+        const num = Number(String(gainRaw).replace(/\s/g, '').replace(',', '.'));
+        if (!Number.isFinite(num)) return;
+        byAsset[asset] = (byAsset[asset] || 0) + num;
+      });
+
+      const assetLabels = Object.keys(byAsset);
+      const assetData   = assetLabels.map(a => byAsset[a]);
+      const assetColors = assetLabels.map(a => assetPalette[a] || assetPalette.DEFAULT);
+
+      if (chartAllocation) {
+        chartAllocation.destroy();
+        chartAllocation = null;
+      }
+      if (wsChartAllocationEl && assetLabels.length) {
+        chartAllocation = new Chart(wsChartAllocationEl.getContext('2d'), {
+          type: 'doughnut',
+          data: {
+            labels: assetLabels,
+            datasets: [{
+              data: assetData,
+              backgroundColor: assetColors,
+              borderWidth: 0
+            }],
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 8,
+                  font: { size: 11 }
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const label = ctx.label || '';
+                    const v = ctx.parsed;
+                    return `${label}: ${formatEur(v)} EUR`;
+                  }
+                }
+              }
+            },
+            cutout: '62%',
+          },
+        });
+      }
+
+      // Update allocation subtitle & insight
+      if (wsAllocSubtitle) {
+        wsAllocSubtitle.textContent = 'Realised gain per asset for the current filter.';
+      }
+      if (wsAllocInsight) {
+        if (!assetLabels.length) {
+          wsAllocInsight.textContent =
+            'No realised gains or losses to attribute to individual assets in this view.';
+        } else {
+          // Find the asset with the largest absolute contribution
+          let topAsset = null;
+          let topValue = 0;
+          assetLabels.forEach((label) => {
+            const v = byAsset[label] || 0;
+            const abs = Math.abs(v);
+            if (abs > topValue) {
+              topValue = abs;
+              topAsset = { label, value: v };
+            }
+          });
+
+          if (!topAsset || topValue === 0) {
+            wsAllocInsight.textContent =
+              'Gains and losses are evenly distributed across assets in this filter.';
+          } else {
+            const dir = topAsset.value > 0 ? 'gain' : 'loss';
+            wsAllocInsight.textContent =
+              `${topAsset.label} has the largest impact on realised ${dir} in this view.`;
+          }
+        }
+      }
+
+      // ----- Performance over time (bar) -----
+      const byMonth = {};
+      events.forEach((ev) => {
+        const ts = ev.timestamp || ev.date || '';
+        if (!ts) return;
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) return;
+        const key = d.getFullYear().toString().padStart(4, '0') + '-' +
+                    String(d.getMonth() + 1).toString().padStart(2, '0');
+        const gainRaw = ev.gain_eur ?? ev.gain ?? ev.realized_gain_eur ?? null;
+        if (gainRaw == null) return;
+        const num = Number(String(gainRaw).replace(/\s/g, '').replace(',', '.'));
+        if (!Number.isFinite(num)) return;
+        byMonth[key] = (byMonth[key] || 0) + num;
+      });
+
+      const monthLabels = Object.keys(byMonth).sort();
+      const monthData   = monthLabels.map(m => byMonth[m]);
+
+      if (chartPerformance) {
+        chartPerformance.destroy();
+        chartPerformance = null;
+      }
+      if (wsChartPerformanceEl && monthLabels.length) {
+        chartPerformance = new Chart(wsChartPerformanceEl.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: monthLabels,
+            datasets: [{
+              data: monthData,
+              backgroundColor: '#4B9BFF',
+              borderRadius: 6,
+              maxBarThickness: 32
+            }],
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const v = ctx.parsed.y;
+                    return `${formatEur(v)} EUR`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: {
+                  autoSkip: true,
+                  maxTicksLimit: 6,
+                  font: { size: 10 }
+                }
+              },
+              y: {
+                grid: {
+                  color: 'rgba(255,255,255,0.06)'
+                },
+                ticks: {
+                  font: { size: 10 },
+                  callback: (v) => formatEur(v)
+                }
+              }
+            }
+          },
+        });
+      }
+      // Update performance subtitle & insight
+      if (wsPerfSubtitle) {
+        wsPerfSubtitle.textContent = 'Realised gain by month for the current filter.';
+      }
+      if (wsPerfInsight) {
+        if (!monthLabels.length) {
+          wsPerfInsight.textContent =
+            'No realised gains or losses to chart across months in this view yet.';
+        } else {
+          // Find month with largest absolute realised gain/loss
+          let topKey = null;
+          let topValAbs = 0;
+          monthLabels.forEach((key) => {
+            const v = byMonth[key] || 0;
+            const abs = Math.abs(v);
+            if (abs > topValAbs) {
+              topValAbs = abs;
+              topKey = key;
+            }
+          });
+
+          if (!topKey || topValAbs === 0) {
+            wsPerfInsight.textContent =
+              'Gains and losses are relatively flat across months in this filter.';
+          } else {
+            // Convert YYYY-MM to a friendly label (e.g. Mar 2025)
+            let pretty = topKey;
+            try {
+              const [yyyy, mm] = topKey.split('-');
+              const monthIndex = parseInt(mm, 10) - 1;
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+              const mName = monthNames[monthIndex] || mm;
+              pretty = `${mName} ${yyyy}`;
+            } catch (_) {
+              // keep original key
+            }
+            const dir = byMonth[topKey] > 0 ? 'gain' : 'loss';
+            wsPerfInsight.textContent =
+              `${pretty} is the month with the largest impact on realised ${dir} in this view.`;
+          }
+        }
+      }
+    }
+
+    
+
+    function rebuildFilterOptions(events) {
+      if (!Array.isArray(events)) events = [];
+
+      // --- Year options ---
+      if (fltYear) {
+        const years = new Set();
+        events.forEach(ev => {
+          const ts = ev.timestamp || ev.date || '';
+          if (!ts) return;
+          const d = new Date(ts);
+          if (!Number.isNaN(d.getTime())) {
+            years.add(d.getFullYear());
+          }
+        });
+
+        const current = fltYear.value || 'ALL';
+        fltYear.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = 'ALL';
+        optAll.textContent = 'All years';
+        fltYear.appendChild(optAll);
+
+        Array.from(years).sort().forEach(y => {
+          const opt = document.createElement('option');
+          opt.value = String(y);
+          opt.textContent = String(y);
+          fltYear.appendChild(opt);
+        });
+
+        if (Array.from(fltYear.options).some(o => o.value === current)) {
+          fltYear.value = current;
+        }
+      }
+
+      // --- Asset options ---
+      if (fltAsset) {
+        const assets = new Set();
+        events.forEach(ev => {
+          const a = (ev.asset || ev.base_asset || '').toUpperCase();
+          if (a) assets.add(a);
+        });
+
+        const currentAsset = fltAsset.value || 'ALL';
+        fltAsset.innerHTML = '';
+        const optAllA = document.createElement('option');
+        optAllA.value = 'ALL';
+        optAllA.textContent = 'All assets';
+        fltAsset.appendChild(optAllA);
+
+        Array.from(assets).sort().forEach(a => {
+          const opt = document.createElement('option');
+          opt.value = a;
+          opt.textContent = a;
+          fltAsset.appendChild(opt);
+        });
+
+        if (Array.from(fltAsset.options).some(o => o.value === currentAsset)) {
+          fltAsset.value = currentAsset;
+        }
+      }
+    }
+
+    async function applyFiltersAndRender() {
+      let filtered = Array.isArray(allEventsRaw) ? allEventsRaw.slice() : [];
+
+      // YEAR filter (table)
+      let selectedYear = null;
+      if (fltYear && fltYear.value !== 'ALL') {
+        const yr = parseInt(fltYear.value, 10);
+        if (!Number.isNaN(yr)) {
+          selectedYear = yr;
+          filtered = filtered.filter(ev => {
+            const ts = ev.timestamp || ev.date || '';
+            if (!ts) return false;
+            const d = new Date(ts);
+            return d.getFullYear() === yr;
+          });
+        }
+      }
+
+      // ASSET filter (table)
+      let selectedAsset = null;
+      if (fltAsset && fltAsset.value !== 'ALL') {
+        selectedAsset = fltAsset.value.toUpperCase();
+        filtered = filtered.filter(ev =>
+          (ev.asset || ev.base_asset || '').toUpperCase() === selectedAsset
+        );
+      }
+
+      const hasFilter = (selectedYear !== null || selectedAsset !== null);
+
+      // Update table
+      updateEvents(filtered);
+
+      // Update summary line under the table
+      if (glSummary && glSummaryText) {
+        const totalAll = Array.isArray(allEventsRaw) ? allEventsRaw.length : 0;
+        const totalFiltered = Array.isArray(filtered) ? filtered.length : 0;
+
+        if (!currentRunId || totalAll === 0) {
+          glSummary.style.display = 'none';
+          if (btnDownloadEvents) btnDownloadEvents.style.display = 'none';
+        } else if (totalFiltered === 0) {
+          glSummary.style.display = 'block';
+          glSummaryText.textContent = hasFilter
+            ? 'No realised events match the current filter.'
+            : 'No realised events found for this run.';
+          if (btnDownloadEvents) btnDownloadEvents.style.display = 'inline';
+        } else {
+          const showingCount = Math.min(20, totalFiltered);
+          const parts = [];
+
+          if (totalFiltered > 20) {
+            parts.push(`Showing first 20 of ${totalFiltered} events`);
+          } else {
+            parts.push(
+              `Showing ${totalFiltered} event${totalFiltered !== 1 ? 's' : ''}`
+            );
+          }
+
+          if (hasFilter) {
+            if (totalFiltered !== totalAll) {
+              parts.push(`out of ${totalAll} events in this run`);
+            }
+            parts.push('for the current filter.');
+          } else {
+            parts.push('for this run.');
+          }
+
+          glSummary.style.display = 'block';
+          glSummaryText.textContent = parts.join(' ');
+          if (btnDownloadEvents) btnDownloadEvents.style.display = 'inline';
+        }
+      }
+
+      // If we don't have a run yet, hide context and stop here
+      if (!currentRunId) {
+        if (glContext) glContext.style.display = 'none';
+        return;
+      }
+
+      // Update context line
+      updateFilterContext(selectedYear, selectedAsset);
+
+      // If there is NO active filter, keep the full-run KPIs as set by /calculate/v2.
+      // Just refresh charts for the full dataset and stop here.
+      if (!hasFilter) {
+        updateCharts(filtered, {});  // filtered === allEventsRaw here
+        return;
+      }
+
+      // Call backend filtered summary to get accurate EUR totals for the *subset*
+      try {
+        const params = new URLSearchParams();
+        if (selectedYear !== null) {
+          params.append("year", String(selectedYear));
+        }
+        if (selectedAsset !== null) {
+          params.append("asset", selectedAsset);
+        }
+
+        const resp = await fetch(`/calc/run/${currentRunId}/summary_filtered?` + params.toString());
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => "");
+          console.error("summary_filtered error:", resp.status, txt);
+          return;
+        }
+
+        const j = await resp.json();
+        const t = j.totals || {};
+        const p = Number(t.proceeds_eur);
+
+        const taxable = Number(t.taxable_gain_eur);
+        const exempt  = Number(t.exempt_gain_eur);
+
+        let gDisplay = null;
+        if (Number.isFinite(taxable) || Number.isFinite(exempt)) {
+          gDisplay = (Number.isFinite(taxable) ? taxable : 0) +
+                     (Number.isFinite(exempt)  ? exempt  : 0);
+        }
+
+        // Total Proceeds
+        setKpi(kpiProceeds, Number.isFinite(p)        ? p        : null, true);
+        // Total realised gain (taxable + exempt)
+        setKpi(kpiGain,     Number.isFinite(gDisplay) ? gDisplay : null, false);
+        // Taxable gain
+        setKpi(kpiTaxable,  Number.isFinite(taxable)  ? taxable  : null, false);
+        // Exempt gain
+        setKpi(kpiExempt,   Number.isFinite(exempt)   ? exempt   : null, false);
+
+        // Estimated tax for current filter (HR: 10% of taxable gain)
+        if (Number.isFinite(taxable)) {
+          const estTaxFiltered = taxable * 0.10;
+          setKpi(kpiTax, estTaxFiltered, false);
+        } else {
+          setKpi(kpiTax, null, false);
+        }
+        
+        // Update charts for the current filtered events and totals
+        updateCharts(filtered, t);
+        
+      } catch (err) {
+        console.error("Failed to load filtered summary:", err);
+        // On error we simply leave KPIs as they are
+      }
+    }
+
+    if (fltYear) {
+      fltYear.addEventListener('change', applyFiltersAndRender);
+    }
+    if (fltAsset) {
+      fltAsset.addEventListener('change', applyFiltersAndRender);
+    }
+
+    async function runCalculation(jurisdictionOverride, taxYearOverride) {
+      if (!btnRun) return;
+      const original = btnRun.textContent;
+      btnRun.disabled = true;
+      btnRun.textContent = 'Running…';
+
+      if (wsRunStatus) {
+        wsRunStatus.style.display = '';
+        wsRunStatus.textContent = 'Running calculation…';
+        wsRunStatus.classList.remove('is-success', 'is-error');
+        wsRunStatus.classList.add('is-running');
+      }
+
+      const j = jurisdictionOverride || currentJurisdiction || 'HR';
+      let y = taxYearOverride || currentTaxYear || new Date().getFullYear();
+      y = Number.isFinite(Number(y)) ? Number(y) : new Date().getFullYear();
+
+      const body = {
+        jurisdiction: j,
+        tax_year: y,
+        options: {}
+      };
+
+      try {
+        const resp = await fetch('/calculate/v2?debug=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '');
+          throw new Error('Calculation failed: ' + resp.status + (txt ? ' ' + txt : ''));
+        }
+
+        const data = await resp.json();
+
+        const runId = data.run_id ?? data.runID ?? null;
+        currentRunId = runId ?? null;
+
+        const summary = data.summary || {};
+        const totals  = summary.totals || {};
+
+        // --- Engine context strip: premium run summary headline ---
+        const ruleVer = summary.rule_version || summary.rule_version_hint || '–';
+        const fxCtx   = summary.fx_context || {};
+        const fxBatch = (fxCtx && fxCtx.fx_batch_id != null) ? fxCtx.fx_batch_id : '–';
+        const lotsProc = summary.lots_processed != null ? summary.lots_processed : '–';
+
+        const jurisLabel = body.jurisdiction === 'IT' ? 'Italy (IT)' : 'Croatia (HR)';
+        const gainHeadline = totals.gain_eur ?? totals.gain ?? null;
+
+        if (elEngineContext) {
+          const gainText = gainHeadline != null ? formatEur(gainHeadline) : '–';
+          const runLabel = runId != null ? `Run #${runId}` : 'Latest run';
+          elEngineContext.textContent =
+            `${runLabel} • ${jurisLabel} • Tax year ${body.tax_year} • ` +
+            `${lotsProc} realised events • Net gain ${gainText} EUR • ` +
+            `Rule ${ruleVer} • FX batch #${fxBatch}`;
+        }
+
+        // Store backend run-level totals (all events)
+        runTotalsProceeds = Number(totals.proceeds_eur ?? totals.proceeds ?? 0);
+        runTotalsGain     = Number(totals.gain_eur     ?? totals.gain     ?? 0);
+
+        // --- Load realized events for this run ---------------------------
+        let events = [];
+
+        // If calculate_v2 ever starts returning events inline, prefer them
+        if (Array.isArray(data.events)) {
+          events = data.events;
+        } else if (data.run_id != null) {
+          try {
+            const evResp = await fetch(`/calc/run/${data.run_id}/events`);
+            if (evResp.ok) {
+              const evData = await evResp.json().catch(() => ({}));
+              if (Array.isArray(evData.events)) {
+                events = evData.events;
+              }
+            } else {
+              console.warn('Failed to load run events:', evResp.status);
+            }
+          } catch (err) {
+            console.error('Error loading run events', err);
+          }
+        }
+        // -----------------------------------------------------------------
+
+        // KPIs (full-run baseline; filtered view will override via applyFiltersAndRender)
+        const fullProceeds = totals.proceeds_eur ?? totals.proceeds;
+        const fullGain     = totals.gain_eur     ?? totals.gain;
+        const fullTaxable  = totals.taxable_gain_eur ?? totals.taxable_gain ?? null;
+        const fullExempt   = totals.exempt_gain_eur  ?? totals.exempt_gain  ?? null;
+
+        setKpi(kpiProceeds, fullProceeds, true);
+
+        // For full-run view, show total realised gain as taxable + exempt
+        let fullGainDisplay = null;
+        const numTaxable = Number(fullTaxable);
+        const numExempt  = Number(fullExempt);
+        if (Number.isFinite(numTaxable) || Number.isFinite(numExempt)) {
+          fullGainDisplay = (Number.isFinite(numTaxable) ? numTaxable : 0) +
+                            (Number.isFinite(numExempt)  ? numExempt  : 0);
+        } else if (fullGain != null) {
+          fullGainDisplay = fullGain;
+        }
+        setKpi(kpiGain, fullGainDisplay, false);
+        setKpi(kpiTaxable, fullTaxable, false);
+        setKpi(kpiExempt,  fullExempt,  false);
+
+        // Estimated tax (HR: 10% of taxable gain)
+        if (fullTaxable != null) {
+          const nFullTaxable = Number(fullTaxable);
+          if (Number.isFinite(nFullTaxable)) {
+            const estTax = nFullTaxable * 0.10;   // 10% HR flat tax for now
+            setKpi(kpiTax, estTax, false);
+          } else {
+            setKpi(kpiTax, null, false);
+          }
+        } else {
+          setKpi(kpiTax, null, false);
+        }
+
+        // Warnings
+        const warnings = Array.isArray(summary.warnings)
+          ? summary.warnings
+          : (Array.isArray(data.warnings) ? data.warnings : []);
+        updateWarnings(warnings);
+
+        // Store events, rebuild filter options, then apply filters
+        allEventsRaw = Array.isArray(events) ? events : [];
+        rebuildFilterOptions(allEventsRaw);
+        await applyFiltersAndRender();
+
+        // ---- SESSION STATE  ----------------------------------
+        hasRunThisSession = true;
+        // Consider we "have results" only when there are realized events
+        hasResultsThisSession = Array.isArray(events) && events.length > 0;
+        hasEverRun = true;
+        try {
+          window.localStorage.setItem('wsHasEverRun', '1');
+        } catch (_) {}
+
+        updateLayoutForState();
+        // renderPresetsBar(); // presets hidden for now
+
+        // Last run label
+        const j = body.jurisdiction;
+        const text = runId != null
+          ? `Last run: #${runId} • ${j} • ${body.tax_year}`
+          : `Last run: ${j} • ${body.tax_year}`;
+        if (headerLastRun) headerLastRun.textContent = text;
+
+        // Load country notes for current jurisdiction (HR for now)
+        loadCountryNotes(body.jurisdiction || 'HR');
+
+        // Update action strip messaging to reflect the fresh run
+        if (actionStripText) {
+          const shortRunLabel = runId != null
+            ? `Run #${runId}`
+            : `Latest run`;
+          const jurisLabel = j === 'IT' ? 'Italy (IT)' : 'Croatia (HR)';
+          actionStripText.textContent =
+            `${shortRunLabel} • ${jurisLabel} • Tax year ${body.tax_year} — ready to export or inspect events.`;
+        }
+
+        // Status badge: success state, then fade after a short delay
+        if (wsRunStatus) {
+          wsRunStatus.classList.remove('is-running', 'is-error');
+          wsRunStatus.classList.add('is-success');
+          wsRunStatus.textContent = 'Calculation complete';
+          setTimeout(() => {
+            if (!wsRunStatus) return;
+            wsRunStatus.style.display = 'none';
+            wsRunStatus.classList.remove('is-success');
+          }, 2600);
+        }
+
+        // Give the KPI stack a short "fresh result" glow
+        if (wsKpiStack) {
+          wsKpiStack.classList.add('is-fresh');
+          setTimeout(() => {
+            if (!wsKpiStack) return;
+            wsKpiStack.classList.remove('is-fresh');
+          }, 1400);
+        }
+      } catch (e) {
+        console.error(e);
+        updateWarnings(['Calculation failed. Please try again or check the server logs.']);
+        if (wsRunStatus) {
+          wsRunStatus.style.display = '';
+          wsRunStatus.classList.remove('is-running', 'is-success');
+          wsRunStatus.classList.add('is-error');
+          wsRunStatus.textContent = 'Run failed';
+        }
+      } finally {
+        btnRun.disabled = false;
+        btnRun.textContent = original;
+      }
+    }
+
+    if (btnRun) {
+      btnRun.addEventListener('click', () => {
+        // Header CTA: start a new upload + calculation via the wizard
+        openUploadModal();
+      });
+    }
+
+    // Upload modal wiring
+    if (btnUploadBrowse && uploadFilesInput) {
+      btnUploadBrowse.addEventListener('click', () => {
+        uploadFilesInput.click();
+      });
+      uploadFilesInput.addEventListener('change', updateUploadFilesLabel);
+    }
+
+    if (uploadDropZone && uploadFilesInput) {
+      ['dragenter', 'dragover'].forEach((evt) => {
+        uploadDropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          uploadDropZone.classList.add('is-dragover');
+        });
+      });
+
+      ['dragleave', 'dragend', 'drop'].forEach((evt) => {
+        uploadDropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          uploadDropZone.classList.remove('is-dragover');
+        });
+      });
+
+      uploadDropZone.addEventListener('drop', (e) => {
+        if (!e.dataTransfer || !e.dataTransfer.files) return;
+        const csvFiles = Array.from(e.dataTransfer.files).filter((f) =>
+          f.name.toLowerCase().endsWith('.csv')
+        );
+        if (!csvFiles.length) return;
+
+        // Build a new FileList so the rest of the code can use uploadFilesInput.files
+        const dt = new DataTransfer();
+        csvFiles.forEach((f) => dt.items.add(f));
+        uploadFilesInput.files = dt.files;
+        updateUploadFilesLabel();
+      });
+    }
+
+    if (btnUploadClose) {
+      btnUploadClose.addEventListener('click', closeUploadModal);
+    }
+    if (btnUploadCancel) {
+      btnUploadCancel.addEventListener('click', () => {
+        if (wizardStep > 1) {
+          wizardStep = wizardStep - 1;
+          updateWizardStep();
+        } else {
+          closeUploadModal();
+        }
+      });
+    }
+    if (uploadBackdrop) {
+      uploadBackdrop.addEventListener('click', (e) => {
+        if (e.target === uploadBackdrop) {
+          closeUploadModal();
+        }
+      });
+    }
+
+    // ESC closes modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && uploadModal && uploadModal.classList.contains('is-open')) {
+        closeUploadModal();
+      }
+    });
+
+    if (uploadForm && uploadFilesInput && btnUploadConfirm) {
+      uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (uploadError) {
+          uploadError.style.display = 'none';
+          uploadError.textContent = '';
+        }
+
+        // STEP 1: Import CSVs
+        if (wizardStep === 1) {
+          const files = uploadFilesInput.files;
+          if (!files || files.length === 0) {
+            if (uploadError) {
+              uploadError.textContent = 'Please choose at least one CSV file to import.';
+              uploadError.style.display = 'block';
+            }
+            return;
+          }
+
+          btnUploadConfirm.disabled = true;
+          btnUploadConfirm.textContent = 'Importing…';
+
+          try {
+            const fd = new FormData();
+            for (const f of files) {
+              fd.append('files', f, f.name);
+            }
+
+            const resp = await fetch('/import/multiple?reset=1', {
+              method: 'POST',
+              body: fd,
+            });
+
+            if (!resp.ok) {
+              const txt = await resp.text().catch(() => '');
+              throw new Error('Import failed: ' + resp.status + (txt ? ' ' + txt : ''));
+            }
+
+            const data = await resp.json().catch(() => ({}));
+            console.log('[workspace] Import results:', data);
+
+            // Store and render per-file import summary in the table
+            try {
+              const results = Array.isArray(data.results) ? data.results : [];
+              lastImportResults = results;
+              if (results.length) {
+                renderImportSummaryTable(results);
+              }
+            } catch (_) {
+              // If something goes wrong, we silently fall back to the pre-import view
+            }
+
+            // Suggest tax year from backend meta, if provided
+            try {
+              if (data && data.meta && data.meta.max_year != null) {
+                const y = parseInt(data.meta.max_year, 10);
+                if (!Number.isNaN(y)) {
+                  currentTaxYear = y;
+                  if (uploadTaxYear) uploadTaxYear.value = String(y);
+                  if (uploadTaxYearHint) {
+                    uploadTaxYearHint.textContent =
+                      `We detected activity in ${y}. You can adjust this if you’re preparing a different year.`;
+                  }
+                }
+              } else if (uploadTaxYearHint) {
+                // Fallback copy when backend doesn't provide meta yet
+                uploadTaxYearHint.textContent =
+                  'Choose the year you’re filing for. You can reuse this setup next year.';
+              }
+            } catch (_) {
+              // On any error, keep defaults and avoid breaking the flow
+            }
+
+            // This workspace now has data; treat as "returning" from now on
+            hasSeenFirstHero = true;
+            try {
+              window.localStorage.setItem('wsHasSeenFirstHero', '1');
+            } catch (_) {}
+            updateLayoutForState();
+
+            // Move to Step 2
+            wizardStep = 2;
+            updateWizardStep();
+
+            // Preload country notes preview for the current jurisdiction (HR by default)
+            loadCountryNotes(currentJurisdiction || 'HR');
+          } catch (err) {
+            console.error(err);
+            if (uploadError) {
+              uploadError.textContent = String(err);
+              uploadError.style.display = 'block';
+            }
+          } finally {
+            btnUploadConfirm.disabled = false;
+            btnUploadConfirm.textContent = 'Continue';
+          }
+          return;
+        }
+
+        // STEP 2: Save jurisdiction + year and show review
+        if (wizardStep === 2) {
+          const jVal = (uploadJurisdiction && uploadJurisdiction.value) || 'HR';
+          currentJurisdiction = jVal;
+
+          let yearVal = new Date().getFullYear();
+          if (uploadTaxYear && uploadTaxYear.value) {
+            const parsed = parseInt(uploadTaxYear.value, 10);
+            if (!Number.isNaN(parsed)) yearVal = parsed;
+          }
+          currentTaxYear = yearVal;
+
+          // Summaries for Step 3
+          if (wsStep3FilesSummary) {
+            const files = uploadFilesInput && uploadFilesInput.files;
+            let fileSummary = 'No files added yet.';
+            if (files && files.length) {
+              fileSummary =
+                files.length === 1
+                  ? `${files[0].name}`
+                  : `${files.length} CSV files`;
+            }
+            wsStep3FilesSummary.textContent = fileSummary;
+          }
+
+          if (wsStep3JurisdictionSummary) {
+            const label = jVal === 'IT' ? 'Italy (IT)' : 'Croatia (HR)';
+            wsStep3JurisdictionSummary.textContent = `${label} • Tax year ${currentTaxYear}`;
+          }
+
+          wizardStep = 3;
+          updateWizardStep();
+          return;
+        }
+
+        // STEP 3: Run calculation with chosen settings
+        if (wizardStep === 3) {
+          closeUploadModal();
+          await runCalculation(currentJurisdiction, currentTaxYear);
+        }
+      });
+    }
+
+    // Live country notes preview in Step 2 when jurisdiction changes
+    if (uploadJurisdiction) {
+      uploadJurisdiction.addEventListener('change', () => {
+        const jVal = uploadJurisdiction.value || 'HR';
+        currentJurisdiction = jVal;
+        loadCountryNotes(jVal);
+      });
+    }
+
+    // Action strip buttons
+    if (btnActionAdjust) {
+      btnActionAdjust.addEventListener('click', () => {
+        // For now, open the upload modal again
+        openUploadModal();
+      });
+    }
+
+    if (btnActionExport) {
+      btnActionExport.addEventListener('click', () => {
+        if (!currentRunId) {
+          console.warn('[workspace] No run_id available for export yet.');
+          return;
+        }
+
+        // Read current filter state
+        const yearVal  = (fltYear && fltYear.value)  ? fltYear.value  : 'ALL';
+        const assetVal = (fltAsset && fltAsset.value) ? fltAsset.value : 'ALL';
+
+        // If no filters applied, export full workspace summary
+        const noYearFilter  = (yearVal === 'ALL');
+        const noAssetFilter = (assetVal === 'ALL');
+
+        if (noYearFilter && noAssetFilter) {
+          window.location.href = `/export/workspace_summary/${currentRunId}.pdf`;
+          return;
+        }
+
+        // Otherwise, export subset summary matching current filters
+        const params = new URLSearchParams();
+        if (!noYearFilter) {
+          params.append('year', yearVal);
+        }
+        if (!noAssetFilter) {
+          params.append('asset', assetVal);
+        }
+
+        const qs = params.toString() ? ('?' + params.toString()) : '';
+        window.location.href = `/export/workspace_summary/${currentRunId}/subset.pdf` + qs;
+      });
+    }
+
+    if (btnActionInspect) {
+      btnActionInspect.addEventListener('click', () => {
+        if (sectionMain) {
+          sectionMain.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (glCard) {
+          // Restart the focus animation by toggling the class
+          glCard.classList.remove('ws-card-focus');
+          // Force reflow so the animation can replay
+          // eslint-disable-next-line no-unused-expressions
+          glCard.offsetHeight;
+          glCard.classList.add('ws-card-focus');
+        }
+      });
+    }
+
+    initSidebar();
+    updateLayoutForState();
+    // loadPresets() // presets hidden for now
+  })();
+</script>
+{% endblock %}

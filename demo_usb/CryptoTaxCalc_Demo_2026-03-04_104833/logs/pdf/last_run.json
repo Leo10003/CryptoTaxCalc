@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-04T09:50:41Z",
+  "run_id": "c3829578-5229-47b6-9372-b94ccac08dee",
+  "title": "CryptoTaxCalc – Workspace Summary",
+  "summary_sections": {
+    "by_month": true,
+    "by_quote": true,
+    "by_asset": true,
+    "eur_summary": true,
+    "top_events": 50
+  },
+  "pdf_size_bytes": 26088917
+}

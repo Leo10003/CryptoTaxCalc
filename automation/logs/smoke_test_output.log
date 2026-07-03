@@ -1,0 +1,49 @@
+=== CryptoTaxCalc smoke runner ===
+Started at 2025-11-04T14:15:45+00:00
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\picci\Desktop\CryptoTaxCalc\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\picci\Desktop\CryptoTaxCalc
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.11.0, cov-7.0.0
+collecting ... collected 17 items / 3 deselected / 14 selected
+
+tests/smoke_test.py::test_health_smoke PASSED                            [  7%]
+tests/smoke_test.py::test_version_smoke PASSED                           [ 14%]
+tests/smoke_test.py::test_support_bundle_endpoint_if_token PASSED        [ 21%]
+tests/smoke_test.py::test_db_path_is_openable_and_parent_dir_exists PASSED [ 28%]
+tests/smoke_test.py::test_auto_repair_migrations_is_idempotent_and_safe PASSED [ 35%]
+tests/smoke_test.py::test_engine_connectivity_and_select_1 PASSED        [ 42%]
+tests/smoke_test.py::test_calculate_creates_run_and_persists PASSED      [ 50%]
+tests/smoke_test.py::test_calculate_is_idempotent_and_creates_new_runs PASSED [ 57%]
+tests/smoke_test.py::test_history_download_zip_contains_manifest_with_run_id PASSED [ 64%]
+tests/smoke_test.py::test_history_events_csv_if_present PASSED           [ 71%]
+tests/smoke_test.py::test_audit_history_list_if_present PASSED           [ 78%]
+tests/smoke_test.py::test_transaction_model_and_schema_roundtrip PASSED  [ 85%]
+tests/smoke_test.py::test_db_path_is_creatable PASSED                    [ 92%]
+tests/smoke_test.py::test_support_bundle_contains_evolve_artifacts [EXPORT] auto_export=False exitstatus=2
+[EXPORT] SKIP (feature flag). Details -> C:\Users\picci\Desktop\CryptoTaxCalc\artifacts\EXPORT_SKIPPED.txt
+
+
+=================================== PASSES ====================================
+=========================== short test summary info ===========================
+PASSED tests/smoke_test.py::test_health_smoke
+PASSED tests/smoke_test.py::test_version_smoke
+PASSED tests/smoke_test.py::test_support_bundle_endpoint_if_token
+PASSED tests/smoke_test.py::test_db_path_is_openable_and_parent_dir_exists
+PASSED tests/smoke_test.py::test_auto_repair_migrations_is_idempotent_and_safe
+PASSED tests/smoke_test.py::test_engine_connectivity_and_select_1
+PASSED tests/smoke_test.py::test_calculate_creates_run_and_persists
+PASSED tests/smoke_test.py::test_calculate_is_idempotent_and_creates_new_runs
+PASSED tests/smoke_test.py::test_history_download_zip_contains_manifest_with_run_id
+PASSED tests/smoke_test.py::test_history_events_csv_if_present
+PASSED tests/smoke_test.py::test_audit_history_list_if_present
+PASSED tests/smoke_test.py::test_transaction_model_and_schema_roundtrip
+PASSED tests/smoke_test.py::test_db_path_is_creatable
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+C:\Users\picci\AppData\Local\Programs\Python\Python312\Lib\threading.py:355: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+====================== 13 passed, 3 deselected in 2.64s =======================
+
+Finished: 2025-11-04T14:15:49+00:00

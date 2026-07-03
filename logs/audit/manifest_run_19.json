@@ -1,0 +1,48 @@
+{
+  "timestamp_built": "2026-02-20T20:20:46Z",
+  "run_id": 19,
+  "run": {
+    "id": 19,
+    "started_at": "2026-02-20 20:20:46.835749",
+    "finished_at": "2026-02-20 20:20:46.850406",
+    "jurisdiction": "HR",
+    "rule_version": "2025.1",
+    "lot_method": "FIFO",
+    "fx_set_id": 4,
+    "params": "{\"jurisdiction\":\"HR\",\"rule_version\":\"2025.1\",\"lot_method\":\"FIFO\",\"fx_source\":\"HNB\",\"holding_exemption_days\":730,\"it_threshold_eur\":null,\"round_dp\":2,\"include_tax_helpers\":true,\"include_audit_appendix\":true,\"strict_fx\":false}"
+  },
+  "fx_batch": {
+    "id": 4,
+    "imported_at": "2026-02-20T20:20:46.834726+00:00",
+    "source": "runtime-self-heal",
+    "rates_hash": null
+  },
+  "inputs": {
+    "mode": "timestamp_cutoff",
+    "cutoff_finished_at": "2026-02-20 20:20:46.850406",
+    "transactions_hashes_ordered": [
+      null,
+      null
+    ]
+  },
+  "outputs": [
+    {
+      "timestamp": "2024-06-01T12:00:00",
+      "asset": "BTC",
+      "qty_sold": "1",
+      "proceeds": "21000.00000000",
+      "cost_basis": "20000.00000000",
+      "gain": "1000.00000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "21000.00000000",
+          "cost_eur": "20000.00000000",
+          "acquired_at": "2024-01-01T12:00:00",
+          "disposed_at": "2024-06-01T12:00:00"
+        }
+      ]
+    }
+  ]
+}

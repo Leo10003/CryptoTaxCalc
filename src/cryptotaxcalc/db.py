@@ -4,6 +4,7 @@ from __future__ import annotations
 import sqlite3
 import uuid
 import os
+import re
 from datetime import datetime, date
 from contextlib import contextmanager
 from typing import Dict, Set, Iterator, Generator
@@ -91,7 +92,21 @@ def get_session() -> Generator[Session, None, None]:
 # Schema helpers (idempotent + additive)
 # --------------------------------------------------
 
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+def _assert_sql_ident(name: str, what: str) -> str:
+    """
+    Validate a SQL identifier used in DDL (table/index/column).
+    Prevents accidental injection if future refactors ever route user input here.
+    """
+    n = (name or "").strip()
+    if not n or not _IDENT_RE.match(n):
+        raise ValueError(f"Invalid SQL identifier for {what}: {name!r}")
+    return n
+
 def _ensure_index(conn, name: str, table: str, expr: str) -> None:
+    name = _assert_sql_ident(name, "index")
+    table = _assert_sql_ident(table, "table")
     hit = conn.execute(
         text("SELECT name FROM sqlite_master WHERE type='index' AND name=:n;"),
         {"n": name},
@@ -100,6 +115,8 @@ def _ensure_index(conn, name: str, table: str, expr: str) -> None:
         conn.execute(text(f"CREATE INDEX {name} ON {table} {expr};"))
 
 def _ensure_column(conn, table: str, name: str, decl: str) -> None:
+    table = _assert_sql_ident(table, "table")
+    name = _assert_sql_ident(name, "column")
     cols = {str(r[1]) for r in conn.execute(text(f"PRAGMA table_info({table});")).fetchall()}
     if name not in cols:
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {decl};"))
@@ -138,7 +155,7 @@ def _ensure_compatibility_objects(conn) -> None:
             date TEXT,
             base TEXT,
             quote TEXT,
-            rate NUMERIC,
+            rate TEXT,
             batch_id INTEGER
         );
     """))
@@ -147,10 +164,11 @@ def _ensure_compatibility_objects(conn) -> None:
     # so queries don’t fail before migrations complete.
     _ensure_column(conn, "fx_rates", "base", "TEXT")
     _ensure_column(conn, "fx_rates", "quote", "TEXT")
-    _ensure_column(conn, "fx_rates", "rate", "NUMERIC")
+    _ensure_column(conn, "fx_rates", "rate", "TEXT")
     _ensure_column(conn, "fx_rates", "batch_id", "INTEGER")
 
     _ensure_index(conn, "idx_fx_rates_date", "fx_rates", "(date)")
+    _ensure_index(conn, "idx_fx_rates_date_base_quote", "fx_rates", "(date, base, quote)")
 
     # calc_runs
     conn.execute(text("""
@@ -291,9 +309,9 @@ def init_db(engine: Engine) -> None:
             with engine.begin() as conn:
                 _ensure_index(
                     conn,
-                    "ix_realized_events_run_ts_id",
+                    "ix_realized_events_run_asset_ts_id",
                     "realized_events",
-                    "(run_id, timestamp, id)",
+                    "(run_id, asset, timestamp, id)",
                 )
 
         log_success_and_clear_latest("db", "Database initialized and schema verified.")

@@ -1,0 +1,6 @@
+{"timestamp": "2026-03-04T09:49:04Z", "level": "INFO", "component": "audit.digest", "message": "[AUDIT] Building run manifest for run_id=1", "logger": "cryptotaxcalc.audit.digest"}
+{"timestamp": "2026-03-04T09:49:04Z", "level": "INFO", "component": "audit.digest", "message": "[AUDIT] Manifest built for run_id=1 with 2 outputs.", "logger": "cryptotaxcalc.audit.digest"}
+{"timestamp": "2026-03-04T09:49:04Z", "level": "INFO", "component": "audit.digest", "message": "[AUDIT] Digests computed input=00454481… output=d9ef937e… manifest=38e53f5b…", "logger": "cryptotaxcalc.audit.digest"}
+{"timestamp": "2026-03-04T09:49:52Z", "level": "INFO", "component": "audit.digest", "message": "[AUDIT] Building run manifest for run_id=2", "logger": "cryptotaxcalc.audit.digest"}
+{"timestamp": "2026-03-04T09:49:52Z", "level": "INFO", "component": "audit.digest", "message": "[AUDIT] Manifest built for run_id=2 with 11283 outputs.", "logger": "cryptotaxcalc.audit.digest"}
+{"timestamp": "2026-03-04T09:49:52Z", "level": "INFO", "component": "audit.digest", "message": "[AUDIT] Digests computed input=d6f4814a… output=01b382fe… manifest=62f8701a…", "logger": "cryptotaxcalc.audit.digest"}

@@ -1,7 +1,7 @@
 # calc_runner.py – EUR-canonical, auditable calculation runner
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, List
@@ -11,12 +11,16 @@ import json
 import time
 import traceback
 
+def _debug_warnings_enabled() -> bool:
+    v = (os.getenv("DEBUG_WARNINGS") or "").strip().lower()
+    return v in {"1", "true", "yes", "on"}
+
 from sqlalchemy.orm import Session
 
 from cryptotaxcalc.schemas import CalcConfig, RunSummary, RunTotals, Transaction
 from cryptotaxcalc.rules.registry import get_rule, split_taxable_exempt_gain
 from cryptotaxcalc.rules.base import TaxRule, RunContext
-from cryptotaxcalc.models import TransactionRow, RealizedEvent, RunInput
+from cryptotaxcalc.models import TransactionRow, RealizedEvent, RunInput, WalletOutOverride
 from cryptotaxcalc.fifo_engine import compute_fifo
 from cryptotaxcalc.fx_utils import ensure_rate_or_default_lookup, get_or_create_current_fx_batch_id
 from cryptotaxcalc.logging_setup import get_logger, _atomic_write_json, _now_iso_z
@@ -128,6 +132,28 @@ IS_PROD = CTC_ENV in {"prod", "production"}
 ALLOW_FX_FALLBACK_IN_PROD = (os.getenv("ALLOW_FX_FALLBACK_IN_PROD") or "").strip().lower() in {"1", "true", "yes", "on"}
 STRICT_FEE_VALUATION = (os.getenv("STRICT_FEE_VALUATION") or "").strip().lower() in {"1", "true", "yes", "on"}
 
+# Fee valuation helpers:
+# - DB daily prices: fx_rates base=<ASSET>, quote=EUR
+# - Internal fallback: derive <ASSET>/EUR from user trades (e.g., BNBUSDT) + FX conversion
+FEE_INTERNAL_PRICE_FROM_TRADES = (os.getenv("FEE_INTERNAL_PRICE_FROM_TRADES") or "").strip().lower() in {"1", "true", "yes", "on"}
+try:
+    FEE_INTERNAL_PRICE_LOOKBACK_DAYS = int(os.getenv("FEE_INTERNAL_PRICE_LOOKBACK_DAYS") or "7")
+except Exception:
+    FEE_INTERNAL_PRICE_LOOKBACK_DAYS = 7
+if FEE_INTERNAL_PRICE_LOOKBACK_DAYS < 0:
+    FEE_INTERNAL_PRICE_LOOKBACK_DAYS = 0
+if FEE_INTERNAL_PRICE_LOOKBACK_DAYS > 30:
+    FEE_INTERNAL_PRICE_LOOKBACK_DAYS = 30
+
+try:
+    FEE_DB_PRICE_LOOKBACK_DAYS = int(os.getenv("FEE_DB_PRICE_LOOKBACK_DAYS") or "0")
+except Exception:
+    FEE_DB_PRICE_LOOKBACK_DAYS = 0
+if FEE_DB_PRICE_LOOKBACK_DAYS < 0:
+    FEE_DB_PRICE_LOOKBACK_DAYS = 0
+if FEE_DB_PRICE_LOOKBACK_DAYS > 30:
+    FEE_DB_PRICE_LOOKBACK_DAYS = 30
+
 
 def _warn_once(warnings: list[str], seen: set[str], msg: str) -> None:
     if msg in seen:
@@ -190,6 +216,90 @@ def _quote_amount_to_eur(
     )
 
 
+def _build_internal_eur_price_map_from_trades(
+    txs: List[Transaction],
+    *,
+    db: Session,
+    strict_fx: bool,
+    warnings: list[str],
+    seen: set[str],
+    fx_meta: dict[str, Any],
+    fee_assets_needed: set[str],
+) -> dict[str, dict[str, Decimal]]:
+    """
+    Build a daily EUR-per-asset price map from the user's own trades.
+
+    Uses any transaction where:
+      - base_asset is in fee_assets_needed
+      - quote_asset is USD-like (USD/USDT/USDC/BUSD/...)
+      - quote_amount/base_amount yields quote per 1 base
+      - quote is converted to EUR via _quote_amount_to_eur
+    """
+    prices: dict[str, dict[str, Decimal]] = {}
+
+    for t in txs:
+        try:
+            base = (t.base_asset or "").upper().strip()
+            if base not in fee_assets_needed:
+                continue
+
+            if not t.quote_asset or t.quote_amount is None:
+                continue
+
+            quote = (t.quote_asset or "").upper().strip()
+            if quote not in USD_LIKE_QUOTES:
+                continue
+
+            base_amt = _D(getattr(t, "base_amount", None))
+            if base_amt == 0:
+                continue
+            if base_amt < 0:
+                base_amt = abs(base_amt)
+
+            day = t.timestamp.date()
+            day_iso = day.isoformat()
+
+            qa_eur = _quote_amount_to_eur(
+                _D(t.quote_amount),
+                quote_asset=quote,
+                day=day,
+                db=db,
+                strict_fx=strict_fx,
+                warnings=warnings,
+                seen=seen,
+                fx_meta=fx_meta,
+            )
+
+            # EUR per 1 base asset
+            rate_eur = (qa_eur / base_amt).quantize(Decimal("0.00000001"))
+            prices.setdefault(base, {})[day_iso] = rate_eur
+        except Exception:
+            continue
+
+    return prices
+
+
+def _internal_price_lookup(
+    prices: dict[str, dict[str, Decimal]],
+    *,
+    asset: str,
+    day,
+    lookback_days: int,
+) -> tuple[Decimal | None, str | None, int]:
+    """
+    Find EUR-per-asset for `asset` at `day` with lookback.
+    Returns (rate, matched_day_iso, looked_back_days).
+    """
+    a = (asset or "").upper().strip()
+    per_day = prices.get(a) or {}
+    for i in range(lookback_days + 1):
+        probe = day - timedelta(days=i)
+        k = probe.isoformat()
+        if k in per_day:
+            return per_day[k], k, i
+    return None, None, lookback_days
+
+
 def _normalize_transactions_to_eur(
     txs: List[Transaction],
     *,
@@ -219,6 +329,38 @@ def _normalize_transactions_to_eur(
     fee_val_meta.setdefault("third_fee_valued", 0)
     fee_val_meta.setdefault("missing_price_days", set())
     fee_val_meta.setdefault("missing_price_pairs", set())
+    fee_val_meta.setdefault("internal_price_used", 0)
+    fee_val_meta.setdefault("internal_price_assets", set())
+    fee_val_meta.setdefault("internal_price_fallback_days", set())
+
+    # Determine which fee assets actually need third-asset valuation
+    fee_assets_needed: set[str] = set()
+    for t in txs:
+        try:
+            if getattr(t, "fee_amount", None) is None or _D(getattr(t, "fee_amount", None)) == 0:
+                continue
+            fa = (t.fee_asset or "").upper().strip()
+            if not fa or fa in ("EUR",) or fa in USD_LIKE_QUOTES:
+                continue
+            base = (t.base_asset or "").upper().strip()
+            quote = (t.quote_asset or "").upper().strip()
+            if fa not in {base, quote}:
+                fee_assets_needed.add(fa)
+        except Exception:
+            continue
+
+    internal_prices: dict[str, dict[str, Decimal]] = {}
+    if FEE_INTERNAL_PRICE_FROM_TRADES and fee_assets_needed:
+        internal_prices = _build_internal_eur_price_map_from_trades(
+            txs,
+            db=db,
+            strict_fx=strict_fx,
+            warnings=warnings,
+            seen=seen,
+            fx_meta=fx_meta,
+            fee_assets_needed=fee_assets_needed,
+        )
+
 
     for t in txs:
         ttype = (t.type or "").strip().lower()
@@ -319,12 +461,37 @@ def _normalize_transactions_to_eur(
                     base=current_fee_asset,
                     quote="EUR",
                     default_rate=Decimal("0"),
-                    max_lookback_days=0,
+                    max_lookback_days=FEE_DB_PRICE_LOOKBACK_DAYS,
                 )
                 rate = lookup.rate if isinstance(lookup.rate, Decimal) else Decimal(str(lookup.rate))
                 can_value = (not lookup.used_fallback) and (rate > 0)
 
+                # Internal fallback: derive price from user's own trades (e.g., BNBUSDT) + FX conversion
+                if (not can_value) and FEE_INTERNAL_PRICE_FROM_TRADES and internal_prices:
+                    hit_rate, matched_day, looked_back = _internal_price_lookup(
+                        internal_prices,
+                        asset=current_fee_asset,
+                        day=day,
+                        lookback_days=FEE_INTERNAL_PRICE_LOOKBACK_DAYS,
+                    )
+                    if hit_rate is not None and hit_rate > 0:
+                        rate = hit_rate
+                        can_value = True
+                        fee_val_meta["internal_price_used"] = int(fee_val_meta.get("internal_price_used", 0)) + 1
+                        fee_val_meta.setdefault("internal_price_assets", set()).add(f"{current_fee_asset}/EUR")
+                        if looked_back > 0:
+                            fee_val_meta.setdefault("internal_price_fallback_days", set()).add(day.isoformat())
+
                 if not can_value:
+                    _warn_once(
+                        warnings,
+                        seen,
+                        f"Fee FX lookup debug: asset={current_fee_asset} day={day.isoformat()} "
+                        f"rate={rate} used_fallback={getattr(lookup, 'used_fallback', None)} "
+                        f"lookback_days={getattr(lookup, 'lookback_days', None)} "
+                        f"matched_date={getattr(lookup, 'matched_date', None)}"
+                    )
+                    
                     fee_val_meta.setdefault("missing_price_days", set()).add(day.isoformat())
                     fee_val_meta.setdefault("missing_price_pairs", set()).add(f"{current_fee_asset}/EUR")
 
@@ -402,24 +569,70 @@ def _run_core(
         timings_ms[name] = int(round((t1 - t0) * 1000))
     logger.info(f"Run {getattr(run, 'id', None)} started for {cfg.jurisdiction} at {start_ts}")
 
-    # Build Pydantic transactions from DB rows
+    # Build Pydantic transactions from DB rows (apply wallet OUT overrides before FIFO)
     t_load0 = time.perf_counter()
-    tx_models: List[Transaction] = [
-        Transaction(
-            timestamp=r.timestamp,
-            type=r.type,
-            base_asset=r.base_asset,
-            base_amount=_D(r.base_amount),
-            quote_asset=r.quote_asset,
-            quote_amount=_D(r.quote_amount) if r.quote_amount is not None else None,
-            fee_asset=r.fee_asset,
-            fee_amount=_D(r.fee_amount) if r.fee_amount is not None else None,
-            exchange=r.exchange,
-            memo=r.memo,
-            fair_value=_D(getattr(r, "fair_value", None)) if getattr(r, "fair_value", None) is not None else None,
+
+    preload_warnings: list[str] = []
+
+    # Load overrides once (keyed by transaction_id)
+    overrides_by_txid = {}
+    try:
+        for o in db.query(WalletOutOverride).all():
+            try:
+                overrides_by_txid[int(o.transaction_id)] = o
+            except Exception:
+                continue
+    except Exception:
+        # If table is missing/migration not applied yet, proceed without overrides.
+        overrides_by_txid = {}
+
+    tx_models: List[Transaction] = []
+    for r in rows:
+        r_type = r.type
+        r_quote_asset = r.quote_asset
+        r_quote_amount = r.quote_amount
+        r_fee_asset = r.fee_asset
+        r_fee_amount = r.fee_amount
+
+        ov = overrides_by_txid.get(int(r.id))
+        if ov is not None:
+            cls = (ov.classification or "").strip().lower()
+
+            # Backward-compat: treat old "taxable" as "sell"
+            if cls == "taxable":
+                cls = "sell"
+
+            if cls in {"sell", "buy"}:
+                if ov.proceeds_eur is None:
+                    preload_warnings.append(
+                        f"Wallet transfer override missing proceeds_eur for tx_id={r.id}; treated as TRANSFER."
+                    )
+                else:
+                    # SELL/BUY use explicit EUR proceeds/cost.
+                    r_type = "SELL" if cls == "sell" else "BUY"
+                    r_quote_asset = "EUR"
+                    r_quote_amount = ov.proceeds_eur
+                    
+                    # Wallet-derived synthetic trades: do NOT treat network fees as trade fees.
+                    r_fee_asset = None
+                    r_fee_amount = None
+
+        tx_models.append(
+            Transaction(
+                timestamp=r.timestamp,
+                type=r_type,
+                base_asset=r.base_asset,
+                base_amount=(abs(_D(r.base_amount)) if r_type in {"SELL", "BUY"} else _D(r.base_amount)),
+                quote_asset=r_quote_asset,
+                quote_amount=_D(r_quote_amount) if r_quote_amount is not None else None,
+                fee_asset=r_fee_asset,
+                fee_amount=_D(r_fee_amount) if r_fee_amount is not None else None,
+                exchange=r.exchange,
+                memo=r.memo,
+                fair_value=_D(getattr(r, "fair_value", None)) if getattr(r, "fair_value", None) is not None else None,
+            )
         )
-        for r in rows
-    ]
+
     _mark("load_tx_models", t_load0, time.perf_counter())
 
     logger.info(f"Loaded {len(tx_models)} transactions from DB")
@@ -441,6 +654,12 @@ def _run_core(
     strict_fx = bool(strict_fx_configured or strict_fx_enforced_by_env)
     strict_fx_source = "cfg" if strict_fx_configured else ("prod_enforced" if strict_fx_enforced_by_env else "disabled")
     warnings: list[str] = []
+    
+    # Carry forward any warnings from override application during tx model build
+    try:
+        warnings.extend(preload_warnings)
+    except Exception:
+        pass
 
     fx_meta: dict[str, Any] = {"fallback_days": set(), "fallback_pairs": set()}
     fee_val_meta: dict[str, Any] = {
@@ -449,10 +668,79 @@ def _run_core(
         "missing_price_days": set(),
         "missing_price_pairs": set(),
     }
+        
+    # Ensure third-asset fee prices exist before fee valuation / FIFO (same-request, deterministic)
+    try:
+        from cryptotaxcalc.price_autosync import price_autosync_tick
+        res = price_autosync_tick(reason="pre-calc", db=db)
+        
+        # DB sanity check: confirm BNB/EUR exists in the same DB this run is using
+        try:
+            from sqlalchemy import text
+            from datetime import timezone
+
+            # Use the run's date span (min/max tx date) to avoid guessing a range
+            min_day = min(t.timestamp.date() for t in tx_models) if tx_models else None
+            max_day = max(t.timestamp.date() for t in tx_models) if tx_models else None
+
+            if min_day and max_day:
+                n = db.execute(
+                    text(
+                        """
+                        SELECT COUNT(*) FROM fx_rates
+                        WHERE base = 'BNB' AND quote = 'EUR'
+                        AND date >= :s AND date <= :e
+                        """
+                    ),
+                    {"s": min_day.isoformat(), "e": max_day.isoformat()},
+                ).scalar() or 0
+
+                if _debug_warnings_enabled():
+                    warnings.append(f"FX check: BNB/EUR rows in fx_rates for {min_day}..{max_day} = {int(n)}")
+        except Exception as e:
+            warnings.append(f"FX check failed: {e}")
+
+        if isinstance(res, dict):
+            enabled = bool(res.get("enabled", True))
+            ok = bool(res.get("ok", True))
+            provider = str(res.get("provider") or "")
+            quote = str(res.get("quote") or "")
+            inserted = int(res.get("inserted") or 0)
+            skipped = int(res.get("skipped") or 0)
+            errors = int(res.get("errors") or 0)
+
+            details = res.get("details") or {}
+            assets = details.get("assets") if isinstance(details, dict) else None
+
+            if not enabled:
+                warnings.append("Price autosync is disabled; third-asset fee valuation may be incomplete.")
+            elif not ok:
+                warnings.append(f"Price autosync returned error: {res.get('error')}")
+            else:
+                diag = f"Price autosync diag: provider={provider} quote={quote} inserted={inserted} skipped={skipped} errors={errors}"
+                if isinstance(assets, list) and assets:
+                    # show first 3 assets for quick diagnosis
+                    parts = []
+                    for a in assets[:3]:
+                        try:
+                            parts.append(
+                                f"{a.get('asset')}:{a.get('provider_used')} fetched={a.get('fetched_days')} "
+                                f"ins={a.get('inserted')} err={a.get('errors')}"
+                                + (f" msg={a.get('error')}" if a.get("error") else "")
+                            )
+                        except Exception:
+                            continue
+                    if parts:
+                        diag += " | " + " ; ".join(parts)
+                if _debug_warnings_enabled():
+                    warnings.append(diag)
+    except Exception as e:
+        warnings.append(f"Price autosync failed (third-asset fee valuation may be incomplete): {e}")
 
     # Phase 1: EUR-canonical quote legs BEFORE FIFO
     t_norm0 = time.perf_counter()
     try:
+        warn_len_before_norm = len(warnings)
         tx_models_eur = _normalize_transactions_to_eur(
             tx_models,
             db=db,
@@ -461,6 +749,40 @@ def _run_core(
             fx_meta=fx_meta,
             fee_val_meta=fee_val_meta,
         )
+
+        # If fee valuation reported missing daily prices, run one autosync retry and normalize once more.
+        missing_days = fee_val_meta.get("missing_price_days") if isinstance(fee_val_meta, dict) else None
+        if missing_days:
+            try:
+                from cryptotaxcalc.price_autosync import price_autosync_tick
+                price_autosync_tick(reason="fee-missing-days", db=db)
+            except Exception as e2:
+                warnings.append(f"Price autosync retry failed (missing fee days may remain): {e2}")
+            else:
+                # Clear stale missing sets and retry normalization once
+                fee_val_meta["missing_price_days"] = set()
+                fee_val_meta["missing_price_pairs"] = set()
+                tx_models_eur = _normalize_transactions_to_eur(
+                    tx_models,
+                    db=db,
+                    strict_fx=strict_fx,
+                    warnings=warnings,
+                    fx_meta=fx_meta,
+                    fee_val_meta=fee_val_meta,
+                )
+
+                # If retry succeeded (no missing days left), remove stale "incomplete" warnings from the first pass
+                if not fee_val_meta.get("missing_price_days"):
+                    tail = warnings[warn_len_before_norm:]
+                    tail = [
+                        w for w in tail
+                        if not (isinstance(w, str) and (
+                            w.startswith("Fee valuation incomplete:")
+                            or w.startswith("Fee FX lookup debug:")
+                        ))
+                    ]
+                    warnings[:] = warnings[:warn_len_before_norm] + tail
+
     except Exception as e:
         log_workspace_error(
             stage="normalize_to_eur",
@@ -488,6 +810,19 @@ def _run_core(
             warnings.append(
                 f"Fee valuation: valued {third_fee_valued}/{third_fee_detected} third-asset fees into EUR and created synthetic fee disposals."
             )
+        # If valuation fully succeeded, clear any stale missing-day state and stale warnings from earlier passes
+        if third_fee_valued >= third_fee_detected:
+            try:
+                fee_val_meta["missing_price_days"] = set()
+                fee_val_meta["missing_price_pairs"] = set()
+            except Exception:
+                pass
+
+            # Remove stale per-tx warnings emitted during the first pass
+            warnings[:] = [
+                w for w in warnings
+                if not (isinstance(w, str) and w.startswith("Fee valuation incomplete: missing "))
+            ]
         if third_fee_valued < third_fee_detected:
             pairs_s = ", ".join(fee_price_missing_pairs_sample[:5]) or "–"
             days_s = ", ".join(fee_price_missing_days_sample[:5]) or "–"
@@ -496,6 +831,15 @@ def _run_core(
                 f"(pairs: {pairs_s}; days sample: {days_s}). "
                 "Those fees are recorded but not applied. Load daily prices into fx_rates (base=<ASSET>, quote=EUR) and re-run."
             )
+    
+    internal_used = int(fee_val_meta.get("internal_price_used", 0))
+    internal_assets = sorted(list(fee_val_meta.get("internal_price_assets", set())))
+    if internal_used > 0:
+        assets_s = ", ".join(internal_assets[:5]) or "–"
+        warnings.append(
+            f"Fee valuation: used internally derived EUR prices for {internal_used} third-asset fee events "
+            f"(assets: {assets_s}; lookback up to {FEE_INTERNAL_PRICE_LOOKBACK_DAYS} day(s))."
+        )
 
     # Run FIFO engine on EUR-canonical transactions
     events: list[Any] = []
@@ -521,6 +865,32 @@ def _run_core(
 
     # Attach / create FX batch for this run (used in diagnostics/summary_json)
     fx_batch_id = get_or_create_current_fx_batch_id(db)
+
+    # Trust metadata (UI + audit): make available even for subset runs (persist_events=False).
+    fx_context = {
+        "fx_batch_id": fx_batch_id,
+        "jurisdiction": cfg.jurisdiction,
+        "fx_rate_used": "USD->EUR via fx_rates table (lookback up to 7 days)",
+        "strict_fx": strict_fx,
+        "strict_fx_source": strict_fx_source,
+        "fx_fallback_used": fx_fallback_used,
+        "fx_fallback_days_count": fx_fallback_days_count,
+        "fx_fallback_days_sample": fx_fallback_days_sample,
+        "fx_fallback_pairs": fx_fallback_pairs,
+    }
+
+    fee_valuation = {
+        "strict_fee_valuation": bool(STRICT_FEE_VALUATION),
+        "third_asset_fee_detected": third_fee_detected,
+        "third_asset_fee_valued": third_fee_valued,
+        "missing_price_days_count": len(fee_price_missing_days),
+        "missing_price_days_sample": fee_price_missing_days_sample,
+        "missing_price_pairs_sample": fee_price_missing_pairs_sample,
+        "internal_price_used": int(fee_val_meta.get("internal_price_used", 0)),
+        "internal_price_assets_sample": sorted(list(fee_val_meta.get("internal_price_assets", set())))[:10],
+        "internal_price_lookback_days": int(FEE_INTERNAL_PRICE_LOOKBACK_DAYS),
+        "db_price_lookback_days": int(FEE_DB_PRICE_LOOKBACK_DAYS),
+    }
 
     # Safety: after Phase 1 normalization, events must be EUR-only.
     non_eur = sorted({
@@ -747,25 +1117,8 @@ def _run_core(
                 "fx_fallback_days_count": fx_fallback_days_count,
                 "fx_fallback_days_sample": fx_fallback_days_sample,
                 "fx_fallback_pairs": fx_fallback_pairs,
-                "fx_context": {
-                    "fx_batch_id": fx_batch_id,
-                    "jurisdiction": cfg.jurisdiction,
-                    "fx_rate_used": "USD->EUR via fx_rates table (lookback up to 7 days)",
-                    "strict_fx": strict_fx,
-                    "strict_fx_source": strict_fx_source,
-                    "fx_fallback_used": fx_fallback_used,
-                    "fx_fallback_days_count": fx_fallback_days_count,
-                    "fx_fallback_days_sample": fx_fallback_days_sample,
-                    "fx_fallback_pairs": fx_fallback_pairs,
-                },
-                "fee_valuation": {
-                    "strict_fee_valuation": bool(STRICT_FEE_VALUATION),
-                    "third_asset_fee_detected": third_fee_detected,
-                    "third_asset_fee_valued": third_fee_valued,
-                    "missing_price_days_count": len(fee_price_missing_days),
-                    "missing_price_days_sample": fee_price_missing_days_sample,
-                    "missing_price_pairs_sample": fee_price_missing_pairs_sample,
-                },
+                "fx_context": fx_context,
+                "fee_valuation": fee_valuation,
                 "lots_processed": lots_processed,
                 "totals": totals.model_dump(),
                 "eur_summary": eur_summary,
@@ -819,6 +1172,8 @@ def _run_core(
         strict_fx=strict_fx,
         strict_fx_source=strict_fx_source,
         fx_fallback_pairs=fx_fallback_pairs,
+        fx_context=fx_context,
+        fee_valuation=fee_valuation,
         lots_processed=lots_processed,
         totals=totals,
         warnings=warnings,

@@ -1,0 +1,6 @@
+{
+  "timestamp": "2026-02-08T11:25:30Z",
+  "error": "'latin-1' codec can't encode character '\\u2013' in position 57: ordinal not in range(256)",
+  "path": "/wallet/transfers/672/export_resolved.csv",
+  "method": "GET"
+}

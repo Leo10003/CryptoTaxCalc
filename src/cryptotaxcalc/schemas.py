@@ -365,10 +365,14 @@ class RunSummary(BaseModel):
     fx_fallback_used: bool | None = None
     fx_fallback_days_count: int | None = None
     fx_fallback_days_sample: list[str] | None = None
+    
+    # Trust metadata: surfaced in UI to explain integrity and next steps.
+    fx_context: dict[str, Any] | None = None
+    fee_valuation: dict[str, Any] | None = None
 
     lots_processed: int = 0
     totals: RunTotals
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[str | dict[str, Any]] = Field(default_factory=list)
     timings_ms: dict[str, int] | None = None
 
 
@@ -379,3 +383,112 @@ for model in list(globals().values()):
             model.model_rebuild()
         except Exception:
             pass
+
+class PrecheckAssetIssue(BaseModel):
+    asset: str
+    first_sell_ts: str | None = None
+    total_sell_qty: str
+    reason: str
+    guidance: str | None = None
+
+
+class PrecheckFileIssue(BaseModel):
+    filename: str
+    issues_detected: bool
+    assets: list[PrecheckAssetIssue] = Field(default_factory=list)
+
+
+class PrecheckResponse(BaseModel):
+    issues_detected: bool
+    assets: list[PrecheckAssetIssue] = Field(default_factory=list)
+    files: list[PrecheckFileIssue] = Field(default_factory=list)
+
+class WalletOutItem(BaseModel):
+    transaction_id: int
+    timestamp: str
+    asset: str
+    amount: str
+    exchange: str | None = None
+
+
+class WalletTransferOverrideRequest(BaseModel):
+    classification: Literal["transfer", "sell", "buy"]
+    proceeds_eur: str | None = None
+    note: str | None = None
+    
+class WalletTransferRow(BaseModel):
+    transaction_id: int
+    raw_event_id: int
+    filename: str
+
+    timestamp: str
+    asset: str
+    amount: str
+
+    # persisted from Ledger: fair_value + memo contains cv_ticker=EUR/USD
+    fair_value: str | None = None
+    cv_ticker: str | None = None
+
+    # current classification
+    classification: Literal["transfer", "sell", "buy"] = "transfer"
+    proceeds_eur: str | None = None
+
+    # suggestion (auto-fill)
+    suggested_proceeds_eur: str | None = None
+
+
+class WalletTransferFileGroup(BaseModel):
+    raw_event_id: int
+    filename: str
+    ins: list[WalletTransferRow] = Field(default_factory=list)
+    outs: list[WalletTransferRow] = Field(default_factory=list)
+
+
+class WalletTransferBatchItem(BaseModel):
+    transaction_id: int
+    classification: Literal["transfer", "sell", "buy"]
+    proceeds_eur: str | None = None
+    note: str | None = None
+
+
+class WalletTransferBatchRequest(BaseModel):
+    raw_event_id: int
+    items: list[WalletTransferBatchItem] = Field(default_factory=list)
+
+class WalletOutRow(BaseModel):
+    transaction_id: int
+    raw_event_id: int | None = None
+    filename: str | None = None
+
+    timestamp: str
+    asset: str
+    amount: str
+
+    # persisted from Ledger countervalue via fair_value + memo cv_ticker
+    fair_value: str | None = None
+    cv_ticker: str | None = None
+
+    # current override state (if any)
+    classification: Literal["transfer", "taxable"] = "transfer"
+    proceeds_eur: str | None = None
+
+    # server suggestion (auto-fill)
+    suggested_proceeds_eur: str | None = None
+
+
+class WalletOutGroup(BaseModel):
+    raw_event_id: int
+    filename: str
+    rows: list[WalletOutRow] = Field(default_factory=list)
+
+
+class WalletOutBatchItem(BaseModel):
+    transaction_id: int
+    classification: Literal["transfer", "taxable"]
+    proceeds_eur: str | None = None
+    note: str | None = None
+
+
+class WalletOutBatchRequest(BaseModel):
+    raw_event_id: int
+    items: list[WalletOutBatchItem] = Field(default_factory=list)

@@ -1,0 +1,67 @@
+{
+  "timestamp_built": "2026-02-08T18:49:33Z",
+  "run_id": 102,
+  "run": {
+    "id": 102,
+    "started_at": "2026-02-08 18:49:31.706930",
+    "finished_at": "2026-02-08 18:49:33.959150",
+    "jurisdiction": "HR",
+    "rule_version": "2025.1",
+    "lot_method": "FIFO",
+    "fx_set_id": 152,
+    "params": "{\"jurisdiction\":\"HR\",\"rule_version\":\"2025.1\",\"lot_method\":\"FIFO\",\"fx_source\":\"HNB\",\"holding_exemption_days\":730,\"it_threshold_eur\":null,\"round_dp\":2,\"include_tax_helpers\":true,\"include_audit_appendix\":true,\"strict_fx\":false}"
+  },
+  "fx_batch": {
+    "id": 152,
+    "imported_at": "2026-02-07T23:06:06.050295+00:00",
+    "source": "runtime-self-heal",
+    "rates_hash": null
+  },
+  "inputs": {
+    "mode": "snapshot",
+    "cutoff_finished_at": null,
+    "transactions_hashes_ordered": [
+      "7d3a735a532ea30f367d90b403450b65b1c43666598ed0173a13948aa435d974",
+      "955fa3ca5007adf6cd04b04d1cd708ce81b8bdd9aee521cf002bd2ea6365c404",
+      "ab9b0282c11d0d1ec7afd779751a3c46a414542aace528dfaf0a58f2685e9918"
+    ]
+  },
+  "outputs": [
+    {
+      "timestamp": "2025-05-21T21:03:24",
+      "asset": "SOL",
+      "qty_sold": "0.000000001",
+      "proceeds": "0.08000000",
+      "cost_basis": "0",
+      "gain": "0.08000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "0.08000000",
+          "cost_eur": "0",
+          "acquired_at": null,
+          "disposed_at": "2025-05-21T21:03:24"
+        }
+      ]
+    },
+    {
+      "timestamp": "2025-11-03T22:06:39",
+      "asset": "SOL",
+      "qty_sold": "0.000000001",
+      "proceeds": "4620.08000000",
+      "cost_basis": "4555.78000000",
+      "gain": "64.30000000",
+      "quote_asset": "EUR",
+      "fee_applied": "0",
+      "matches": [
+        {
+          "proceeds_eur": "4620.08000000",
+          "cost_eur": "4555.78000000",
+          "acquired_at": "2025-05-21T21:03:24",
+          "disposed_at": "2025-11-03T22:06:39"
+        }
+      ]
+    }
+  ]
+}

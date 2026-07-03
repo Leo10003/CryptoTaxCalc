@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -20,7 +21,7 @@ def migrate_fx_schema(engine: Engine) -> None:
     Bring FX tables to the expected shape.
 
     Expected shape:
-      fx_rates(date TEXT, base TEXT, quote TEXT, rate NUMERIC, batch_id INTEGER, [optional id PK])
+      fx_rates(date TEXT, base TEXT, quote TEXT, rate TEXT, batch_id INTEGER, [optional id PK])
       fx_batches(id INTEGER PK, date TEXT UNIQUE, created_at TEXT, imported_at TEXT, source TEXT, rates_hash TEXT)
 
     Idempotent and safe on SQLite.
@@ -33,7 +34,7 @@ def migrate_fx_schema(engine: Engine) -> None:
                 date TEXT,
                 base TEXT,
                 quote TEXT,
-                rate NUMERIC,
+                rate TEXT,
                 batch_id INTEGER
             )
             """
@@ -51,7 +52,7 @@ def migrate_fx_schema(engine: Engine) -> None:
         if "quote" not in cols:
             _add_fx_rates_col("quote TEXT")
         if "rate" not in cols:
-            _add_fx_rates_col("rate NUMERIC")
+            _add_fx_rates_col("rate TEXT")
         if "batch_id" not in cols:
             _add_fx_rates_col("batch_id INTEGER")
 
@@ -145,7 +146,11 @@ def migrate_fx_rates_add_id(engine: Engine) -> None:
     with engine.begin() as conn:
         cols = conn.exec_driver_sql("PRAGMA table_info('fx_rates')").fetchall()
         colnames = {c[1] for c in cols}
-        if "id" in colnames:
+        coltypes = {c[1]: (c[2] or "") for c in cols}
+
+        # Rebuild not only when "id" is missing, but also when rate affinity is not TEXT,
+        # otherwise SQLite will coerce decimal strings into floats (drift).
+        if "id" in colnames and coltypes.get("rate", "").strip().upper() == "TEXT":
             return
 
         # Create new table with the correct schema
@@ -156,48 +161,98 @@ def migrate_fx_rates_add_id(engine: Engine) -> None:
                 date TEXT NOT NULL,
                 base TEXT NOT NULL,
                 quote TEXT NOT NULL,
-                rate NUMERIC NOT NULL,
+                rate TEXT NOT NULL,
                 batch_id INTEGER
             )
             """
         )
 
-        # Copy existing data with legacy compatibility
-        if {"date", "usd_per_eur", "batch_id"}.issubset(colnames):
-            conn.exec_driver_sql(
-                """
-                INSERT INTO fx_rates_new (date, base, quote, rate, batch_id)
-                SELECT date, 'USD', 'EUR', (1.0 / CAST(usd_per_eur AS REAL)), batch_id FROM fx_rates
-                """
-            )
-        elif {"date", "usd_per_eur"}.issubset(colnames):
-            conn.exec_driver_sql(
-                """
-                INSERT INTO fx_rates_new (date, base, quote, rate, batch_id)
-                SELECT date, 'USD', 'EUR', (1.0 / CAST(usd_per_eur AS REAL)), NULL FROM fx_rates
-                """
-            )
-        elif {"date", "rate", "batch_id", "base", "quote"}.issubset(colnames):
-            conn.exec_driver_sql(
-                """
-                INSERT INTO fx_rates_new (date, base, quote, rate, batch_id)
-                SELECT date, base, quote, CAST(rate AS REAL), batch_id FROM fx_rates
-                """
-            )
+        # Copy existing data with legacy compatibility.
+        # IMPORTANT: store rates as TEXT to avoid float drift (money-safe determinism).
+        if {"date", "usd_per_eur"}.issubset(colnames):
+            # Legacy schema: usd_per_eur = USD per 1 EUR. We store eur_per_usd = EUR per 1 USD.
+            if "batch_id" in colnames:
+                rows = conn.execute(text("SELECT date, usd_per_eur, batch_id FROM fx_rates")).fetchall()
+            else:
+                rows = conn.execute(text("SELECT date, usd_per_eur, NULL FROM fx_rates")).fetchall()
+
+            for d, usd_per_eur, bid in rows:
+                try:
+                    v = Decimal(str(usd_per_eur))
+                    if v == 0:
+                        continue
+                    eur_per_usd = (Decimal("1") / v).quantize(Decimal("0.00000001"))
+                except (InvalidOperation, ValueError, TypeError):
+                    continue
+
+                conn.execute(
+                    text(
+                        "INSERT INTO fx_rates_new (date, base, quote, rate, batch_id) "
+                        "VALUES (:d, 'USD', 'EUR', :r, :b)"
+                    ),
+                    {"d": d, "r": str(eur_per_usd), "b": bid},
+                )
+
+        elif {"id", "date", "rate", "base", "quote"}.issubset(colnames):
+            # Preserve ids when rebuilding a modern table that already has an id column.
+            if "batch_id" in colnames:
+                rows = conn.execute(text("SELECT id, date, base, quote, rate, batch_id FROM fx_rates")).fetchall()
+            else:
+                rows = conn.execute(text("SELECT id, date, base, quote, rate, NULL FROM fx_rates")).fetchall()
+
+            for rid, d, base, quote, rate, bid in rows:
+                try:
+                    r = Decimal(str(rate))
+                except (InvalidOperation, ValueError, TypeError):
+                    continue
+
+                conn.execute(
+                    text(
+                        "INSERT INTO fx_rates_new (id, date, base, quote, rate, batch_id) "
+                        "VALUES (:id, :d, :base, :quote, :r, :b)"
+                    ),
+                    {"id": rid, "d": d, "base": base, "quote": quote, "r": str(r), "b": bid},
+                )
+
         elif {"date", "rate", "base", "quote"}.issubset(colnames):
-            conn.exec_driver_sql(
-                """
-                INSERT INTO fx_rates_new (date, base, quote, rate, batch_id)
-                SELECT date, base, quote, CAST(rate AS REAL), NULL FROM fx_rates
-                """
-            )
+            if "batch_id" in colnames:
+                rows = conn.execute(text("SELECT date, base, quote, rate, batch_id FROM fx_rates")).fetchall()
+            else:
+                rows = conn.execute(text("SELECT date, base, quote, rate, NULL FROM fx_rates")).fetchall()
+
+            for d, base, quote, rate, bid in rows:
+                try:
+                    r = Decimal(str(rate))
+                except (InvalidOperation, ValueError, TypeError):
+                    continue
+
+                conn.execute(
+                    text(
+                        "INSERT INTO fx_rates_new (date, base, quote, rate, batch_id) "
+                        "VALUES (:d, :base, :quote, :r, :b)"
+                    ),
+                    {"d": d, "base": base, "quote": quote, "r": str(r), "b": bid},
+                )
+
         elif {"date", "rate"}.issubset(colnames):
-            conn.exec_driver_sql(
-                """
-                INSERT INTO fx_rates_new (date, base, quote, rate, batch_id)
-                SELECT date, 'USD', 'EUR', CAST(rate AS REAL), NULL FROM fx_rates
-                """
-            )
+            if "batch_id" in colnames:
+                rows = conn.execute(text("SELECT date, rate, batch_id FROM fx_rates")).fetchall()
+            else:
+                rows = conn.execute(text("SELECT date, rate, NULL FROM fx_rates")).fetchall()
+
+            for d, rate, bid in rows:
+                try:
+                    r = Decimal(str(rate))
+                except (InvalidOperation, ValueError, TypeError):
+                    continue
+
+                conn.execute(
+                    text(
+                        "INSERT INTO fx_rates_new (date, base, quote, rate, batch_id) "
+                        "VALUES (:d, 'USD', 'EUR', :r, :b)"
+                    ),
+                    {"d": d, "r": str(r), "b": bid},
+                )
 
         # Swap tables
         conn.exec_driver_sql("DROP TABLE fx_rates")

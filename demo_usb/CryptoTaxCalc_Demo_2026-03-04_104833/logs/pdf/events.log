@@ -1,0 +1,2 @@
+2026-03-04T10:50:41Z [INFO] cryptotaxcalc.pdf: Building summary PDF for run_id=c3829578-5229-47b6-9372-b94ccac08dee | title=CryptoTaxCalc – Workspace Summary
+2026-03-04T10:50:51Z [INFO] cryptotaxcalc.pdf: PDF built successfully: {'timestamp': '2026-03-04T09:50:41Z', 'run_id': 'c3829578-5229-47b6-9372-b94ccac08dee', 'title': 'CryptoTaxCalc – Workspace Summary', 'summary_sections': {'by_month': True, 'by_quote': True, 'by_asset': True, 'eur_summary': True, 'top_events': 50}, 'pdf_size_bytes': 26088917}

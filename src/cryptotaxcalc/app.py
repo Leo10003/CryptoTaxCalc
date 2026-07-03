@@ -19,6 +19,19 @@ Endpoints kept for continuity:
 """
 
 import os, shutil, tempfile, csv, io, json, csv as _csv, sys, time, subprocess, zipfile, traceback
+import asyncio
+import anyio
+# Load .env BEFORE importing project modules.
+# This prevents security flags/tokens from being frozen to defaults at import-time.
+_DOTENV_DISABLED = (os.getenv("CTC_DISABLE_DOTENV") or "").strip().lower() in {"1", "true", "yes", "on"}
+if not _DOTENV_DISABLED:
+    try:
+        from pathlib import Path as _Path
+        from dotenv import load_dotenv
+        _ROOT = _Path(__file__).resolve().parents[2]  # <repo>/CryptoTaxCalc/
+        load_dotenv(dotenv_path=str((_ROOT / ".env").resolve()), override=False)
+    except Exception:
+        pass
 from typing import Dict, Any, List, Literal, Optional, Iterator, Tuple
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Response, Header, Request, Path as PathParam, Body, Depends, APIRouter
 from decimal import Decimal, InvalidOperation
@@ -35,6 +48,7 @@ import uuid
 from dataclasses import is_dataclass, asdict
 from uuid import UUID, uuid4
 from cryptotaxcalc.report_pdf import build_summary_pdf
+from cryptotaxcalc.price_autosync import price_autosync_enabled, price_autosync_interval_seconds, price_autosync_loop
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, Session as _OrmSession, Session as SASession
 from contextlib import asynccontextmanager
@@ -54,11 +68,33 @@ from .csv_source_registry import (
 from .fifo_engine import compute_fifo
 from .fx_utils import usd_to_eur, get_or_create_current_fx_batch_id, ensure_rate_or_default, ensure_fx_rates_schema, set_session_factory
 from .audit_utils import audit
-from .schemas import CSVPreviewResponse, ImportCSVResponse, Transaction, CalcConfig
+from .schemas import (
+    CSVPreviewResponse,
+    ImportCSVResponse,
+    Transaction,
+    CalcConfig,
+    PrecheckAssetIssue,
+    PrecheckResponse,
+    WalletOutItem,
+    WalletTransferOverrideRequest,
+    WalletTransferRow,
+    WalletTransferFileGroup,
+    WalletTransferBatchRequest,
+    PrecheckFileIssue,
+)
 from .db import SessionLocal, engine, init_db
-from .models import Base, TransactionRow, FXRate as FxRate, CalcRun, RunDigest, AuditLog, RealizedEvent, RawEvent, RunInput
+from .models import (
+    Base,
+    TransactionRow,
+    CalcRun,
+    RunDigest,
+    AuditLog,
+    RealizedEvent,
+    RawEvent,
+    RunInput,
+    WalletOutOverride,
+)
 from .calc_runner import run_calculation, run_calculation_on_subset
-from .exporter import build_export_zip, ExportOptions
 from .db_migrations import migrate_fx_rates_add_id, migrate_fx_schema, ensure_fx_schema_v2
 from .demo_mode import is_demo_mode_enabled
 
@@ -73,75 +109,401 @@ from cryptotaxcalc.logging_setup import (
 
 import platform
 import hashlib  # built-in Python library for secure hashes
+import html as _html
+import hmac
 
-from cryptotaxcalc.demo_mode import router as demo_router
-from cryptotaxcalc.demo_builder import router as demo_build_router
-
-# Resolve runtime roots:
-# - PROJECT_ROOT: writable location (repo root in dev; EXE folder when frozen)
-# - RESOURCE_ROOT: bundled assets (repo root in dev; sys._MEIPASS when frozen)
-def _resolve_project_root() -> FSPath:
-    if getattr(sys, "frozen", False):
-        return FSPath(sys.executable).resolve().parent
-    here = FSPath(__file__).resolve()
-    for p in [here.parent] + list(here.parents):
-        if (p / "pyproject.toml").exists() or (p / "requirements.txt").exists():
-            return p.resolve()
-    return here.parents[2]
-
-
-def _resolve_resource_root(project_root: FSPath) -> FSPath:
-    """
-    Resolve where runtime resources live (templates/static/logo).
-
-    We keep templates/ and static/ at the PROJECT ROOT (repo root).
-    This function simply makes that robust across different run contexts
-    (Docker, systemd, CI) without changing folder paths.
-
-    Priority:
-      1) Frozen builds: sys._MEIPASS
-      2) Explicit override: CTC_RESOURCE_ROOT
-      3) Repo root if it contains templates/ and static/
-      4) Current working directory if it contains templates/ and static/
-      5) Fallback: project_root
-    """
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        return FSPath(meipass).resolve()
-
-    env_root = (os.getenv("CTC_RESOURCE_ROOT") or "").strip()
-    if env_root:
-        return FSPath(env_root).resolve()
-
-    if (project_root / "templates").exists() and (project_root / "static").exists():
-        return project_root
-
-    cwd = FSPath.cwd()
-    if (cwd / "templates").exists() and (cwd / "static").exists():
-        return cwd.resolve()
-
-    return project_root
-
-
-PROJECT_ROOT = _resolve_project_root()
-RESOURCE_ROOT = _resolve_resource_root(PROJECT_ROOT)
-if not (RESOURCE_ROOT / "templates").exists():
-    get_logger("app").warning(
-        f"Templates directory not found at {RESOURCE_ROOT / 'templates'}. "
-        "Ensure templates/ exists at the project root or set CTC_RESOURCE_ROOT."
-    )
-if not (RESOURCE_ROOT / "static").exists():
-    get_logger("app").warning(
-        f"Static directory not found at {RESOURCE_ROOT / 'static'}. "
-        "Ensure static/ exists at the project root or set CTC_RESOURCE_ROOT."
-    )
-
-# Resource-only folders (bundled into the EXE)
-AUTOMATION = RESOURCE_ROOT / "automation"
+from .runtime_paths import PROJECT_ROOT, RESOURCE_ROOT, AUTOMATION
 
 # Writable/script/log folders (dev repo; or EXE folder)
 GIT_SCRIPT = (PROJECT_ROOT / "automation" / "git_auto_push.ps1")
 LOG_DIR = (PROJECT_ROOT / "automation" / "logs")
+
+_fx_boot_logger = logging.getLogger("cryptotaxcalc.fx.bootstrap")
+
+def _bootstrap_fx_from_csv_if_empty(_engine) -> None:
+    """
+    Bootstrap fx_rates from automation/fx_ecb.csv when the DB is empty.
+
+    CSV format: date, usd_per_eur (USD per 1 EUR)
+    Stored format: base='USD', quote='EUR', rate=<EUR per 1 USD> as TEXT (Decimal-safe).
+    """
+    try:
+        with SessionLocal() as session:
+            # Ensure schema exists before querying/inserting
+            try:
+                ensure_fx_rates_schema(session)
+            except Exception:
+                pass
+
+            try:
+                cnt = session.execute(text("SELECT COUNT(*) FROM fx_rates")).scalar() or 0
+            except Exception as e:
+                _fx_boot_logger.info("FX bootstrap skipped: cannot query fx_rates (%s)", e)
+                return
+
+            if int(cnt) > 0:
+                _fx_boot_logger.info("FX bootstrap skipped: fx_rates already has %s rows.", cnt)
+                return
+
+            csv_path = (AUTOMATION / "fx_ecb.csv")
+            if not csv_path.exists():
+                _fx_boot_logger.warning("FX bootstrap skipped: %s not found.", csv_path)
+                return
+
+            # Optional: associate inserts to today's FX batch if available
+            try:
+                bid = get_or_create_current_fx_batch_id(session)
+            except Exception:
+                bid = None
+
+            inserted = 0
+            errors = 0
+
+            with csv_path.open("r", encoding="utf-8-sig", errors="replace", newline="") as f:
+                rdr = csv.DictReader(f)
+                if not rdr.fieldnames:
+                    _fx_boot_logger.warning("FX bootstrap skipped: fx_ecb.csv has no header.")
+                    return
+
+                hm = {h.strip().lower(): h for h in rdr.fieldnames}
+                if "date" not in hm or "usd_per_eur" not in hm:
+                    _fx_boot_logger.warning("FX bootstrap skipped: fx_ecb.csv must include date, usd_per_eur.")
+                    return
+
+                for row in rdr:
+                    try:
+                        raw_date = (row.get(hm["date"]) or "").strip()
+                        raw_rate = (row.get(hm["usd_per_eur"]) or "").strip()
+                        if not raw_date or not raw_rate:
+                            raise ValueError("missing date/rate")
+
+                        d = datetime.strptime(raw_date, "%Y-%m-%d").date().isoformat()
+
+                        usd_per_eur = Decimal(raw_rate)
+                        if usd_per_eur <= 0:
+                            raise ValueError("usd_per_eur <= 0")
+
+                        eur_per_usd = (Decimal("1") / usd_per_eur)
+
+                        session.execute(
+                            text(
+                                """
+                                INSERT INTO fx_rates (date, base, quote, rate, batch_id)
+                                VALUES (:d, 'USD', 'EUR', :r, :b)
+                                ON CONFLICT(date, base, quote)
+                                DO UPDATE SET rate=excluded.rate, batch_id=excluded.batch_id
+                                """
+                            ),
+                            {"d": d, "r": str(eur_per_usd), "b": bid},
+                        )
+                        inserted += 1
+                    except Exception:
+                        errors += 1
+                        continue
+
+            session.commit()
+            _fx_boot_logger.info("FX bootstrap imported %s rows from %s (errors=%s).", inserted, csv_path, errors)
+
+    except Exception as e:
+        _fx_boot_logger.warning("FX bootstrap skipped due to unexpected error: %s", e)
+        
+
+# -----------------------------------------------------------------------------
+# FX Auto-Sync (startup + periodic)
+# -----------------------------------------------------------------------------
+_fx_autosync_logger = logging.getLogger("cryptotaxcalc.fx.autosync")
+_FX_AUTOSYNC_TASK: asyncio.Task | None = None
+_FX_AUTOSYNC_STOP: asyncio.Event | None = None
+_PRICE_AUTOSYNC_TASK: asyncio.Task | None = None
+_PRICE_AUTOSYNC_STOP: asyncio.Event | None = None
+
+
+def _env_truthy(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
+    if v is None or not str(v).strip():
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    v = os.getenv(name)
+    if v is None or not str(v).strip():
+        return default
+    try:
+        return int(str(v).strip())
+    except Exception:
+        return default
+
+
+def _fx_autosync_enabled() -> bool:
+    # Enabled by default (can be disabled with FX_AUTOSYNC_ENABLED=0)
+    return _env_truthy("FX_AUTOSYNC_ENABLED", default=True)
+
+
+def _fx_autosync_interval_seconds() -> int:
+    minutes = _env_int("FX_AUTOSYNC_INTERVAL_MINUTES", 360)
+    if minutes < 1:
+        minutes = 1
+    return minutes * 60
+
+
+def _fx_autosync_fetch_ecb() -> bool:
+    # Optional: download ECB zip and refresh fx_ecb.csv automatically
+    return _env_truthy("FX_AUTOSYNC_FETCH_ECB", default=False)
+
+
+def _fx_autosync_ecb_zip_url() -> str:
+    return (os.getenv("FX_AUTOSYNC_ECB_ZIP_URL") or "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip").strip()
+
+
+def _fx_autosync_max_stale_days() -> int:
+    return _env_int("FX_AUTOSYNC_MAX_STALE_DAYS", 10)
+
+
+def _fx_autosync_source_csv() -> FSPath:
+    p = (os.getenv("FX_AUTOSYNC_SOURCE_CSV") or str((AUTOMATION / "fx_ecb.csv"))).strip()
+    return FSPath(p).expanduser().resolve()
+
+
+def _fx_refresh_fx_ecb_csv_from_ecb(target_csv: FSPath) -> dict:
+    """
+    Download ECB eurofxref-hist.zip and write automation/fx_ecb.csv (date, usd_per_eur).
+    This removes the need to run update_fx.ps1 externally when FX_AUTOSYNC_FETCH_ECB=1.
+    """
+    try:
+        import requests
+    except Exception as e:
+        return {"ok": False, "error": f"requests not available: {e}"}
+
+    url = _fx_autosync_ecb_zip_url()
+    timeout_s = _env_int("FX_AUTOSYNC_HTTP_TIMEOUT_SECONDS", 30)
+
+    try:
+        r = requests.get(url, timeout=timeout_s, headers={"User-Agent": "CryptoTaxCalc/1.0"})
+        r.raise_for_status()
+    except Exception as e:
+        return {"ok": False, "error": f"download failed: {e}", "url": url}
+
+    try:
+        buf = BytesIO(r.content)
+        with zipfile.ZipFile(buf) as zf:
+            # ECB zip contains eurofxref-hist.csv
+            name = None
+            for n in zf.namelist():
+                if n.lower().endswith("eurofxref-hist.csv"):
+                    name = n
+                    break
+            if not name:
+                return {"ok": False, "error": "ECB zip missing eurofxref-hist.csv", "url": url}
+
+            raw = zf.read(name).decode("utf-8-sig", errors="replace")
+    except Exception as e:
+        return {"ok": False, "error": f"zip parse failed: {e}", "url": url}
+
+    rdr = _csv.DictReader(StringIO(raw))
+    if not rdr.fieldnames:
+        return {"ok": False, "error": "ECB CSV has no header", "url": url}
+
+    hm = {h.strip(): h for h in rdr.fieldnames}
+    if "Date" not in hm or "USD" not in hm:
+        return {"ok": False, "error": "ECB CSV schema missing Date/USD", "headers": rdr.fieldnames}
+
+    rows = []
+    max_d = None
+    for row in rdr:
+        try:
+            d = (row.get(hm["Date"]) or "").strip()
+            usd = (row.get(hm["USD"]) or "").strip()
+            if not d or not usd:
+                continue
+            # keep: date, usd_per_eur
+            rows.append({"date": d, "usd_per_eur": usd})
+            if max_d is None or d > max_d:
+                max_d = d
+        except Exception:
+            continue
+
+    if not rows or not max_d:
+        return {"ok": False, "error": "No usable rows from ECB"}
+
+    # Recency validation (max business day should be recent)
+    try:
+        max_dt = datetime.strptime(max_d, "%Y-%m-%d").date()
+        age_days = (datetime.now(timezone.utc).date() - max_dt).days
+        if age_days > _fx_autosync_max_stale_days():
+            return {"ok": False, "error": f"ECB data stale (max date {max_d}, age {age_days}d)"}
+    except Exception:
+        pass
+
+    # Sort by date asc for stable output
+    rows.sort(key=lambda x: x["date"])
+
+    target_csv.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target_csv.with_suffix(".tmp")
+
+    try:
+        with tmp.open("w", encoding="utf-8", newline="") as f:
+            w = _csv.DictWriter(f, fieldnames=["date", "usd_per_eur"])
+            w.writeheader()
+            for rr in rows:
+                w.writerow(rr)
+        tmp.replace(target_csv)
+    except Exception as e:
+        return {"ok": False, "error": f"write failed: {e}", "path": str(target_csv)}
+
+    return {"ok": True, "rows": len(rows), "max_date": max_d, "path": str(target_csv)}
+
+
+def _fx_import_missing_usd_eur_from_csv(csv_path: FSPath) -> dict:
+    """
+    Import any missing USD->EUR FX dates from fx_ecb.csv into fx_rates.
+    Does NOT overwrite existing days (preserves historical batches/auditability).
+    """
+    if not csv_path.exists():
+        return {"ok": False, "skipped": "missing_csv", "path": str(csv_path)}
+
+    inserted = 0
+    skipped = 0
+    errors = 0
+
+    with SessionLocal() as session:
+        try:
+            ensure_fx_rates_schema(session)
+        except Exception:
+            pass
+
+        # Existing coverage (fills gaps, not just tail)
+        existing = set(
+            r[0] for r in session.execute(
+                text("SELECT date FROM fx_rates WHERE base='USD' AND quote='EUR'")
+            ).fetchall()
+        )
+
+        bid = None
+        try:
+            bid = get_or_create_current_fx_batch_id(session)
+        except Exception:
+            bid = None
+
+        with csv_path.open("r", encoding="utf-8-sig", errors="replace", newline="") as f:
+            rdr = csv.DictReader(f)
+            if not rdr.fieldnames:
+                return {"ok": False, "error": "fx_ecb.csv has no header", "path": str(csv_path)}
+
+            hm = {h.strip().lower(): h for h in rdr.fieldnames}
+            if "date" not in hm or "usd_per_eur" not in hm:
+                return {"ok": False, "error": "fx_ecb.csv must include date, usd_per_eur", "path": str(csv_path)}
+
+            for row in rdr:
+                try:
+                    d = (row.get(hm["date"]) or "").strip()
+                    r = (row.get(hm["usd_per_eur"]) or "").strip()
+                    if not d or not r:
+                        raise ValueError("missing date/rate")
+
+                    if d in existing:
+                        skipped += 1
+                        continue
+
+                    usd_per_eur = Decimal(r)
+                    if usd_per_eur <= 0:
+                        raise ValueError("usd_per_eur <= 0")
+
+                    eur_per_usd = (Decimal("1") / usd_per_eur)
+
+                    session.execute(
+                        text(
+                            """
+                            INSERT INTO fx_rates (date, base, quote, rate, batch_id)
+                            VALUES (:d, 'USD', 'EUR', :r, :b)
+                            ON CONFLICT(date, base, quote)
+                            DO UPDATE SET rate=excluded.rate, batch_id=excluded.batch_id
+                            """
+                        ),
+                        {"d": d, "r": str(eur_per_usd), "b": bid},
+                    )
+                    inserted += 1
+                    existing.add(d)
+
+                except (InvalidOperation, ValueError):
+                    errors += 1
+                    continue
+                except Exception:
+                    errors += 1
+                    continue
+
+        session.commit()
+
+    return {"ok": True, "inserted": inserted, "skipped": skipped, "errors": errors, "path": str(csv_path)}
+
+
+def _fx_autosync_tick(reason: str = "tick") -> dict:
+    """
+    One autosync iteration:
+      - optionally refresh fx_ecb.csv from ECB
+      - import missing FX dates into DB
+    """
+    if not _fx_autosync_enabled():
+        return {"ok": True, "enabled": False, "reason": reason}
+
+    csv_path = _fx_autosync_source_csv()
+    refresh = None
+
+    if _fx_autosync_fetch_ecb():
+        refresh = _fx_refresh_fx_ecb_csv_from_ecb(csv_path)
+        if refresh and not refresh.get("ok"):
+            _fx_autosync_logger.warning("FX autosync: ECB refresh failed: %s", refresh)
+
+    imp = _fx_import_missing_usd_eur_from_csv(csv_path)
+
+    if imp.get("ok") and int(imp.get("inserted") or 0) > 0:
+        _fx_autosync_logger.info(
+            "FX autosync (%s): inserted=%s errors=%s source=%s",
+            reason,
+            imp.get("inserted"),
+            imp.get("errors"),
+            csv_path,
+        )
+    elif imp.get("ok"):
+        _fx_autosync_logger.info("FX autosync (%s): no new rows (source=%s)", reason, csv_path)
+
+    return {"ok": True, "enabled": True, "reason": reason, "refresh": refresh, "import": imp}
+
+
+async def _fx_autosync_loop() -> None:
+    interval = _fx_autosync_interval_seconds()
+    _fx_autosync_logger.info(
+        "FX autosync loop started (interval=%ss fetch_ecb=%s source=%s)",
+        interval,
+        _fx_autosync_fetch_ecb(),
+        _fx_autosync_source_csv(),
+    )
+
+    while True:
+        try:
+            if _FX_AUTOSYNC_STOP is not None and _FX_AUTOSYNC_STOP.is_set():
+                break
+
+            # Run blocking file/DB work off the event loop
+            await asyncio.to_thread(_fx_autosync_tick, "periodic")
+
+            if _FX_AUTOSYNC_STOP is None:
+                await asyncio.sleep(interval)
+            else:
+                try:
+                    await asyncio.wait_for(_FX_AUTOSYNC_STOP.wait(), timeout=interval)
+                    break
+                except asyncio.TimeoutError:
+                    pass
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            _fx_autosync_logger.warning("FX autosync loop error: %s", e)
+            await asyncio.sleep(min(interval, 60))
+
+    _fx_autosync_logger.info("FX autosync loop stopped")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -149,6 +511,9 @@ async def lifespan(app: FastAPI):
     Async lifespan context used by FastAPI to handle startup/shutdown events.
     Performs idempotent DB checks, initializes logs, and records startup diagnostics.
     """
+    global _FX_AUTOSYNC_STOP, _FX_AUTOSYNC_TASK
+    global _PRICE_AUTOSYNC_STOP, _PRICE_AUTOSYNC_TASK
+    
     log_dir = PROJECT_ROOT / "logs" / "app"
     log_dir.mkdir(parents=True, exist_ok=True)
     for p in sorted(log_dir.glob("*.log"))[:-10]:  # keep last 10 logs
@@ -180,6 +545,33 @@ async def lifespan(app: FastAPI):
         # Run existing startup sequence
         if hasattr(sys.modules[__name__], "on_startup"):
             on_startup()
+            
+        # Start price autosync loop (external provider) if enabled
+        if price_autosync_enabled():
+            _PRICE_AUTOSYNC_STOP = asyncio.Event()
+            _PRICE_AUTOSYNC_TASK = asyncio.create_task(price_autosync_loop(_PRICE_AUTOSYNC_STOP))
+            diag["price_autosync"] = {
+                "enabled": True,
+                "interval_seconds": price_autosync_interval_seconds(),
+                "provider": os.getenv("PRICE_AUTOSYNC_PROVIDER", "auto"),
+                "quote": os.getenv("PRICE_AUTOSYNC_QUOTE", "USDT"),
+                "coingecko_vs": os.getenv("PRICE_AUTOSYNC_COINGECKO_VS_CURRENCY", "eur"),
+            }
+        else:
+            diag["price_autosync"] = {"enabled": False}
+            
+        # Start FX autosync background loop (optional; enabled by FX_AUTOSYNC_ENABLED)
+        if _fx_autosync_enabled():
+            _FX_AUTOSYNC_STOP = asyncio.Event()
+            _FX_AUTOSYNC_TASK = asyncio.create_task(_fx_autosync_loop())
+            diag["fx_autosync"] = {
+                "enabled": True,
+                "interval_seconds": _fx_autosync_interval_seconds(),
+                "fetch_ecb": _fx_autosync_fetch_ecb(),
+                "source_csv": str(_fx_autosync_source_csv()),
+            }
+        else:
+            diag["fx_autosync"] = {"enabled": False}
 
         diag.update({
             "status": "ok",
@@ -213,6 +605,36 @@ async def lifespan(app: FastAPI):
             pass
 
     yield
+    
+    # Stop FX autosync loop cleanly on shutdown
+    try:
+        if _FX_AUTOSYNC_STOP is not None:
+            _FX_AUTOSYNC_STOP.set()
+        if _FX_AUTOSYNC_TASK is not None:
+            _FX_AUTOSYNC_TASK.cancel()
+            try:
+                await _FX_AUTOSYNC_TASK
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+    
+    # Stop Price autosync loop cleanly on shutdown
+    try:
+        if _PRICE_AUTOSYNC_STOP is not None:
+            _PRICE_AUTOSYNC_STOP.set()
+        if _PRICE_AUTOSYNC_TASK is not None:
+            _PRICE_AUTOSYNC_TASK.cancel()
+            try:
+                await _PRICE_AUTOSYNC_TASK
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     try:
         deps = {
@@ -242,39 +664,27 @@ async def lifespan(app: FastAPI):
     
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-
-# Load .env early so runtime configuration (tokens, flags) is available (best-effort).
-# In production deployments, prefer supplying environment variables via the process manager
-# rather than relying on a local .env file.
-try:
-    from dotenv import load_dotenv
-    load_dotenv(dotenv_path=str((PROJECT_ROOT / ".env").resolve()), override=False)
-except Exception:
-    pass
-
-
-def _truthy_env(val: str | None) -> bool:
-    if not val:
-        return False
-    return val.strip().lower() in {"1", "true", "yes", "on"}
-
-
-# Runtime environment mode (used to harden dangerous endpoints in production).
-CTC_ENV = (os.getenv("CTC_ENV") or os.getenv("ENVIRONMENT") or "development").strip().lower()
-IS_PROD = CTC_ENV in {"prod", "production"}
-
-# Security feature flags (prod defaults are restrictive).
-ENABLE_ADMIN_ENDPOINTS = _truthy_env(os.getenv("ENABLE_ADMIN_ENDPOINTS")) if IS_PROD else True
-ENABLE_ADMIN_SCRIPTS = _truthy_env(os.getenv("ENABLE_ADMIN_SCRIPTS")) if IS_PROD else True
-ALLOW_QUERY_TOKENS = _truthy_env(os.getenv("ALLOW_QUERY_TOKENS")) if IS_PROD else True
-
-# Admin tokens (MUST be set explicitly in production; defaults are dev-only).
-ADMIN_TOKEN = (os.getenv("ADMIN_TOKEN") or "dev-token-change-me").strip()
-BUNDLE_TOKEN = (os.getenv("BUNDLE_TOKEN") or "").strip()
-
-# Upload safety caps (prevent preview OOM and accidental huge uploads).
-MAX_PREVIEW_BYTES = int(os.getenv("MAX_PREVIEW_BYTES") or str(5 * 1024 * 1024))    # 5MB
-MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES") or str(50 * 1024 * 1024))     # 50MB
+from .security import (
+    _truthy_env,
+    IS_PROD,
+    ENABLE_ADMIN_ENDPOINTS,
+    ENABLE_ADMIN_SCRIPTS,
+    ALLOW_QUERY_TOKENS,
+    ADMIN_HEADER_ONLY,
+    ADMIN_ALLOW_REMOTE,
+    ADMIN_TOKEN,
+    BUNDLE_TOKEN,
+    MAX_PREVIEW_BYTES,
+    MAX_UPLOAD_BYTES,
+)
+from cryptotaxcalc.demo_mode import router as demo_router
+from cryptotaxcalc.demo_builder import router as demo_build_router
+from .admin_ops import router as admin_ops_router
+from .routes.data_admin import router as data_admin_router
+from .routes.csv_admin import router as csv_admin_router
+from .routes.ops_admin import router as ops_admin_router
+from .routes.ui import router as ui_router
+from .routes.export_ui import router as export_ui_router
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -380,6 +790,16 @@ def _build_manifest(session: Session, run_db_id: int, run_uuid: str) -> dict:
         "finished_at": _iso_utc(row.finished_at) if getattr(row, "finished_at", None) else None,
     }
 
+    # End-to-end wall time (includes everything between CalcRun.start and finish).
+    # This is the number users see in the wizard "Elapsed".
+    try:
+        if row.started_at and row.finished_at:
+            dt_ms = int((row.finished_at - row.started_at).total_seconds() * 1000)
+            if dt_ms >= 0:
+                manifest["elapsed_wall_ms"] = dt_ms
+    except Exception:
+        pass
+
     # Trust signal: strict_fx (from params_json)
     try:
         params = getattr(row, "params_json", None)
@@ -482,117 +902,12 @@ def _sha256_str(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
-def _extract_bearer_token(authorization: str | None) -> str | None:
-    if not authorization:
-        return None
-    parts = authorization.strip().split()
-    if len(parts) == 2 and parts[0].lower() == "bearer":
-        return parts[1]
-    return None
-
-
-def _admin_not_found() -> None:
-    # 404 reduces endpoint discovery in production
-    raise HTTPException(status_code=404, detail="Not found")
-
-
-def _resolve_supplied_token(
-    *,
-    x_admin_token: str | None,
-    x_token: str | None,
-    authorization: str | None,
-    query_token: str | None,
-) -> str:
-    bearer = _extract_bearer_token(authorization)
-    if bearer:
-        return bearer
-    if x_admin_token:
-        return x_admin_token
-    if x_token:
-        return x_token
-
-    # Query-string tokens leak via browser history, reverse-proxy logs and error traces.
-    # We keep them only for developer convenience and disable them by default in production.
-    if query_token and (not IS_PROD or ALLOW_QUERY_TOKENS):
-        return query_token
-
-    return ""
-
-
-def require_admin(
-    request: Request,
-    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-    x_token: str | None = Header(default=None, alias="X-Token"),
-    authorization: str | None = Header(default=None, alias="Authorization"),
-    token: str | None = Query(default=None, description="Deprecated: use X-Admin-Token header"),
-) -> None:
-    # Feature flag gate (production-safe default: disabled unless explicitly enabled).
-    if IS_PROD and not ENABLE_ADMIN_ENDPOINTS:
-        _admin_not_found()
-
-    supplied = _resolve_supplied_token(
-        x_admin_token=x_admin_token,
-        x_token=x_token,
-        authorization=authorization,
-        query_token=token,
-    )
-    if not supplied:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    # Hard fail if prod is misconfigured (prevents shipping with the dev token).
-    if IS_PROD and (not ADMIN_TOKEN or ADMIN_TOKEN == "dev-token-change-me"):
-        raise HTTPException(status_code=500, detail="ADMIN_TOKEN is not configured for production")
-
-    if supplied != ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-def require_admin_scripts(
-    request: Request,
-    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-    x_token: str | None = Header(default=None, alias="X-Token"),
-    authorization: str | None = Header(default=None, alias="Authorization"),
-    token: str | None = Query(default=None, description="Deprecated: use X-Admin-Token header"),
-) -> None:
-    require_admin(
-        request=request,
-        x_admin_token=x_admin_token,
-        x_token=x_token,
-        authorization=authorization,
-        token=token,
-    )
-    if IS_PROD and not ENABLE_ADMIN_SCRIPTS:
-        _admin_not_found()
-
-
-def require_bundle_admin(
-    request: Request,
-    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-    x_token: str | None = Header(default=None, alias="X-Token"),
-    authorization: str | None = Header(default=None, alias="Authorization"),
-    token: str | None = Query(default=None, description="Deprecated: use X-Admin-Token header"),
-) -> None:
-    # Bundling runs local scripts and touches sensitive artifacts. Treat as scripts.
-    if IS_PROD and not ENABLE_ADMIN_ENDPOINTS:
-        _admin_not_found()
-    if IS_PROD and not ENABLE_ADMIN_SCRIPTS:
-        _admin_not_found()
-
-    supplied = _resolve_supplied_token(
-        x_admin_token=x_admin_token,
-        x_token=x_token,
-        authorization=authorization,
-        query_token=token,
-    )
-    if not supplied:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    allowed = {t for t in (ADMIN_TOKEN, BUNDLE_TOKEN) if t}
-    if IS_PROD and (not allowed or "dev-token-change-me" in allowed):
-        raise HTTPException(status_code=500, detail="Admin token is not configured for production")
-
-    if supplied not in allowed:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+from .security import (
+    _admin_not_found,
+    require_admin,
+    require_admin_scripts,
+    require_bundle_admin,
+)
 
 
 def _demo_allowed_here() -> bool:
@@ -719,7 +1034,7 @@ def compute_tx_hash(tx: Transaction) -> str:
         f"{tx.fee_asset}|"
         f"{tx.fee_amount}|"
         f"{tx.exchange}|"
-        f"{tx.memo}"
+        f"{tx.memo}|"
         f"{tx.fair_value}"
     )
     # Compute the hash value and return it as a 64-character hexadecimal string
@@ -823,6 +1138,66 @@ def _parse_iso_ts(ts: str) -> datetime | None:
             return datetime(int(t[:4]), int(t[5:7]), int(t[8:10]))
         except Exception:
             return None
+
+
+def _tax_context_for(
+    jurisdiction: str,
+    tax_year: int,
+    local_area: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Compute tax context for a scope.
+
+    Returns keys required by summary_filtered + subset exports:
+      - tax_year_used
+      - jurisdiction
+      - national_rate
+      - local_surtax_pct
+      - local_rate
+      - effective_rate
+      - rate_model
+      - local_area
+    """
+    j = (jurisdiction or "").strip().upper()
+
+    # National base rates
+    if j == "HR":
+        national_rate = Decimal("0.12") if tax_year >= 2024 else Decimal("0.10")
+    elif j == "IT":
+        national_rate = Decimal("0.33") if tax_year >= 2026 else Decimal("0.26")
+    else:
+        national_rate = Decimal("0")
+
+    local_area_code = (local_area or "").strip().upper()
+
+    rate_model = "flat"
+    local_surtax_pct = Decimal("0")
+
+    # Croatia prirez applies only for tax years <= 2023 (abolished from 01.01.2024)
+    if j == "HR" and tax_year <= 2023 and local_area_code:
+        rate_model = "hr_prirez"
+        HR_PRIREZ_2023 = {
+            "ZAGREB": Decimal("0.18"),
+            "SPLIT": Decimal("0.15"),
+            "RIJEKA": Decimal("0.13"),
+            "OSIJEK": Decimal("0.13"),
+        }
+        local_surtax_pct = HR_PRIREZ_2023.get(local_area_code, Decimal("0"))
+
+    # prirez applies on tax amount → convert to an add-on rate
+    local_rate = (national_rate * local_surtax_pct) if local_surtax_pct > 0 else Decimal("0")
+    effective_rate = national_rate + local_rate
+
+    return {
+        "tax_year_used": int(tax_year),
+        "jurisdiction": j,
+        "national_rate": national_rate,
+        "local_surtax_pct": local_surtax_pct,
+        "local_rate": local_rate,
+        "effective_rate": effective_rate,
+        "rate_model": rate_model,
+        "local_area": local_area_code,
+    }
 
 
 # --- Support-bundle helpers ---------------------------------------------------
@@ -1531,6 +1906,7 @@ def on_startup() -> None:
     Runs when the server starts.
     - Ensures database tables exist (idempotent).
     """
+    logger = get_logger("app")
     init_db(engine)
     Base.metadata.create_all(bind=engine)
     
@@ -1550,6 +1926,7 @@ def on_startup() -> None:
         
     # Auto-bootstrap FX rates once from automation/fx_ecb.csv if fx_rates is empty
     _bootstrap_fx_from_csv_if_empty(engine)
+    _fx_autosync_tick("startup")
         
     logger.info("Startup completed successfully at %s", datetime.now(timezone.utc).isoformat())
 
@@ -1604,9 +1981,11 @@ def country_notes(
             "title": "Country Notes – Croatia",
             "subtitle": "High-level context only.",
             "bullets": [
-                "Croatia: taxable crypto disposals are typically treated as capital gains (JOPPD context).",
-                "Holding-period relief (e.g., 2+ years) can affect taxable vs exempt classification.",
-                "This is a technical EUR summary; mapping into forms requires professional review.",
+                "Croatia: crypto disposals are treated as capital income (capital gains).",
+                "Rate: 10% through tax period 2023; 12% from tax period 2024 (final income rates increased when prirez was abolished).",
+                "Local surtax (prirez): applies only to tax years ≤ 2023; abolished from 01.01.2024 (so local add-on is 0% for 2024+ in this model).",
+                "Sources: Porezna uprava (tax changes 2023/2024) + Porezna uprava prirez table (2023).",
+                "This is a technical EUR summary; mapping into JOPPD / forms requires professional review.",
             ],
         }
 
@@ -1616,9 +1995,10 @@ def country_notes(
             "title": "Country Notes – Italy",
             "subtitle": "High-level context only.",
             "bullets": [
-                "Italy: crypto may involve Quadro RT (gains) and Quadro RW (holdings disclosure).",
-                "Thresholds and obligations can depend on your situation; consult a commercialista.",
-                "This is a technical EUR summary only; it does not replace Italian tax forms.",
+                "Italy: crypto gains are taxed via a flat substitute tax (no regional/municipal add-on applied in this model).",
+                "Rate: 26% for tax period 2025; 33% from tax period 2026; €2,000 exemption removed from 2025.",
+                "Sources: PwC Tax Summaries (Italy – taxation of cryptocurrencies).",
+                "This is a technical EUR summary only; it does not replace Italian tax forms (e.g., Quadro RT/RW).",
             ],
         }
 
@@ -1731,7 +2111,582 @@ def status():
         "demo_mode": demo_enabled,
         "last_run_id": last_id,
     }
+
+
+@app.get("/export/status", summary="Explain why exports may be blocked")
+def export_status(db: Session = Depends(get_db)):
+    """
+    User-facing explanation for export blocking.
+    Psychology: users feel guided instead of punished when errors explain intent.
+    """
+    run = db.query(CalcRun).order_by(CalcRun.id.desc()).first()
+    if not run:
+        return {"export_allowed": True}
+
+    summary = run.summary_json or {}
+    warnings = summary.get("warnings", []) if isinstance(summary, dict) else []
+
+    blockers = []
+
+    for w in warnings:
+        if isinstance(w, dict):
+            if w.get("severity") == "blocker":
+                blockers.append(w.get("message", "Data integrity issue detected."))
+            continue
+
+        try:
+            s = str(w)
+        except Exception:
+            continue
+
+        if s.startswith("BLOCKER:"):
+            blockers.append(s)
+
+    if not blockers:
+        return {"export_allowed": True}
+
+    return {
+        "export_allowed": False,
+        "title": "We need more history before exporting",
+        "message": (
+            "Some assets were sold without recorded acquisition history. "
+            "Exporting now could result in incorrect tax calculations."
+        ),
+        "recommended_actions": [
+            "Upload older CSVs from the same exchange",
+            "Upload deposit or transfer history",
+            "Ensure your dataset starts before your first sale",
+        ],
+        "blockers": blockers[:3],  # limit for UI clarity
+    }
+
+
+@app.get("/data_quality/missing_history", summary="Detect assets with missing acquisition history")
+def missing_history(db: Session = Depends(get_db)):
+    """
+    Identify assets that were sold without acquisition history.
+
+    Psychology:
+    Users fix problems faster when the system tells them exactly
+    what is missing, how much, and since when.
+    """
+    run = db.query(CalcRun).order_by(CalcRun.id.desc()).first()
+    if not run or not isinstance(run.summary_json, dict):
+        return {"assets": []}
+
+    warnings = run.summary_json.get("warnings", [])
+    if not isinstance(warnings, list):
+        return {"assets": []}
+
+    missing: dict[str, dict] = {}
+
+    for w in warnings:
+        if not isinstance(w, dict):
+            continue
+        if w.get("type") != "missing_history":
+            continue
+
+        asset = w.get("asset")
+        if not asset:
+            continue
+
+        entry = missing.setdefault(
+            asset,
+            {
+                "asset": asset,
+                "missing_qty_total": 0,
+                "first_seen_ts": None,
+                "events": 0,
+            },
+        )
+
+        try:
+            entry["missing_qty_total"] += float(w.get("missing_qty", 0))
+        except Exception:
+            pass
+
+        ts = w.get("timestamp")
+        if ts:
+            if entry["first_seen_ts"] is None or ts < entry["first_seen_ts"]:
+                entry["first_seen_ts"] = ts
+
+        entry["events"] += 1
+
+    return {
+        "assets": list(missing.values())
+    }
     
+
+@app.get("/wallet/out", response_model=list[WalletOutItem])
+def list_wallet_outs(db: Session = Depends(get_db)):
+    """
+    List wallet OUT transactions that require user classification.
+    """
+    rows = (
+        db.query(TransactionRow)
+        .filter(TransactionRow.type == "TRANSFER")
+        .filter(TransactionRow.base_amount < 0)
+        .order_by(TransactionRow.timestamp.desc(), TransactionRow.id.desc())
+        .all()
+    )
+
+    out = []
+    for t in rows:
+        out.append(
+            WalletOutItem(
+                transaction_id=t.id,
+                timestamp=t.timestamp.isoformat(),
+                asset=t.base_asset,
+                amount=str(t.base_amount),
+                exchange=t.exchange,
+            )
+        )
+
+    return out
+
+
+@app.post("/wallet/out/{transaction_id}/classify")
+def classify_wallet_out(
+    transaction_id: int,
+    req: WalletTransferOverrideRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Set user intent for a wallet OUT transaction.
+    """
+    if req.classification in {"sell", "buy"} and not req.proceeds_eur:
+        raise HTTPException(
+            status_code=400,
+            detail="proceeds_eur is required when classification is 'taxable'",
+        )
+
+    override = (
+        db.query(WalletOutOverride)
+        .filter(WalletOutOverride.transaction_id == transaction_id)
+        .one_or_none()
+    )
+
+    if override is None:
+        override = WalletOutOverride(
+            transaction_id=transaction_id,
+        )
+        db.add(override)
+
+    override.classification = req.classification
+    override.proceeds_eur = req.proceeds_eur
+    override.note = req.note
+
+    db.commit()
+
+    return {"ok": True}
+
+
+@app.get("/wallet/transfers/grouped", response_model=list[WalletTransferFileGroup])
+def wallet_transfers_grouped(db: Session = Depends(get_db)):
+    """
+    Group wallet transfers by original uploaded file (raw_event_id), split into IN and OUT.
+    Newest -> oldest ordering.
+    """
+    txs = (
+        db.query(TransactionRow)
+        .filter(TransactionRow.type == "TRANSFER")
+        .order_by(TransactionRow.timestamp.desc(), TransactionRow.id.desc())
+        .all()
+    )
+    
+    # Filter out dust transfers so they don't trigger the resolve modal on re-upload.
+    # Value-aware: keep dust rows if their countervalue is material (>= €0.01).
+    dust_cutoff = Decimal("0.00000001")
+    value_cutoff_eur = Decimal("0.01")
+
+    filtered = []
+    for t in txs:
+        try:
+            amt = Decimal(str(t.base_amount))
+            fv = t.fair_value if t.fair_value is not None else None
+
+            is_dust = abs(amt) < dust_cutoff
+            is_material_value = (fv is not None and Decimal(str(fv)) >= value_cutoff_eur)
+
+            if is_dust and not is_material_value:
+                continue
+        except Exception:
+            # If parsing fails, keep the row (conservative)
+            pass
+
+        filtered.append(t)
+
+    txs = filtered
+
+    # overrides (same table, now treated as transfer overrides)
+    ovs = db.query(WalletOutOverride).all()
+    ov_by_txid = {int(o.transaction_id): o for o in ovs if o.transaction_id is not None}
+
+    raw_ids = sorted({int(t.raw_event_id) for t in txs if t.raw_event_id is not None})
+    raw_name: dict[int, str] = {}
+    if raw_ids:
+        rows = (
+            db.query(RawEvent.id, RawEvent.source_filename)
+            .filter(RawEvent.id.in_(raw_ids))
+            .all()
+        )
+        raw_name = {int(r[0]): str(r[1] or f"raw_event_{r[0]}") for r in rows}
+
+    def _parse_cv_ticker(memo: str | None) -> str | None:
+        if not memo:
+            return None
+        parts = [p.strip() for p in memo.split("|")]
+        for p in parts:
+            if p.startswith("cv_ticker="):
+                return p.split("=", 1)[1].strip().upper() or None
+        return None
+
+    def _suggest_proceeds_eur(trow: TransactionRow) -> Decimal | None:
+        fv = trow.fair_value
+        if fv is None or fv == 0:
+            return None
+        cv = _parse_cv_ticker(trow.memo)
+        if (cv or "").upper() == "EUR":
+            return fv
+        if (cv or "").upper() == "USD":
+            from cryptotaxcalc.fx_utils import ensure_rate_or_default_lookup
+            d = trow.timestamp.date()
+            fx = ensure_rate_or_default_lookup(
+                db,
+                d,
+                base="USD",
+                quote="EUR",
+                default_rate=Decimal("1.0"),
+                max_lookback_days=7,
+            )
+            eur_per_usd = fx.rate if isinstance(fx.rate, Decimal) else Decimal(str(fx.rate))
+            return (fv * eur_per_usd)
+        return None
+
+    grouped: dict[int, WalletTransferFileGroup] = {}
+
+    for t in txs:
+        if t.raw_event_id is None:
+            continue
+        rid = int(t.raw_event_id)
+        fname = raw_name.get(rid, f"raw_event_{rid}")
+
+        g = grouped.get(rid)
+        if g is None:
+            g = WalletTransferFileGroup(raw_event_id=rid, filename=fname, ins=[], outs=[])
+            grouped[rid] = g
+
+        cv_ticker = _parse_cv_ticker(t.memo)
+        suggested = _suggest_proceeds_eur(t)
+        suggested_str = None if suggested is None else str(suggested.quantize(Decimal("0.01")))
+
+        ov = ov_by_txid.get(int(t.id))
+        cls = (ov.classification or "transfer") if ov else "transfer"
+        cls_norm = str(cls).strip().lower()
+        if cls_norm not in {"transfer", "sell", "buy"}:
+            cls_norm = "transfer"
+
+        proceeds = None if not ov or ov.proceeds_eur is None else str(ov.proceeds_eur)
+
+        row = WalletTransferRow(
+            transaction_id=int(t.id),
+            raw_event_id=rid,
+            filename=fname,
+            timestamp=t.timestamp.isoformat(),
+            asset=t.base_asset,
+            amount=str(t.base_amount),
+            fair_value=(None if t.fair_value is None else str(t.fair_value)),
+            cv_ticker=cv_ticker,
+            classification=cls_norm,  # transfer/sell/buy
+            proceeds_eur=proceeds,
+            suggested_proceeds_eur=suggested_str,
+        )
+
+        if t.base_amount is not None and Decimal(str(t.base_amount)) < 0:
+            g.outs.append(row)
+        else:
+            g.ins.append(row)
+
+    out = list(grouped.values())
+    out.sort(key=lambda x: x.filename.lower())
+    return out
+
+
+@app.post("/wallet/transfers/{raw_event_id}/batch_classify")
+def wallet_transfers_batch_classify(
+    raw_event_id: int,
+    req: WalletTransferBatchRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Batch save classifications (transfer/sell/buy) for a specific uploaded file.
+    Auto-fills proceeds_eur from EUR countervalue or USD->EUR FX if missing.
+    """
+    if int(req.raw_event_id) != int(raw_event_id):
+        raise HTTPException(status_code=400, detail="raw_event_id mismatch")
+
+    txs = (
+        db.query(TransactionRow)
+        .filter(TransactionRow.raw_event_id == raw_event_id)
+        .filter(TransactionRow.type == "TRANSFER")
+        .all()
+    )
+    tx_by_id = {int(t.id): t for t in txs}
+
+    def _parse_cv_ticker(memo: str | None) -> str | None:
+        if not memo:
+            return None
+        parts = [p.strip() for p in memo.split("|")]
+        for p in parts:
+            if p.startswith("cv_ticker="):
+                return p.split("=", 1)[1].strip().upper() or None
+        return None
+
+    def _auto_proceeds_eur(trow: TransactionRow) -> Decimal | None:
+        fv = trow.fair_value
+        if fv is None or fv == 0:
+            return None
+        cv = _parse_cv_ticker(trow.memo)
+        if (cv or "").upper() == "EUR":
+            return fv
+        if (cv or "").upper() == "USD":
+            from cryptotaxcalc.fx_utils import ensure_rate_or_default_lookup
+            d = trow.timestamp.date()
+            fx = ensure_rate_or_default_lookup(
+                db,
+                d,
+                base="USD",
+                quote="EUR",
+                default_rate=Decimal("1.0"),
+                max_lookback_days=7,
+            )
+            eur_per_usd = fx.rate if isinstance(fx.rate, Decimal) else Decimal(str(fx.rate))
+            return (fv * eur_per_usd)
+        return None
+
+    for item in req.items:
+        txid = int(item.transaction_id)
+        trow = tx_by_id.get(txid)
+        if trow is None:
+            continue
+
+        cls = (item.classification or "").strip().lower()
+        if cls not in {"transfer", "sell", "buy"}:
+            raise HTTPException(status_code=400, detail=f"Invalid classification for tx_id={txid}")
+
+        proceeds = item.proceeds_eur
+        if cls in {"sell", "buy"} and (proceeds is None or not str(proceeds).strip()):
+            auto = _auto_proceeds_eur(trow)
+            if auto is not None:
+                proceeds = str(auto.quantize(Decimal("0.01")))
+            else:
+                raise HTTPException(status_code=400, detail=f"proceeds_eur required for tx_id={txid}")
+
+        ov = (
+            db.query(WalletOutOverride)
+            .filter(WalletOutOverride.transaction_id == txid)
+            .one_or_none()
+        )
+        if ov is None:
+            ov = WalletOutOverride(transaction_id=txid)
+            db.add(ov)
+
+        ov.classification = cls
+        ov.proceeds_eur = proceeds
+        ov.note = item.note
+
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/wallet/transfers/{raw_event_id}/export_resolved.csv")
+def export_resolved_transfers_csv(raw_event_id: int, db: Session = Depends(get_db)):
+    """
+    Download an updated version of the ORIGINAL Ledger Operations CSV:
+    - OUT classified sell -> Operation Type = SELL, countervalue set to EUR proceeds
+    - IN classified buy  -> Operation Type = BUY,  countervalue set to EUR proceeds
+    Preserves original layout and row order.
+    """
+    raw = db.query(RawEvent).filter(RawEvent.id == raw_event_id).one_or_none()
+    if raw is None or not raw.blob_path:
+        raise HTTPException(status_code=404, detail="raw_event not found or missing blob_path")
+
+    txs = (
+        db.query(TransactionRow)
+        .filter(TransactionRow.raw_event_id == raw_event_id)
+        .filter(TransactionRow.type == "TRANSFER")
+        .all()
+    )
+
+    def _op_hash(memo: str | None) -> str | None:
+        if not memo:
+            return None
+        parts = [p.strip() for p in memo.split("|")]
+        for p in parts:
+            if p.startswith("hash="):
+                return p.split("=", 1)[1].strip() or None
+        return None
+
+    ovs = db.query(WalletOutOverride).all()
+    ov_by_txid = {int(o.transaction_id): o for o in ovs if o.transaction_id is not None}
+
+    # Build update maps:
+    # 1) by hash when available
+    # 2) fallback key when hash is missing
+    updates_by_hash: dict[tuple[str, str, str, str, str, str, str], list[tuple[str, str]]] = {}
+    updates_by_key: dict[tuple[int, str, str, str, str, str, str], list[tuple[str, str]]] = {}
+
+    def _account_name(memo: str | None) -> str:
+        if not memo:
+            return ""
+        for p in [x.strip() for x in memo.split("|")]:
+            if p.startswith("account="):
+                return p.split("=", 1)[1].strip()
+        return ""
+
+    def _norm_amt(x) -> str:
+        try:
+            return str(abs(Decimal(str(x))))
+        except Exception:
+            return str(x or "")
+
+    def _norm_fee(x) -> str:
+        try:
+            d = Decimal(str(x))
+            if d <= 0:
+                return "0"
+            return str(d)
+        except Exception:
+            return "0"
+        
+    def _norm_cv(x) -> str:
+        try:
+            s = str(x).strip()
+            if not s:
+                return ""
+            s = s.replace(",", ".")
+            return str(Decimal(s))
+        except Exception:
+            return ""
+
+    for t in txs:
+        ov = ov_by_txid.get(int(t.id))
+        if not ov:
+            continue
+
+        cls = str(ov.classification or "").strip().lower()
+        if cls not in {"sell", "buy"}:
+            continue
+
+        if not ov.proceeds_eur:
+            continue
+
+        new_type = cls.upper()
+        proceeds = str(ov.proceeds_eur)
+
+        h = _op_hash(t.memo)
+
+        # Timestamp key (seconds)
+        ts_sec = int(t.timestamp.replace(tzinfo=timezone.utc).timestamp())
+
+        asset = str(t.base_asset or "").strip().upper()
+        amt = _norm_amt(t.base_amount)
+        fee = _norm_fee(t.fee_amount)
+        acc = _account_name(t.memo)
+        cv = _norm_cv(t.fair_value)
+
+        op = "OUT" if (t.base_amount is not None and Decimal(str(t.base_amount)) < 0) else "IN"
+
+        if h:
+            updates_by_hash.setdefault((h, op, asset, amt, fee, acc, cv), []).append((new_type, proceeds))
+        else:
+            updates_by_key.setdefault((ts_sec, op, asset, amt, fee, acc, cv), []).append((new_type, proceeds))
+
+    import csv as _csv
+    from io import StringIO
+    from pathlib import Path as _Path
+
+    path = _Path(str(raw.blob_path))
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="source CSV file not found on disk")
+
+    with path.open("r", encoding="utf-8-sig", errors="replace", newline="") as f:
+        rdr = _csv.DictReader(f)
+        if not rdr.fieldnames:
+            raise HTTPException(status_code=400, detail="CSV has no headers")
+        rows = list(rdr)
+        fieldnames = list(rdr.fieldnames)
+
+    def _parse_row_ts_sec(s: str) -> int | None:
+        try:
+            # CSV is ISO like 2025-12-03T08:28:59.000Z
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return int(dt.timestamp())
+        except Exception:
+            return None
+
+    for row in rows:
+        op = (row.get("Operation Type") or "").strip().upper()
+        if op not in {"IN", "OUT"}:
+            continue
+        
+        h = (row.get("Operation Hash") or "").strip()
+
+        # Always compute the row’s identity fields first (used for both hash and fallback matching)
+        asset = (row.get("Currency Ticker") or "").strip().upper()
+        amt = _norm_amt(row.get("Operation Amount"))
+        fee = _norm_fee(row.get("Operation Fees"))
+        acc = (row.get("Account Name") or "").strip()
+        cv = _norm_cv(row.get("Countervalue at Operation Date"))
+
+        lst = None
+
+        if h:
+            lst = updates_by_hash.get((h, op, asset, amt, fee, acc, cv))
+
+        if not lst:
+            ts_raw = (row.get("Operation Date") or "").strip()
+            ts_sec = _parse_row_ts_sec(ts_raw)
+            if ts_sec is None:
+                continue
+            lst = updates_by_key.get((ts_sec, op, asset, amt, fee, acc, cv))
+
+        if not lst:
+            continue
+
+        new_type, proceeds = lst.pop(0)
+
+        row["Operation Type"] = new_type
+        row["Countervalue Ticker"] = "EUR"
+        row["Countervalue at Operation Date"] = proceeds
+        if "Countervalue at CSV Export" in row:
+            row["Countervalue at CSV Export"] = proceeds
+
+    buf = StringIO()
+    w = _csv.DictWriter(buf, fieldnames=fieldnames, lineterminator="\n")
+    w.writeheader()
+    for row in rows:
+        w.writerow(row)
+
+    out_bytes = buf.getvalue().encode("utf-8")
+
+    filename = (raw.source_filename or f"ledger_{raw_event_id}.csv").replace(".csv", "_resolved.csv")
+
+    # Starlette encodes headers as latin-1; ensure ASCII-safe fallback filename.
+    safe_name = "".join(ch if (32 <= ord(ch) < 127 and ch not in {'"', "\\", "\r", "\n"}) else "_" for ch in filename)
+    if not safe_name.lower().endswith(".csv"):
+        safe_name += ".csv"
+
+    # RFC5987 filename* supports UTF-8 via percent-encoding (ASCII-only header value).
+    import urllib.parse
+    fn_star = urllib.parse.quote(filename, safe="")
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_name}"; filename*=UTF-8\'\'{fn_star}'
+    }
+
+    return Response(content=out_bytes, media_type="text/csv; charset=utf-8", headers=headers)
+
 
 @app.get("/fx/status", summary="Inspect rate data availability")
 def fx_status(
@@ -1793,7 +2748,7 @@ def fx_status(
         "base": b,
         "quote": q,
         "latest_date": str(latest_date) if latest_date is not None else None,
-        "latest_rate": float(latest_rate) if latest_rate is not None else None,
+        "latest_rate": str(latest_rate) if latest_rate is not None else None,
         "latest_batch_id": int(latest_batch_id) if latest_batch_id is not None else None,
     }
 
@@ -1960,87 +2915,6 @@ def csv_sources_catalog() -> Dict[str, Any]:
     return {"sources": sources}
 
 
-@app.get("/csv/formats", response_class=HTMLResponse, include_in_schema=False)
-def csv_formats_page(request: Request):
-    """
-    User-facing catalog of supported CSV formats (required headers, optional headers, filename hints).
-    """
-    try:
-        sources = list_supported_sources_catalog()
-    except Exception:
-        sources = []
-    return templates.TemplateResponse(
-        "csv_formats.html",
-        {
-            "request": request,
-            "sources": sources,
-        },
-    )
-
-
-@app.get("/admin/csv/unsupported", tags=["admin"])
-def admin_csv_unsupported(
-    limit: int = Query(200, ge=1, le=2000),
-    _admin: None = Depends(require_admin),
-) -> Dict[str, Any]:
-    """
-    Developer/ops endpoint: list unsupported CSV structures captured from users.
-    """
-    items = list_unsupported_signatures(limit=limit)
-    return {"items": items, "limit": int(limit)}
-
-
-@app.get(
-    "/admin/csv/unsupported/ui",
-    response_class=HTMLResponse,
-    include_in_schema=False,
-    tags=["admin"],
-)
-def admin_csv_unsupported_ui(
-    request: Request,
-    limit: int = Query(200, ge=1, le=2000),
-    _admin: None = Depends(require_admin),
-) -> HTMLResponse:
-    """
-    Admin UI: triage unsupported CSV structures captured from users.
-
-    Note: If you rely on query-string tokens for this UI, you must enable them explicitly
-    (ALLOW_QUERY_TOKENS=1) and enable admin endpoints.
-    """
-    items = list_unsupported_signatures(limit=limit)
-    token = request.query_params.get("token")  # optional; used only to keep legacy UI links working
-    return templates.TemplateResponse(
-        "admin_csv_unsupported.html",
-        {
-            "request": request,
-            "items": items,
-            "limit": int(limit),
-            "token": token,
-        },
-    )
-
-
-class AdminRemoveUnsupportedSignatureRequest(BaseModel):
-    signature: str
-
-
-@app.post("/admin/csv/unsupported/remove", tags=["admin"])
-def admin_csv_unsupported_remove(
-    req: AdminRemoveUnsupportedSignatureRequest,
-    _admin: None = Depends(require_admin),
-) -> Dict[str, Any]:
-    """
-    Admin action: remove a signature from unsupported_structures.json
-    (use after you implement the parser and add it to supported sources).
-    """
-    signature = (req.signature or "").strip()
-    if not signature:
-        raise HTTPException(status_code=400, detail="Missing signature")
-
-    removed = remove_unsupported_signature(signature)
-    return {"removed": bool(removed), "signature": signature}
-
-
 @app.post("/import/csv", response_model=ImportCSVResponse)
 async def import_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
     """
@@ -2052,6 +2926,195 @@ async def import_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
 
     # Add a gentle deprecation warning header.
     return JSONResponse(result, headers={"Warning": '299 - "Deprecated; use /import/multiple"'})
+
+
+@app.post("/data_quality/precheck", response_model=PrecheckResponse)
+async def precheck_import(
+    files: List[UploadFile] = File(...),
+):
+    """
+    Pre-import diagnostic to detect disposals without acquisition history.
+
+    Returns:
+    - global aggregate issues
+    - per-file issues (so UI can badge the offending file)
+    """
+    from collections import defaultdict
+    from .csv_normalizer import parse_csv_stream_with_meta
+
+    def _guidance_for_sources(srcs: set[str]) -> str:
+        if srcs == {"binance_spot_trades"}:
+            return (
+                "This looks like a Binance Spot Trades export. Spot trades typically do not include deposits or transfers. "
+                "To fix missing acquisition history, also upload Binance Deposits/Withdrawals (or earlier Spot Trades) "
+                "covering when you acquired this asset."
+            )
+        return (
+            "This file set appears to be trade history only. Trades often exclude deposits/transfers. "
+            "To fix missing acquisition history, also upload deposit/withdrawal/transfer history (or earlier trading history) "
+            "from the same exchange or wallet covering when you acquired this asset."
+        )
+
+    def _compute_issues(
+        buy_qty: dict[str, Decimal],
+        sell_qty: dict[str, Decimal],
+        first_sell_ts: dict[str, str],
+        sources: set[str],
+    ) -> list[PrecheckAssetIssue]:
+        out: list[PrecheckAssetIssue] = []
+        for asset, total_sold in sell_qty.items():
+            total_bought = buy_qty.get(asset, Decimal("0"))
+            if total_sold > total_bought:
+                missing = total_sold - total_bought
+                out.append(
+                    PrecheckAssetIssue(
+                        asset=asset,
+                        first_sell_ts=first_sell_ts.get(asset),
+                        total_sell_qty=str(total_sold),
+                        reason=(
+                            f"Total sells/disposals exceed total buys in uploaded files "
+                            f"(missing at least {missing} {asset} acquisition history)"
+                        ),
+                        guidance=_guidance_for_sources(sources),
+                    )
+                )
+        return out
+
+    # Global aggregates
+    g_buy = defaultdict(Decimal)
+    g_sell = defaultdict(Decimal)
+    g_first_sell_ts: dict[str, str] = {}
+    g_sources: set[str] = set()
+
+    # We collect per-file aggregates first, then compute:
+    #  - global missing-assets list
+    #  - per-file "contribution" issues (files that contain disposals of missing assets)
+    file_stats: list[dict] = []
+
+    for file in files:
+        await file.seek(0)
+        text_stream = io.TextIOWrapper(
+            file.file,
+            encoding="utf-8-sig",
+            errors="replace",
+            newline="",
+        )
+
+        try:
+            rows, _errors, _meta = parse_csv_stream_with_meta(
+                text_stream,
+                filename=file.filename or "(no-name)",
+            )
+        finally:
+            try:
+                text_stream.detach()
+            except Exception:
+                pass
+
+        # Per-file aggregates
+        f_buy = defaultdict(Decimal)
+        f_sell = defaultdict(Decimal)
+        f_first_sell_ts: dict[str, str] = {}
+        f_sources: set[str] = set()
+
+        try:
+            src_id = None
+            if isinstance(_meta, dict):
+                src_id = _meta.get("recognized_source_id")
+            if src_id:
+                f_sources.add(str(src_id))
+                g_sources.add(str(src_id))
+        except Exception:
+            pass
+
+        for tx in rows:
+            asset = (tx.base_asset or "").upper().strip()
+            qty = tx.base_amount
+            ts = tx.timestamp.isoformat()
+            ttype = (tx.type or "").strip().lower()
+
+            # Treat:
+            # - buy as acquisition
+            # - sell as disposal
+            # - trade as disposal of base (many exchange exports normalize swaps to "trade")
+            if ttype == "buy":
+                f_buy[asset] += qty
+                g_buy[asset] += qty
+
+            elif ttype in {"sell", "trade"}:
+                f_sell[asset] += qty
+                g_sell[asset] += qty
+
+                if asset not in f_first_sell_ts or ts < f_first_sell_ts[asset]:
+                    f_first_sell_ts[asset] = ts
+                if asset not in g_first_sell_ts or ts < g_first_sell_ts[asset]:
+                    g_first_sell_ts[asset] = ts
+
+        file_stats.append(
+            dict(
+                filename=(file.filename or "(no-name)"),
+                buy=f_buy,
+                sell=f_sell,
+                first_sell_ts=f_first_sell_ts,
+                sources=f_sources,
+            )
+        )
+
+    # Global issues (source of truth)
+    g_list = _compute_issues(g_buy, g_sell, g_first_sell_ts, g_sources)
+    missing_assets = {i.asset for i in g_list}
+
+    # Per-file contribution issues: mark files that contain disposals of globally-missing assets.
+    file_issues: list[PrecheckFileIssue] = []
+    for st in file_stats:
+        fn = str(st["filename"])
+        f_sell = st["sell"]
+        f_first_sell_ts = st["first_sell_ts"]
+        f_sources = st["sources"]
+
+        contrib: list[PrecheckAssetIssue] = []
+        if missing_assets:
+            multi = len(file_stats) > 1
+            for asset in sorted(missing_assets):
+                sold_here = f_sell.get(asset, Decimal("0"))
+                if sold_here <= 0:
+                    continue
+
+                bought_here = st["buy"].get(asset, Decimal("0"))
+
+                # Behavior:
+                # - Single file: if it sells a missing asset, it must be flagged.
+                # - Multiple files: flag only the file that is locally deficit for that asset.
+                is_deficit = sold_here > bought_here
+                if (not multi) or is_deficit:
+                    contrib.append(
+                        PrecheckAssetIssue(
+                            asset=asset,
+                            first_sell_ts=f_first_sell_ts.get(asset),
+                            total_sell_qty=str(sold_here),
+                            reason=(
+                                "This file contains disposals exceeding acquisitions for an asset "
+                                "whose acquisition history is incomplete in the uploaded set."
+                                if multi else
+                                "This file contains disposals for an asset without sufficient acquisition history."
+                            ),
+                            guidance=_guidance_for_sources(set(f_sources) or set(g_sources)),
+                        )
+                    )
+
+        file_issues.append(
+            PrecheckFileIssue(
+                filename=fn,
+                issues_detected=bool(contrib),
+                assets=contrib,
+            )
+        )
+
+    return PrecheckResponse(
+        issues_detected=bool(g_list),
+        assets=g_list,
+        files=file_issues,
+    )
 
 
 @app.post("/import/multiple")
@@ -2078,7 +3141,10 @@ async def import_multiple(
     # the same behavior as before.
     if reset or is_demo_mode_enabled():
         with SessionLocal() as session:
+            # Clear transactions and any saved wallet transfer overrides.
+            # Otherwise old overrides can be misapplied after resets (SQLite ID reuse).
             session.query(TransactionRow).delete()
+            session.query(WalletOutOverride).delete()
             session.commit()
 
     for file in files:
@@ -2441,6 +3507,7 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
     try:
         # compute realized events
         events, summary, warnings = compute_fifo(tx_models)
+        _export_block_if_blockers(warnings)
 
         # normalize events to plain dicts for stable hashing/JSON
         events_payload = [ev_to_dict(e) for e in events]
@@ -2755,10 +3822,43 @@ def calculate_v2(
 
     except HTTPException:
         logger.exception("Calculation failed with HTTPException (run_id=%s)", run.id)
-        _audit("calc:error", {"detail": "HTTPException"}); raise
+        _audit("calc:error", {"detail": "HTTPException"})
+        raise
+
+    except ValueError as e:
+        # Input/data/config problem (client-side), not a server crash.
+        logger.warning(
+            "Calculation rejected due to input/config error (run_id=%s): %s",
+            getattr(run, "id", None),
+            str(e),
+        )
+        try:
+            run.finished_at = datetime.now(timezone.utc)
+            run.summary_json = {"status": "error", "error": str(e)}
+            db.add(run)
+            db.commit()
+        except Exception:
+            db.rollback()
+        _audit("calc:error", {"detail": str(e)})
+        raise HTTPException(status_code=400, detail=str(e))
+
     except Exception as e:
         logger.exception("Calculation failed (run_id=%s).", getattr(run, "id", None))
-        db.rollback(); _audit("calc:error", {"detail": str(e)})
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+        # Close the run so it doesn't look "stuck" in history/UIs.
+        try:
+            run.finished_at = datetime.now(timezone.utc)
+            run.summary_json = {"status": "error", "error": str(e)}
+            db.add(run)
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        _audit("calc:error", {"detail": str(e)})
         raise HTTPException(status_code=500, detail=f"Calculation failed: {e}")
     
 
@@ -2932,13 +4032,12 @@ def report_summary(
                 basis_eur    += e.cost_basis
                 gain_eur     += e.gain
             elif q in ("USD", "USDT"):
-                rate = ensure_rate_or_default(session, dt.date())
                 try:
-                    proceeds_eur += (e.proceeds / rate)
-                    basis_eur    += (e.cost_basis / rate)
-                    gain_eur     += (e.gain / rate)
+                    proceeds_eur += usd_to_eur(e.proceeds, dt.date(), db=session)
+                    basis_eur    += usd_to_eur(e.cost_basis, dt.date(), db=session)
+                    gain_eur     += usd_to_eur(e.gain, dt.date(), db=session)
                 except Exception:
-                    notes.append(f"Bad EURUSD rate for {dt.date()}; skipped conversion for an event.")
+                    notes.append(f"Bad USD->EUR FX conversion for {dt.date()}; skipped conversion for an event.")
             else:
                 notes.append(f"EUR conversion for quote '{q}' not implemented; skipped an event.")
 
@@ -2963,606 +4062,155 @@ def report_summary(
     }
 
 
-@app.post("/fx/upload")
-async def fx_upload(file: UploadFile = File(...), _admin: None = Depends(require_admin)) -> dict:
+def _export_block_if_blockers(warnings: list[str | dict] | None) -> None:
     """
-    Upload a CSV of daily EURUSD rates.
-    Required headers: date, usd_per_eur
-      - date format: YYYY-MM-DD
-      - usd_per_eur: decimal number (USD per 1 EUR)
-    We normalize and store as: base='USD', quote='EUR', rate=<EUR per 1 USD>.
-    A new fx_batches row is created; imported rows get its batch_id.
+    Block exports if the run contains data-integrity blockers.
+
+    Supports:
+    - legacy string warnings
+    - structured dict warnings (preferred)
     """
-    # Basic validation
-    if not (file.filename or "").lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Please upload a .csv file")
+    w = warnings or []
 
-    raw = await file.read()
-    try:
-        text_csv = raw.decode("utf-8-sig", errors="replace")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Unable to decode CSV (utf-8).")
+    blockers: list[str] = []
 
-    reader = DictReader(StringIO(text_csv))
-    required = {"date", "usd_per_eur"}
-    if not reader.fieldnames or required - {h.strip().lower() for h in reader.fieldnames}:
-        raise HTTPException(status_code=400, detail="CSV must include headers: date, usd_per_eur")
+    for item in w:
+        # New structured warning
+        if isinstance(item, dict):
+            if item.get("severity") == "blocker":
+                msg = item.get("message") or "Data integrity issue detected."
+                blockers.append(msg)
+            continue
 
-    # Map canonical → actual header casing
-    header_map = {h.strip().lower(): h for h in (reader.fieldnames or [])}
-
-    inserted = 0
-    updated = 0
-    errors = 0
-
-    now_iso_z = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-    with SessionLocal() as session:
-        # Make sure fx_rates has the columns this code relies on
+        # Legacy string warning
         try:
-            from .fx_utils import ensure_fx_rates_schema
-            ensure_fx_rates_schema(session)
+            s = str(item)
         except Exception:
-            # Not fatal; continue and let the operations fail if schema is truly broken
-            pass
+            continue
 
-        # Start a new batch
-        bid = session.execute(
-            text("INSERT INTO fx_batches (imported_at, source, rates_hash) VALUES (:t,:s,:h)"),
-            {"t": now_iso_z, "s": "ECB CSV", "h": None}
-        ).lastrowid
+        if s.startswith("BLOCKER:"):
+            blockers.append(s)
 
-        for row in reader:
-            try:
-                raw_date = (row.get(header_map["date"]) or "").strip()
-                raw_rate = (row.get(header_map["usd_per_eur"]) or "").strip()
-
-                if not raw_date or not raw_rate:
-                    raise ValueError("Missing date or usd_per_eur")
-
-                # Parse date
-                d = datetime.strptime(raw_date, "%Y-%m-%d").date()
-                d_iso = d.isoformat()
-
-                # CSV gives USD per 1 EUR → normalize to EUR per 1 USD
-                usd_per_eur = Decimal(raw_rate)  # may raise InvalidOperation
-                if usd_per_eur <= 0:
-                    raise ValueError("usd_per_eur must be > 0")
-
-                rate_eur_per_usd = (Decimal("1") / usd_per_eur)
-
-                # Upsert normalized row
-                exists = session.execute(
-                    text("SELECT 1 FROM fx_rates WHERE date = :d AND base='USD' AND quote='EUR'"),
-                    {"d": d_iso}
-                ).scalar()
-
-                if exists:
-                    session.execute(
-                        text("""UPDATE fx_rates
-                                SET rate = :r, batch_id = :b, base='USD', quote='EUR'
-                                WHERE date = :d AND base='USD' AND quote='EUR'"""),
-                        {"r": str(rate_eur_per_usd), "b": bid, "d": d_iso}
-                    )
-                    updated += 1
-                else:
-                    session.execute(
-                        text("""INSERT INTO fx_rates (date, base, quote, rate, batch_id)
-                                VALUES (:d, 'USD', 'EUR', :r, :b)"""),
-                        {"d": d_iso, "r": str(rate_eur_per_usd), "b": bid}
-
-                    )
-                    inserted += 1
-
-            except (InvalidOperation, ValueError):
-                errors += 1
-                continue
-            except Exception:
-                # Any unexpected row-level failure shouldn't kill the batch
-                errors += 1
-                continue
-
-        session.commit()
-
-        # Compute a deterministic hash of what was just imported (by date asc)
-        rows_for_hash = session.execute(
-            text("SELECT date, base, quote, rate FROM fx_rates WHERE batch_id = :b ORDER BY date"),
-            {"b": bid}
-        ).fetchall()
-
-        h = hashlib.sha256()
-        for r in rows_for_hash:
-            # r = (date, base, quote, rate)
-            line = f"{r[0]}|{r[1]}|{r[2]}|{r[3]}\n"
-            h.update(line.encode("utf-8"))
-        rates_hash = h.hexdigest()
-
-        session.execute(
-            text("UPDATE fx_batches SET rates_hash = :rh WHERE id = :bid"),
-            {"rh": rates_hash, "bid": bid}
+    if blockers:
+        sample = " | ".join(blockers[:2])
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "title": "Export blocked to protect your tax results",
+                "reason": "Some assets were sold without any recorded acquisition history.",
+                "what_this_means": (
+                    "Without knowing how you acquired these assets, the system would "
+                    "assume a zero cost basis, which could significantly overstate taxes."
+                ),
+                "how_to_fix": [
+                    "Import earlier trades from the same exchange",
+                    "Import deposit or transfer history",
+                    "Ensure CSVs cover your full trading history",
+                ],
+                "technical_details": sample,
+            },
         )
-        session.commit()
+        
 
-    return {"inserted": inserted, "updated": updated, "errors": errors, "batch_id": int(bid)}
+# -----------------------------------------------------------------------------
+# PDF export cache (disk)
+PDF_CACHE_VERSION = "ws_pdf_v1"
+PDF_CACHE_DIR = (PROJECT_ROOT / "artifacts" / "pdf_cache")
+PDF_CACHE_MAX_FILES = 250  # keep it bounded for demo EXE + local use
 
-
-@app.get("/prices/template.csv", summary="Download CSV template for daily price uploads", tags=["prices"])
-def prices_template_csv() -> Response:
+def _pdf_cache_key(kind: str, parts: dict[str, Any]) -> str:
     """
-    Template for /prices/upload.
-    rate is QUOTE per 1 BASE (e.g., EUR per 1 BNB; USD per 1 ETH).
+    Deterministic cache key: stable across restarts, invalidated by PDF_CACHE_VERSION.
     """
-    sample = (
-        "date,base,quote,rate\n"
-        "2025-01-01,BNB,EUR,250.12\n"
-        "2025-01-01,ETH,USD,3450.50\n"
-    )
-    headers = {"Content-Disposition": 'attachment; filename="prices_template.csv"'}
-    return Response(content=sample, media_type="text/csv; charset=utf-8", headers=headers)
+    # Stable order for hashing
+    payload = {"v": PDF_CACHE_VERSION, "kind": kind, **parts}
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
 
+def _pdf_cache_path(key: str) -> Path:
+    return PDF_CACHE_DIR / f"{key}.pdf"
 
-@app.post("/prices/upload", summary="Upload daily prices for assets (used for third-asset fee valuation)", tags=["prices"])
-async def prices_upload(
-    file: UploadFile = File(...),
-    source: str = Query("PRICE CSV", description="Label stored in fx_batches.source"),
-    _admin: None = Depends(require_admin),
-) -> dict:
-    """
-    Upload daily prices into fx_rates as base=<ASSET>, quote='EUR', rate=<EUR per 1 base>.
-
-    CSV headers:
-      - date: YYYY-MM-DD
-      - base: asset symbol (e.g., BNB, ETH)
-      - quote: EUR or USD-like (USD/USDT/USDC/BUSD). USD-like quotes are converted to EUR using fx_rates USD/EUR.
-      - rate: quote per 1 base (e.g., EUR per 1 BNB; USD per 1 ETH)
-    """
-    if not (file.filename or "").lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Please upload a .csv file")
-
-    raw = await file.read()
+def _pdf_cache_get(key: str) -> bytes | None:
     try:
-        text_csv = raw.decode("utf-8-sig", errors="replace")
+        p = _pdf_cache_path(key)
+        if p.exists() and p.is_file():
+            return p.read_bytes()
     except Exception:
-        raise HTTPException(status_code=400, detail="Unable to decode CSV (utf-8).")
+        return None
+    return None
 
-    reader = DictReader(StringIO(text_csv))
-    required = {"date", "base", "quote", "rate"}
-    if not reader.fieldnames or required - {h.strip().lower() for h in reader.fieldnames}:
-        raise HTTPException(status_code=400, detail="CSV must include headers: date, base, quote, rate")
-
-    header_map = {h.strip().lower(): h for h in (reader.fieldnames or [])}
-
-    inserted = 0
-    updated = 0
-    errors = 0
-    fx_missing = 0
-    fx_missing_days: set[str] = set()
-
-    now_iso_z = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-    USD_LIKE = {"USD", "USDT", "USDC", "BUSD"}
-
-    with SessionLocal() as session:
-        # Ensure fx_rates schema exists (idempotent)
-        try:
-            ensure_fx_rates_schema(session)
-        except Exception:
-            pass
-
-        # Start a new batch for these rates/prices
-        bid = session.execute(
-            text("INSERT INTO fx_batches (imported_at, source, rates_hash) VALUES (:t,:s,:h)"),
-            {"t": now_iso_z, "s": (source or "PRICE CSV"), "h": None},
-        ).lastrowid
-
-        from datetime import timedelta
-
-        for row in reader:
+def _pdf_cache_prune() -> None:
+    try:
+        PDF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        files = [p for p in PDF_CACHE_DIR.glob("*.pdf") if p.is_file()]
+        if len(files) <= PDF_CACHE_MAX_FILES:
+            return
+        files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for p in files[PDF_CACHE_MAX_FILES:]:
             try:
-                raw_date = (row.get(header_map["date"]) or "").strip()
-                raw_base = (row.get(header_map["base"]) or "").strip()
-                raw_quote = (row.get(header_map["quote"]) or "").strip()
-                raw_rate = (row.get(header_map["rate"]) or "").strip()
-
-                if not raw_date or not raw_base or not raw_quote or not raw_rate:
-                    raise ValueError("Missing required fields")
-
-                d = datetime.strptime(raw_date, "%Y-%m-%d").date()
-                d_iso = d.isoformat()
-
-                base = raw_base.upper()
-                quote = raw_quote.upper()
-
-                rate_in_quote = Decimal(raw_rate)
-                if rate_in_quote <= 0:
-                    raise ValueError("rate must be > 0")
-
-                # Normalize into EUR rates for downstream valuation.
-                if quote == "EUR":
-                    rate_eur = rate_in_quote
-                elif quote in USD_LIKE:
-                    # Convert quote (USD-like) -> EUR using USD->EUR rate for same day (allow up to 7-day lookback for weekends/holidays).
-                    min_iso = (d - timedelta(days=7)).isoformat()
-                    fx_row = session.execute(
-                        text(
-                            "SELECT rate FROM fx_rates "
-                            "WHERE base='USD' AND quote='EUR' AND date <= :d AND date >= :min_d "
-                            "ORDER BY date DESC LIMIT 1"
-                        ),
-                        {"d": d_iso, "min_d": min_iso},
-                    ).first()
-                    if not fx_row or fx_row[0] is None:
-                        fx_missing += 1
-                        fx_missing_days.add(d_iso)
-                        raise ValueError("Missing USD->EUR FX rate for conversion")
-                    eur_per_usd = Decimal(str(fx_row[0]))
-                    rate_eur = (rate_in_quote * eur_per_usd)
-                else:
-                    raise ValueError(f"Unsupported quote '{quote}'. Use EUR or USD/USDT/USDC/BUSD.")
-
-                # Upsert into fx_rates (base=<asset>, quote='EUR')
-                exists = session.execute(
-                    text("SELECT 1 FROM fx_rates WHERE date = :d AND base = :b AND quote = :q"),
-                    {"d": d_iso, "b": base, "q": "EUR"},
-                ).scalar()
-
-                if exists:
-                    session.execute(
-                        text(
-                            "UPDATE fx_rates SET rate = :r, batch_id = :bid "
-                            "WHERE date = :d AND base = :b AND quote = :q"
-                        ),
-                        {"r": str(rate_eur), "bid": bid, "d": d_iso, "b": base, "q": "EUR"},
-                    )
-                    updated += 1
-                else:
-                    session.execute(
-                        text(
-                            "INSERT INTO fx_rates (date, base, quote, rate, batch_id) "
-                            "VALUES (:d, :b, :q, :r, :bid)"
-                        ),
-                        {"d": d_iso, "b": base, "q": "EUR", "r": str(rate_eur), "bid": bid},
-                    )
-                    inserted += 1
-
-            except (InvalidOperation, ValueError):
-                errors += 1
-                continue
+                p.unlink(missing_ok=True)
             except Exception:
-                errors += 1
-                continue
+                pass
+    except Exception:
+        pass
 
-        session.commit()
+def _pdf_cache_put(key: str, data: bytes) -> None:
+    try:
+        PDF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = PDF_CACHE_DIR / f".{key}.tmp"
+        dst = _pdf_cache_path(key)
+        tmp.write_bytes(data)
+        tmp.replace(dst)
+        _pdf_cache_prune()
+    except Exception:
+        pass
+    
+    
+# -----------------------------------------------------------------------------
+# PDF generation jobs (in-memory; demo-friendly)
+PDF_JOB_TTL_SECONDS = 20 * 60  # 20 minutes
+_pdf_jobs: dict[str, dict[str, Any]] = {}
 
-        # Hash the imported/updated rows for this batch
-        rows_for_hash = session.execute(
-            text("SELECT date, base, quote, rate FROM fx_rates WHERE batch_id = :b ORDER BY date, base, quote"),
-            {"b": bid},
-        ).fetchall()
+def _pdf_job_prune() -> None:
+    try:
+        now = time.time()
+        dead = [k for k, v in _pdf_jobs.items() if (now - float(v.get("ts", now))) > PDF_JOB_TTL_SECONDS]
+        for k in dead:
+            _pdf_jobs.pop(k, None)
+    except Exception:
+        pass
 
-        h = hashlib.sha256()
-        for r in rows_for_hash:
-            line = f"{r[0]}|{r[1]}|{r[2]}|{r[3]}\n"
-            h.update(line.encode("utf-8"))
-        rates_hash = h.hexdigest()
+def _pdf_job_new(payload: dict[str, Any]) -> str:
+    _pdf_job_prune()
+    job_id = uuid.uuid4().hex
+    _pdf_jobs[job_id] = {
+        "ts": time.time(),
+        "status": "queued",
+        "message": "Queued",
+        "progress": 0.0,
+        "payload": payload,
+        "pdf_url": None,
+        "cache": None,
+        "error": None,
+    }
+    return job_id
 
-        session.execute(
-            text("UPDATE fx_batches SET rates_hash = :rh WHERE id = :bid"),
-            {"rh": rates_hash, "bid": bid},
-        )
-        session.commit()
+@app.get("/export/pdf_job/{job_id}", tags=["export"])
+def export_pdf_job_status(job_id: str):
+    _pdf_job_prune()
+    job = _pdf_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
 
     return {
-        "inserted": inserted,
-        "updated": updated,
-        "errors": errors,
-        "fx_missing": fx_missing,
-        "fx_missing_days_count": len(fx_missing_days),
-        "fx_missing_days_sample": sorted(list(fx_missing_days))[:10],
-        "batch_id": int(bid),
+        "job_id": job_id,
+        "status": job.get("status"),
+        "message": job.get("message"),
+        "progress": job.get("progress"),
+        "pdf_url": job.get("pdf_url"),
+        "cache": job.get("cache"),
+        "error": job.get("error"),
     }
-
-
-def _bootstrap_fx_from_csv_if_empty(engine: Engine) -> None:
-    """
-    One-shot FX bootstrap from automation/fx_ecb.csv.
-
-    Behavior:
-      - If fx_rates already has rows → do nothing
-      - If automation/fx_ecb.csv is missing → do nothing
-      - Otherwise: import it using the same semantics as /fx/upload
-        (date, usd_per_eur → base='USD', quote='EUR', rate=EUR per 1 USD)
-    """
-    logger = get_logger("fx.bootstrap")
-
-    # 1) Check if fx_rates already has data
-    try:
-        with engine.connect() as conn:
-            total = conn.execute(text("SELECT COUNT(1) FROM fx_rates")).scalar() or 0
-        if total:
-            logger.info("FX bootstrap skipped: fx_rates already has %s rows.", int(total))
-            return
-    except Exception as e:
-        logger.warning("FX bootstrap: could not inspect fx_rates; skipping. %s", e)
-        return
-
-    # 2) Locate automation/fx_ecb.csv relative to project root
-    csv_path = AUTOMATION / "fx_ecb.csv"
-    if not csv_path.exists():
-        logger.info("FX bootstrap: %s not found; nothing to import.", csv_path)
-        return
-
-    # 3) Read and parse CSV (same headers as /fx/upload)
-    try:
-        raw = csv_path.read_bytes()
-        text_csv = raw.decode("utf-8-sig", errors="replace")
-    except Exception as e:
-        logger.warning("FX bootstrap: failed to read/ decode %s: %s", csv_path, e)
-        return
-
-    reader = DictReader(StringIO(text_csv))
-    required = {"date", "usd_per_eur"}
-    fieldnames = reader.fieldnames or []
-    seen = {h.strip().lower() for h in fieldnames}
-    if required - seen:
-        logger.warning(
-            "FX bootstrap: %s missing required headers %s; found %s. Skipping.",
-            csv_path,
-            required,
-            fieldnames,
-        )
-        return
-
-    header_map = {h.strip().lower(): h for h in fieldnames}
-
-    inserted = 0
-    updated = 0
-    errors = 0
-    now_iso_z = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-    with SessionLocal() as session:
-        # Ensure schema is ready (same helper fx_upload uses)
-        try:
-            from .fx_utils import ensure_fx_rates_schema
-            ensure_fx_rates_schema(session)
-        except Exception as e:
-            logger.warning("FX bootstrap: ensure_fx_rates_schema failed (continuing): %s", e)
-
-        # Start a new batch
-        bid = session.execute(
-            text("INSERT INTO fx_batches (imported_at, source, rates_hash) VALUES (:t,:s,:h)"),
-            {"t": now_iso_z, "s": "ECB CSV (bootstrap)", "h": None},
-        ).lastrowid
-
-        for row in reader:
-            try:
-                raw_date = (row.get(header_map["date"]) or "").strip()
-                raw_rate = (row.get(header_map["usd_per_eur"]) or "").strip()
-
-                if not raw_date or not raw_rate:
-                    raise ValueError("Missing date or usd_per_eur")
-
-                d = datetime.strptime(raw_date, "%Y-%m-%d").date()
-                d_iso = d.isoformat()
-
-                usd_per_eur = Decimal(raw_rate)
-                if usd_per_eur <= 0:
-                    raise ValueError("usd_per_eur must be > 0")
-
-                # Same normalization as /fx/upload:
-                # CSV gives USD per 1 EUR → store EUR per 1 USD
-                rate_eur_per_usd = (Decimal("1") / usd_per_eur)
-
-                exists = session.execute(
-                    text(
-                        "SELECT 1 FROM fx_rates "
-                        "WHERE date = :d AND base='USD' AND quote='EUR'"
-                    ),
-                    {"d": d_iso},
-                ).scalar()
-
-                if exists:
-                    session.execute(
-                        text(
-                            "UPDATE fx_rates "
-                            "SET rate = :r, batch_id = :b, base='USD', quote='EUR' "
-                            "WHERE date = :d AND base='USD' AND quote='EUR'"
-                        ),
-                        {"r": str(rate_eur_per_usd), "b": bid, "d": d_iso},
-                    )
-                    updated += 1
-                else:
-                    session.execute(
-                        text(
-                            "INSERT INTO fx_rates (date, base, quote, rate, batch_id) "
-                            "VALUES (:d, 'USD', 'EUR', :r, :b)"
-                        ),
-                        {"d": d_iso, "r": str(rate_eur_per_usd), "b": bid},
-                    )
-                    inserted += 1
-
-            except (InvalidOperation, ValueError):
-                errors += 1
-                continue
-            except Exception:
-                errors += 1
-                continue
-
-        session.commit()
-
-        # Compute deterministic hash of imported batch (like /fx/upload)
-        rows_for_hash = session.execute(
-            text(
-                "SELECT date, base, quote, rate "
-                "FROM fx_rates WHERE batch_id = :b ORDER BY date"
-            ),
-            {"b": bid},
-        ).fetchall()
-
-        h = hashlib.sha256()
-        for r in rows_for_hash:
-            line = f"{r[0]}|{r[1]}|{r[2]}|{r[3]}\n"
-            h.update(line.encode("utf-8"))
-        rates_hash = h.hexdigest()
-
-        session.execute(
-            text("UPDATE fx_batches SET rates_hash = :rh WHERE id = :bid"),
-            {"rh": rates_hash, "bid": bid},
-        )
-        session.commit()
-
-    logger.info(
-        "FX bootstrap: imported=%s updated=%s errors=%s from %s (batch_id=%s)",
-        inserted,
-        updated,
-        errors,
-        csv_path,
-        bid,
-    )
-
-
-@app.post("/maintenance/prune_fx")
-def prune_fx(keep_years: int = Query(5, ge=1, le=20), _admin: None = Depends(require_admin)) -> Dict[str, Any]:
-    """
-    Keep only the last N years of FX rates (rolling window).
-    Safe: does not touch transactions.
-    """
-    today = dt.today()
-    cutoff_year = today.year - keep_years
-    cutoff = dt(cutoff_year, 1, 1)  # keep from Jan 1 of cutoff_year onward
-
-    deleted = 0
-    with SessionLocal() as session:
-        # Count before
-        total_before = session.query(FxRate).count()
-        session.query(FxRate).filter(FxRate.date < cutoff).delete(synchronize_session=False)
-        session.commit()
-        total_after = session.query(FxRate).count()
-        deleted = total_before - total_after
-
-    return {"status": "ok", "kept_from": str(cutoff), "deleted_rows": deleted}
-
-
-@app.post("/maintenance/vacuum")
-def vacuum_sqlite(_admin: None = Depends(require_admin)) -> Dict[str, Any]:
-    """
-    Run VACUUM to reclaim file space in SQLite after large deletes.
-    """
-    with engine.connect() as conn:
-        conn.execute(text("VACUUM"))
-    return {"status": "ok"}
-
-
-@app.get("/export/db", summary="Download current database backup")
-def export_database(_admin: None = Depends(require_admin)):
-    # Derive the active sqlite file from the SQLAlchemy engine
-    db_name = getattr(engine.url, "database", None) or "cryptotaxcalc.db"
-    db_path = db_name if os.path.isabs(db_name) else str((PROJECT_ROOT / db_name).resolve())
-
-    if not os.path.exists(db_path):
-        raise HTTPException(status_code=404, detail=f"Database not found at {db_path}")
-
-    # Timestamped backup copy (kept on disk)
-    import datetime
-    backups_dir = PROJECT_ROOT / "backups"
-    backups_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    backup_name = f"db_backup_{timestamp}.sqlite"
-    backup_path = backups_dir / backup_name
-    shutil.copy2(db_path, backup_path)
-
-    # Stream the *live* DB as the download (filename is the backup copy name)
-    return FileResponse(
-        path=db_path,
-        filename=backup_name,
-        media_type="application/x-sqlite3"
-    )
-
-
-@app.post("/import/db", summary="Restore the SQLite database from an uploaded .db file (with safety checks)")
-async def import_database(
-    file: UploadFile = File(...),
-    confirm: str = Query("", description="Must be 'I_UNDERSTAND' to proceed"),
-    _admin: None = Depends(require_admin),
-):
-    """
-    Restores the application's SQLite database from an uploaded file.
-    Safety features:
-    - Requires explicit confirm='I_UNDERSTAND'
-    - Validates SQLite magic header
-    - Backs up current data.db before replacing
-    - Disposes engine to release file locks
-    - Verifies PRAGMA integrity_check after swap; rolls back on failure
-    """
-    if confirm != "I_UNDERSTAND":
-        raise HTTPException(
-            status_code=400,
-            detail="Confirmation missing. Add ?confirm=I_UNDERSTAND to proceed (this will overwrite the current DB)."
-        )
-
-    # 0) Ensure backups dir exists
-    os.makedirs("backups", exist_ok=True)
-
-    # 1) Save uploaded file to a temp path
-    suffix = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    tmp_dir = tempfile.mkdtemp(prefix="restore_")
-    tmp_upload = os.path.join(tmp_dir, f"uploaded_{suffix}.db")
-
-    try:
-        raw = await file.read()
-        if not raw:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-        with open(tmp_upload, "wb") as f:
-            f.write(raw)
-
-        # 2) Validate it's really a SQLite DB
-        if not _is_sqlite_file(tmp_upload):
-            raise HTTPException(status_code=400, detail="Uploaded file is not a valid SQLite database.")
-
-        # 3) Optional pre-check integrity of the uploaded DB
-        if not _integrity_ok(tmp_upload):
-            raise HTTPException(status_code=400, detail="Uploaded database failed integrity_check.")
-
-        # 4) Backup current DB
-        db_name = getattr(engine.url, "database", None) or "cryptotaxcalc.db"
-        src_db = db_name if os.path.isabs(db_name) else str((PROJECT_ROOT / db_name).resolve())
-        if not os.path.exists(src_db):
-            # Allow restore even if current DB does not exist
-            backup_path = None
-        else:
-            backup_name = f"data_before_restore_{suffix}.db"
-            backup_path = os.path.join("backups", backup_name)
-            shutil.copy2(src_db, backup_path)
-
-        # 5) Dispose global engine so SQLite file is not locked
-        try:
-            engine.dispose()
-        except Exception:
-            pass  # best effort
-
-        # 6) Replace data.db with the uploaded file
-        shutil.copy2(tmp_upload, src_db)
-
-        # 7) Post-swap integrity check (on the active DB path)
-        if not _integrity_ok(src_db):
-            # Roll back if broken
-            if backup_path and os.path.exists(backup_path):
-                shutil.copy2(backup_path, src_db)
-            raise HTTPException(status_code=500, detail="Restored DB failed integrity_check; original DB has been restored.")
-
-        # 8) Success
-        return JSONResponse({
-            "status": "ok",
-            "message": "Database restored successfully.",
-            "backup": (backup_path or "none"),
-            "restored_from": file.filename
-        })
-
-    finally:
-        # Cleanup temp directory
-        try:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-        except Exception:
-            pass
 
 
 @app.get("/export/calculate.csv", summary="Download realized events (FIFO) as CSV")
@@ -3588,6 +4236,7 @@ def export_calculate_csv() -> Response:
         ))
 
     events, summary, warnings = compute_fifo(tx_models)
+    _export_block_if_blockers(warnings)
 
     # Build CSV in-memory
     buf = io.StringIO()
@@ -3643,6 +4292,7 @@ def export_summary_csv(year: int | None = None) -> Response:
 
     # Compute FIFO once
     events, summary, warnings = compute_fifo(tx_models)
+    _export_block_if_blockers(warnings)
 
     # Optional year filter
     if year is not None:
@@ -3788,6 +4438,7 @@ def export_summary_pdf(
 
     # 2) Compute FIFO once
     events, summary, warnings = compute_fifo(tx_models)
+    _export_block_if_blockers(warnings)
 
     # 3) Optional filter by year (affects both tables and EUR conversion)
     if year is not None:
@@ -3964,6 +4615,8 @@ def export_summary_pdf(
 @app.get("/export/workspace_summary/{run_db_id}.pdf", summary="Export a Workspace summary PDF for a specific run.")
 def export_workspace_summary(
     run_db_id: int,
+    force: bool = Query(False, description="Proceed even if data-integrity blockers are present"),
+    download: bool = Query(False, description="Download as attachment instead of inline preview"),
     db: Session = Depends(get_db),
 ):
     """
@@ -3994,6 +4647,31 @@ def export_workspace_summary(
 
     totals = summary.get("totals", {})
     warnings = summary.get("warnings", [])
+    if not force:
+        _export_block_if_blockers(warnings)
+    cache_key = _pdf_cache_key(
+        "workspace_summary_full",
+        {
+            "run_db_id": int(run_db_id),
+            "run_id": str(run.run_id or run.id),
+            "jur": str(run.jurisdiction or ""),
+            "rule": str(run.rule_version or ""),
+            "tax_year": int(run.tax_year) if getattr(run, "tax_year", None) else None,
+            "force": bool(force),
+        },
+    )
+    cached = _pdf_cache_get(cache_key)
+    if cached is not None:
+        filename = f"workspace_summary_run_{run_db_id}.pdf"
+        disp = "attachment" if download else "inline"
+        return StreamingResponse(
+            BytesIO(cached),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'{disp}; filename="{filename}"',
+                "X-Cache": "HIT",
+            },
+        )
     fx_ctx = summary.get("fx_context", {})
 
     # 2) Load realized events for this run
@@ -4127,11 +4805,17 @@ def export_workspace_summary(
         "show_yearly_tax_block": False,
     })
 
+    _pdf_cache_put(cache_key, pdf_bytes)
+
     filename = f"workspace_summary_run_{run_db_id}.pdf"
+    disp = "attachment" if download else "inline"
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'}
+        headers={
+            "Content-Disposition": f'{disp}; filename="{filename}"',
+            "X-Cache": "MISS",
+        },
     )
     
 
@@ -4143,6 +4827,9 @@ def export_workspace_summary_subset(
     run_db_id: int,
     year: int | None = Query(None, description="Optional tax-year filter (YYYY)"),
     asset: str | None = Query(None, description="Optional asset filter (e.g. BTC)"),
+    local_area: str | None = Query(None, description="Optional local area code (e.g. ZAGREB) for HR prirez ≤ 2023"),
+    force: bool = Query(False, description="Proceed even if data-integrity blockers are present"),
+    download: bool = Query(False, description="Download as attachment instead of inline preview"),
     db: Session = Depends(get_db),
 ):
     """
@@ -4175,6 +4862,9 @@ def export_workspace_summary_subset(
 
     if not isinstance(run_warnings, list):
         run_warnings = []
+        
+    if not force:
+        _export_block_if_blockers(run_warnings)
 
     # 2) Load and filter realized events for this run
     q = (
@@ -4282,12 +4972,28 @@ def export_workspace_summary_subset(
     # 5) Compute taxable / exempt gain for this subset using HR/IT logic
     total_gain, taxable, exempt = _compute_subset_tax_split(run, ev_rows)
 
+    tax_year_used = int(year) if year is not None else int(getattr(run, "tax_year", 0) or datetime.utcnow().year)
+    tax_ctx = _tax_context_for(jurisdiction=run.jurisdiction, tax_year=tax_year_used, local_area=local_area)
+
+    taxable_base_eur = taxable if taxable > 0 else Decimal("0")
+    tax_due_eur = (taxable_base_eur * tax_ctx["effective_rate"]).quantize(Decimal("0.01"))
+
     subset_totals = {
         "proceeds_eur": dec_to_str(proceeds),
         "cost_eur": dec_to_str(cost),
         "gain_eur": dec_to_str(total_gain),
         "taxable_gain_eur": dec_to_str(taxable),
         "exempt_gain_eur": dec_to_str(exempt),
+
+        "tax_year_used": str(tax_ctx["tax_year_used"]),
+        "national_rate": str(tax_ctx["national_rate"]),
+        "local_rate": str(tax_ctx["local_rate"]),
+        "effective_rate": str(tax_ctx["effective_rate"]),
+        "tax_due_eur": str(tax_due_eur),
+
+        "rate_model": str(tax_ctx["rate_model"]),
+        "local_surtax_pct": str(tax_ctx["local_surtax_pct"]),
+        "local_area": str(tax_ctx["local_area"]),
     }
 
     # 6) Build EUR summary payload compatible with report_pdf.py
@@ -4315,6 +5021,30 @@ def export_workspace_summary_subset(
 
     # 8) Descriptive title reflecting the subset
     title_text = f"CryptoTaxCalc – Workspace Summary ({asset_label}, {year_label})"
+    
+    cache_key = _pdf_cache_key(
+        "workspace_summary_subset",
+        {
+            "run_db_id": int(run_db_id),
+            "run_id": str(run.run_id or run.id),
+            "asset": str(asset_label),
+            "year": str(year_label),
+            "local_area": str(local_area or ""),
+            "force": bool(force),
+        },
+    )
+    cached = _pdf_cache_get(cache_key)
+    if cached is not None:
+        filename = f"workspace_summary_run_{run_db_id}_{fname_asset}_{fname_year}.pdf"
+        disp = "attachment" if download else "inline"
+        return StreamingResponse(
+            BytesIO(cached),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'{disp}; filename="{filename}"',
+                "X-Cache": "HIT",
+            },
+        )
 
     pdf_bytes = build_summary_pdf(
         {
@@ -4348,12 +5078,195 @@ def export_workspace_summary_subset(
     fname_asset = asset_label.replace(" ", "")
     fname_year = year_label.replace(" ", "")
     filename = f"workspace_summary_run_{run_db_id}_{fname_asset}_{fname_year}.pdf"
+    disp = "attachment" if download else "inline"
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+        headers={"Content-Disposition": f'{disp}; filename="{filename}"'},
     )
 
+
+@app.post("/export/workspace_summary/{run_db_id}.pdf/job", tags=["export"])
+async def export_workspace_summary_job(
+    run_db_id: int,
+    force: bool = Query(False),
+    download: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """
+    Start PDF generation in background. Uses existing export endpoint logic so
+    PDF content/caching rules stay identical.
+    """
+    _pdf_job_prune()
+
+    # Build the final URL the client will open when ready
+    pdf_url = f"/export/workspace_summary/{run_db_id}.pdf?force={'1' if force else '0'}&download={'1' if download else '0'}"
+
+    # If cached already, return ready immediately (fast path)
+    run = db.query(CalcRun).filter(CalcRun.id == run_db_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    summary = getattr(run, "summary_json", None)
+    if not summary:
+        raise HTTPException(status_code=400, detail="Run has no summary_json — cannot export workspace PDF.")
+
+    # Match your cache-key inputs used in export_workspace_summary (so HIT works)
+    warnings = summary.get("warnings", []) if isinstance(summary, dict) else []
+    if not force:
+        _export_block_if_blockers(warnings)
+
+    cache_key = _pdf_cache_key(
+        "workspace_summary_full",
+        {
+            "run_db_id": int(run_db_id),
+            "run_id": str(getattr(run, "run_id", None) or run.id),
+            "jur": str(getattr(run, "jurisdiction", "") or ""),
+            "rule": str(getattr(run, "rule_version", "") or ""),
+            "tax_year": int(getattr(run, "tax_year", 0) or 0),
+            "force": bool(force),
+        },
+    )
+    if _pdf_cache_get(cache_key) is not None:
+        job_id = _pdf_job_new({"kind": "full", "run_db_id": run_db_id})
+        _pdf_jobs[job_id]["status"] = "ready"
+        _pdf_jobs[job_id]["message"] = "Ready (cached)"
+        _pdf_jobs[job_id]["progress"] = 1.0
+        _pdf_jobs[job_id]["pdf_url"] = pdf_url
+        _pdf_jobs[job_id]["cache"] = "HIT"
+        return {"job_id": job_id, "status": "ready", "pdf_url": pdf_url, "cache": "HIT"}
+
+    job_id = _pdf_job_new({"kind": "full", "run_db_id": run_db_id, "force": force, "download": download})
+    _pdf_jobs[job_id]["status"] = "running"
+    _pdf_jobs[job_id]["message"] = "Generating PDF…"
+    _pdf_jobs[job_id]["progress"] = 0.05
+
+    async def _work():
+        try:
+            def _run_export():
+                # IMPORTANT: use a fresh DB session in the background thread.
+                # The request-scoped session from Depends(get_db) will be closed.
+                with SessionLocal() as s:
+                    export_workspace_summary(run_db_id=run_db_id, force=force, download=False, db=s)
+
+            await anyio.to_thread.run_sync(_run_export)
+
+            _pdf_jobs[job_id]["status"] = "ready"
+            _pdf_jobs[job_id]["message"] = "Ready"
+            _pdf_jobs[job_id]["progress"] = 1.0
+            _pdf_jobs[job_id]["pdf_url"] = pdf_url
+            _pdf_jobs[job_id]["cache"] = "MISS"
+        except HTTPException as e:
+            _pdf_jobs[job_id]["status"] = "error"
+            _pdf_jobs[job_id]["message"] = "Failed"
+            _pdf_jobs[job_id]["progress"] = 1.0
+            _pdf_jobs[job_id]["error"] = str(e.detail)
+        except Exception as e:
+            _pdf_jobs[job_id]["status"] = "error"
+            _pdf_jobs[job_id]["message"] = "Failed"
+            _pdf_jobs[job_id]["progress"] = 1.0
+            _pdf_jobs[job_id]["error"] = str(e)
+
+    asyncio.create_task(_work())
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.post("/export/workspace_summary/{run_db_id}/subset.pdf/job", tags=["export"])
+async def export_workspace_summary_subset_job(
+    run_db_id: int,
+    year: int | None = Query(None),
+    asset: str | None = Query(None),
+    local_area: str | None = Query(None),
+    force: bool = Query(False),
+    download: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    _pdf_job_prune()
+
+    qs = f"?year={year or ''}&asset={(asset or '')}&local_area={(local_area or '')}&force={'1' if force else '0'}&download={'1' if download else '0'}"
+    pdf_url = f"/export/workspace_summary/{run_db_id}/subset.pdf{qs}"
+
+    run = db.query(CalcRun).filter(CalcRun.id == run_db_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    raw_summary = getattr(run, "summary_json", None)
+    summary = raw_summary if isinstance(raw_summary, dict) else None
+    if not summary and raw_summary:
+        try:
+            summary = json.loads(raw_summary)
+        except Exception:
+            summary = None
+    if not summary:
+        raise HTTPException(status_code=400, detail="Run has no summary_json — cannot export workspace PDF.")
+
+    run_warnings = summary.get("warnings", []) if isinstance(summary, dict) else []
+    if not force:
+        _export_block_if_blockers(run_warnings)
+
+    asset_label = (asset or "").strip().upper() or "ALL"
+    year_label = str(year) if year else "ALL"
+
+    cache_key = _pdf_cache_key(
+        "workspace_summary_subset",
+        {
+            "run_db_id": int(run_db_id),
+            "run_id": str(getattr(run, "run_id", None) or run.id),
+            "asset": str(asset_label),
+            "year": str(year_label),
+            "local_area": str(local_area or ""),
+            "force": bool(force),
+        },
+    )
+    if _pdf_cache_get(cache_key) is not None:
+        job_id = _pdf_job_new({"kind": "subset", "run_db_id": run_db_id})
+        _pdf_jobs[job_id]["status"] = "ready"
+        _pdf_jobs[job_id]["message"] = "Ready (cached)"
+        _pdf_jobs[job_id]["progress"] = 1.0
+        _pdf_jobs[job_id]["pdf_url"] = pdf_url
+        _pdf_jobs[job_id]["cache"] = "HIT"
+        return {"job_id": job_id, "status": "ready", "pdf_url": pdf_url, "cache": "HIT"}
+
+    job_id = _pdf_job_new({"kind": "subset", "run_db_id": run_db_id, "force": force, "download": download})
+    _pdf_jobs[job_id]["status"] = "running"
+    _pdf_jobs[job_id]["message"] = "Generating PDF…"
+    _pdf_jobs[job_id]["progress"] = 0.05
+
+    async def _work():
+        try:
+            def _run_export():
+                # IMPORTANT: use a fresh DB session in the background thread.
+                with SessionLocal() as s:
+                    export_workspace_summary_subset(
+                        run_db_id=run_db_id,
+                        year=year,
+                        asset=asset,
+                        local_area=local_area,
+                        force=force,
+                        download=False,
+                        db=s,
+                    )
+
+            await anyio.to_thread.run_sync(_run_export)
+
+            _pdf_jobs[job_id]["status"] = "ready"
+            _pdf_jobs[job_id]["message"] = "Ready"
+            _pdf_jobs[job_id]["progress"] = 1.0
+            _pdf_jobs[job_id]["pdf_url"] = pdf_url
+            _pdf_jobs[job_id]["cache"] = "MISS"
+        except HTTPException as e:
+            _pdf_jobs[job_id]["status"] = "error"
+            _pdf_jobs[job_id]["message"] = "Failed"
+            _pdf_jobs[job_id]["progress"] = 1.0
+            _pdf_jobs[job_id]["error"] = str(e.detail)
+        except Exception as e:
+            _pdf_jobs[job_id]["status"] = "error"
+            _pdf_jobs[job_id]["message"] = "Failed"
+            _pdf_jobs[job_id]["progress"] = 1.0
+            _pdf_jobs[job_id]["error"] = str(e)
+
+    asyncio.create_task(_work())
+    return {"job_id": job_id, "status": "running"}
 
 @app.get("/export/calculate.pdf", summary="Download realized events (FIFO) as a PDF table")
 def export_calculate_pdf() -> StreamingResponse:
@@ -4378,6 +5291,7 @@ def export_calculate_pdf() -> StreamingResponse:
         ))
 
     events, summary, warnings = compute_fifo(tx_models)
+    _export_block_if_blockers(warnings)
 
     # Build a compact PDF listing events only (reuse helper with empty summary)
     by_quote_dummy = {}
@@ -4518,7 +5432,593 @@ def export_events_csv(run_id: str = "latest"):
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+    
 
+@app.get("/export/events_csv/preview", tags=["export"])
+def export_events_csv_preview(
+    run_id: str = "latest",
+):
+    """
+    HTML preview for realized events CSV (all rows), using virtual scrolling + paged JSON fetches.
+    """
+    with engine.begin() as conn:
+        # Resolve internal calc_runs.id from external parameter
+        if run_id == "latest":
+            row = conn.execute(
+                text("SELECT id FROM calc_runs ORDER BY id DESC LIMIT 1")
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=400, detail="No calculation runs found.")
+            run_id_val = int(row[0])
+        else:
+            try:
+                run_id_val = int(run_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid run_id")
+
+        run_meta = conn.execute(
+            text(
+                """
+                SELECT id, jurisdiction, tax_year, fx_set_id, run_id AS run_ref
+                FROM calc_runs
+                WHERE id = :rid
+                """
+            ),
+            {"rid": run_id_val},
+        ).mappings().first()
+
+        if not run_meta:
+            raise HTTPException(status_code=400, detail=f"Run metadata not found for id={run_id_val}")
+
+        total = conn.execute(
+            text("SELECT COUNT(1) AS n FROM realized_events WHERE run_id = :rid"),
+            {"rid": run_id_val},
+        ).mappings().first()
+        total_n = int(total["n"]) if total and total.get("n") is not None else 0
+
+    dl_url = f"/export/events_csv?run_id={run_id_val}"
+    data_url = f"/export/events_csv/preview_data?run_id={run_id_val}"
+    title = f"Events CSV preview — run {run_id_val}"
+
+    def esc(x: object) -> str:
+        return _html.escape("" if x is None else str(x))
+
+    html_doc = f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{esc(title)}</title>
+  <style>
+    :root {{
+      --bg0: #070b14;
+      --bg1: #0b1224;
+      --card: rgba(18, 24, 40, 0.72);
+      --border: rgba(255,255,255,0.10);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.70);
+      --muted2: rgba(255,255,255,0.55);
+      --accent: #33d6ff;
+      --accent2: #7c5cff;
+      --shadow: 0 18px 60px rgba(0,0,0,0.45);
+    }}
+
+    html, body {{ height: 100%; overflow: hidden; }}
+
+    body {{
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 20% 10%, rgba(51, 214, 255, 0.12), transparent 60%),
+        radial-gradient(900px 500px at 80% 0%, rgba(124, 92, 255, 0.12), transparent 55%),
+        radial-gradient(900px 700px at 60% 110%, rgba(51, 214, 255, 0.06), transparent 55%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+    }}
+
+    .page {{
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }}
+
+    .topbar {{
+        position: sticky;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        padding: 18px 18px 14px;
+        background: linear-gradient(180deg, rgba(7,11,20,0.94), rgba(7,11,20,0.62));
+        backdrop-filter: blur(12px);
+        border-bottom: 0; /* remove harsh line */
+        box-shadow: 0 18px 48px rgba(0,0,0,0.22);
+    }}
+
+    .topbar:after {{
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -1px;
+        height: 34px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.00));
+        opacity: 0.14;
+        pointer-events: none;
+    }}
+
+    .topbar-inner {{
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1400px;
+      margin: 0 auto;
+
+      padding: 14px 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+      box-shadow: 0 16px 54px rgba(0,0,0,0.30);
+      backdrop-filter: blur(14px);
+    }}
+
+    .title {{
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      font-size: 20px;
+      margin: 0;
+      line-height: 1.05;
+    }}
+
+    .meta {{
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.35;
+    }}
+
+    .pillrow {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted2);
+    }}
+
+    .pill {{
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+      backdrop-filter: blur(8px);
+      white-space: nowrap;
+    }}
+
+    .actions {{
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+      padding-top: 2px;
+      flex-shrink: 0;
+    }}
+
+    .btn {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text);
+      text-decoration: none;
+      background: rgba(255,255,255,0.04);
+      cursor: pointer;
+      user-select: none;
+      transition: transform .08s ease, background .12s ease, border-color .12s ease;
+    }}
+    .btn:hover {{
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.16);
+    }}
+    .btn:active {{ transform: translateY(1px); }}
+
+    .btn-primary {{
+      background: linear-gradient(135deg, rgba(51,214,255,0.26), rgba(124,92,255,0.22));
+      border-color: rgba(51,214,255,0.32);
+      box-shadow: 0 14px 38px rgba(51,214,255,0.10), 0 18px 60px rgba(0,0,0,0.25);
+    }}
+
+    .content {{
+      flex: 1;
+      padding: 0 18px 18px;
+      min-height: 0;
+
+      /* Critical: makes .card {{ flex: 1 }} take effect so the table scrolls, not the page */
+      display: flex;
+      flex-direction: column;
+    }}
+
+    .card {{
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--card);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }}
+
+    .card-head {{
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }}
+
+    .card-head-right {{
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }}
+
+    .btn-compact {{
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+    }}
+
+    .status {{
+      font-size: 12px;
+      color: var(--muted);
+    }}
+
+    .mono {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }}
+
+    .tableWrap {{
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+
+      /* Helps visibility on dark UI; harmless on Chromium/Opera */
+      scrollbar-width: auto;
+      scrollbar-color: rgba(255,255,255,0.30) rgba(255,255,255,0.06);
+    }}
+
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }}
+
+    th, td {{
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      text-align: left;
+      white-space: nowrap;
+    }}
+
+    th {{
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      font-size: 12px;
+      color: rgba(255,255,255,0.82);
+      background: linear-gradient(180deg, rgba(10,14,26,0.78), rgba(10,14,26,0.58));
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+    }}
+
+    tbody tr:nth-child(2n) td {{ background: rgba(255,255,255,0.015); }}
+    tbody tr:hover td {{ background: rgba(51,214,255,0.06); }}
+
+    td.num, th.num {{
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }}
+
+    .tableWrap::-webkit-scrollbar {{ width: 16px; height: 16px; }}
+
+    .tableWrap::-webkit-scrollbar-track {{
+      background: rgba(255,255,255,0.06);
+      border-left: 1px solid rgba(255,255,255,0.08);
+    }}
+
+    .tableWrap::-webkit-scrollbar-thumb {{
+      background: rgba(255,255,255,0.30);
+      border-radius: 999px;
+      border: 4px solid rgba(0,0,0,0);
+      background-clip: padding-box;
+    }}
+
+    .tableWrap::-webkit-scrollbar-thumb:hover {{
+      background: rgba(255,255,255,0.40);
+      background-clip: padding-box;
+    }}
+
+    .tableWrap::-webkit-scrollbar-corner {{
+      background: rgba(255,255,255,0.06);
+    }}
+
+    @media (max-width: 900px) {{
+      .card {{ height: calc(100vh - 190px); }}
+      th, td {{ padding: 9px 8px; }}
+    }}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div style="min-width:0;">
+        <div class="title">{esc(title)}</div>
+        <div class="meta">
+          Jurisdiction: {esc(run_meta.get("jurisdiction"))} • Tax year: {esc(run_meta.get("tax_year"))} • FX: {esc(run_meta.get("fx_set_id"))}
+        </div>
+        <div class="pillrow">
+          <div class="pill">Total rows: <span class="mono">{esc(total_n)}</span></div>
+          <div class="pill"><span id="st">Loading…</span></div>
+          <div class="pill mono" id="st2"></div>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="btn btn-primary" href="{esc(dl_url)}" target="_blank" rel="noopener">Download CSV</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="card">
+      <div class="card-head">
+        <div class="status">Tip: scroll to load the full dataset. The table stays smooth with virtual scrolling.</div>
+        <div class="card-head-right">
+          <div class="status mono">Run {esc(run_id_val)} • Events <span id="st3" class="mono">—</span></div>
+          <button id="btnScrollEnd" class="btn btn-compact" type="button">Scroll to end</button>
+        </div>
+      </div>
+
+      <div class="tableWrap" id="wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>timestamp</th>
+              <th>asset</th>
+              <th class="num">qty_sold</th>
+              <th class="num">proceeds_eur</th>
+              <th class="num">cost_basis_eur</th>
+              <th class="num">gain_eur</th>
+              <th>quote_asset</th>
+              <th class="num">fee_applied_eur</th>
+            </tr>
+          </thead>
+          <tbody id="tb"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {{
+  const DATA_URL = {json.dumps(data_url)};
+  const TOTAL = {int(total_n)};
+
+  const wrap = document.getElementById('wrap');
+  const tb = document.getElementById('tb');
+  const st = document.getElementById('st');
+  const st2 = document.getElementById('st2');
+  const st3 = document.getElementById('st3');
+  const btnScrollEnd = document.getElementById('btnScrollEnd');
+
+  st3.textContent = TOTAL.toLocaleString();
+  if (btnScrollEnd) {{
+    btnScrollEnd.addEventListener('click', async () => {{
+      // Ensure all rows are loaded first, then scroll after layout settles.
+      await ensureLoaded(TOTAL);
+
+      requestAnimationFrame(() => {{
+        wrap.scrollTop = wrap.scrollHeight;
+        requestAnimationFrame(() => {{
+          wrap.scrollTop = wrap.scrollHeight;
+          renderWindow(true);
+        }});
+      }});
+    }});
+  }}
+
+  const PAGE = 800;
+  const rows = [];
+  let loaded = 0;
+  let loading = false;
+  let done = false;
+
+  let rowH = 34;
+  const overscan = 14;
+  let raf = 0;
+
+  function esc(s) {{
+    const div = document.createElement('div');
+    div.textContent = (s == null ? '' : String(s));
+    return div.innerHTML;
+  }}
+
+  async function fetchPage(offset) {{
+    const u = new URL(DATA_URL, window.location.origin);
+    u.searchParams.set('offset', String(offset));
+    u.searchParams.set('limit', String(PAGE));
+    const r = await fetch(u.toString(), {{ credentials: 'same-origin' }});
+    if (!r.ok) throw new Error('fetch');
+    return await r.json();
+  }}
+
+  async function ensureLoaded(need) {{
+    if (done || loading) return;
+    if (loaded >= need) return;
+
+    loading = true;
+    st.textContent = 'Loading…';
+    try {{
+      while (loaded < need && !done) {{
+        const j = await fetchPage(loaded);
+        const items = Array.isArray(j.items) ? j.items : [];
+        for (let i = 0; i < items.length; i++) rows.push(items[i]);
+        loaded = rows.length;
+        if (!items.length || loaded >= (j.total ?? TOTAL)) done = true;
+        st2.textContent = `${{loaded.toLocaleString()}} / ${{(j.total ?? TOTAL).toLocaleString()}}`;
+        await new Promise(res => requestAnimationFrame(res));
+      }}
+    }} finally {{
+      loading = false;
+      st.textContent = done ? 'Loaded' : 'Loaded (partial)';
+      st2.textContent = `${{loaded.toLocaleString()}} / ${{TOTAL.toLocaleString()}}`;
+      renderWindow(true);
+    }}
+  }}
+
+  function renderWindow(force) {{
+    const n = rows.length;
+    if (!n) {{
+      tb.innerHTML = '';
+      return;
+    }}
+
+    const scrollTop = wrap.scrollTop;
+    const viewH = wrap.clientHeight;
+
+    const rowsPerView = Math.max(1, Math.ceil(viewH / rowH));
+    const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
+
+    // Clamp start so the final window always reaches the end.
+    const maxStart = Math.max(0, n - (rowsPerView + (overscan * 2)));
+    const start2 = Math.min(start, maxStart);
+    const end = Math.min(n, start2 + rowsPerView + (overscan * 2));
+
+    const key = `${{start2}}:${{end}}:${{n}}`;
+    if (!force && tb.getAttribute('data-vkey') === key) return;
+    tb.setAttribute('data-vkey', key);
+
+    const topPad = start2 * rowH;
+    const botPad = (n - end) * rowH;
+
+    let html = '';
+    if (topPad > 0) {{
+      html += `<tr class="sp"><td colspan="8" style="height:${{topPad}}px;padding:0;border:0;"></td></tr>`;
+    }}
+
+    for (let i = start2; i < end; i++) {{
+      const r = rows[i] || {{}};
+      html += `<tr>
+        <td>${{esc(r.timestamp)}}</td>
+        <td>${{esc(r.asset)}}</td>
+        <td class="num">${{esc(r.qty_sold)}}</td>
+        <td class="num">${{esc(r.proceeds)}}</td>
+        <td class="num">${{esc(r.cost_basis)}}</td>
+        <td class="num">${{esc(r.gain)}}</td>
+        <td>${{esc(r.quote_asset)}}</td>
+        <td class="num">${{esc(r.fee_applied)}}</td>
+      </tr>`;
+    }}
+
+    if (botPad > 0) {{
+      html += `<tr class="sp"><td colspan="8" style="height:${{botPad}}px;padding:0;border:0;"></td></tr>`;
+    }}
+
+    tb.innerHTML = html;
+
+    const tr = tb.querySelector('tr:not(.sp)');
+    if (tr) {{
+      const h = tr.getBoundingClientRect().height;
+      if (h && h >= 22 && h <= 80) rowH = h;
+    }}
+  }}
+
+  function onScroll() {{
+    if (raf) return;
+    raf = requestAnimationFrame(() => {{
+      raf = 0;
+      renderWindow(false);
+
+      const scrollBottom = wrap.scrollTop + wrap.clientHeight;
+      const needRows = Math.min(TOTAL, Math.ceil(scrollBottom / rowH) + overscan * 3);
+      ensureLoaded(needRows);
+    }});
+  }}
+
+  wrap.addEventListener('scroll', onScroll, {{ passive: true }});
+
+  const initialNeed = Math.min(TOTAL, 1400);
+  ensureLoaded(initialNeed);
+}})();
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(content=html_doc)
+
+
+@app.get("/export/events_csv/preview_data", tags=["export"])
+def export_events_csv_preview_data(
+    run_id: int = Query(..., description="calc_runs.id"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(800, ge=50, le=5000),
+):
+    """
+    JSON paging for Events CSV preview (ordered by realized_events.id).
+    """
+    with engine.begin() as conn:
+        total = conn.execute(
+            text("SELECT COUNT(1) AS n FROM realized_events WHERE run_id = :rid"),
+            {"rid": int(run_id)},
+        ).mappings().first()
+        total_n = int(total["n"]) if total and total.get("n") is not None else 0
+
+        rows = conn.execute(
+            text(
+                """
+                SELECT
+                    timestamp,
+                    asset,
+                    qty_sold,
+                    proceeds,
+                    cost_basis,
+                    gain,
+                    quote_asset,
+                    fee_applied
+                FROM realized_events
+                WHERE run_id = :rid
+                ORDER BY id
+                LIMIT :lim OFFSET :off
+                """
+            ),
+            {"rid": int(run_id), "lim": int(limit), "off": int(offset)},
+        ).mappings().all()
+
+    return JSONResponse(
+        {
+            "run_id": int(run_id),
+            "total": total_n,
+            "offset": int(offset),
+            "limit": int(limit),
+            "items": [dict(r) for r in rows],
+        }
+    )
+    
 
 @app.get("/audit/run/{run_id}")
 def audit_get_run(run_id: int):
@@ -4576,170 +6076,6 @@ def audit_verify_run(run_id: int):
     stored = {"input_hash": row[0], "output_hash": row[1], "manifest_hash": row[2]}
     ok = (stored == live)
     return {"run_id": run_id, "verified": bool(ok), "stored": stored, "recomputed": live}
-
-
-@app.post("/admin/bundle", tags=["admin"])
-def create_support_bundle(
-    request: Request,
-    _admin: None = Depends(require_bundle_admin),
-):
-    # Auth is enforced via require_bundle_admin dependency.
-    # (Header token preferred; query tokens are allowed only in dev or when explicitly enabled.)
-
-    # ------- rest of your existing implementation unchanged --------
-    script = PROJECT_ROOT / "automation" / "collect_support_bundle.py"
-    if not script.exists():
-        raise HTTPException(status_code=500, detail=f"Bundle script not found: {script}")
-
-    api_base = os.getenv("API_BASE", "http://127.0.0.1:8000")
-    tail = 300
-    ps_exe = sys.executable
-    cmd = [ps_exe, "-u", str(script), "--api-base", api_base, "--tail-lines", str(tail), "--keep-zips", "5"]
-    env = os.environ.copy()
-    env["RUN_CONTEXT"] = "api"
-
-    proc = subprocess.run(
-        cmd,
-        cwd=str(script.parent),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="ignore",
-        timeout=600,
-        env=env,
-    )
-
-    stdout = proc.stdout or ""
-    stderr = proc.stderr or ""
-    zip_path = None
-    for line in stdout.splitlines():
-        s = line.strip()
-        if s.startswith("::zip::"):
-            zip_path = s.split("::zip::", 1)[1].strip()
-            break
-    if not zip_path:
-        time.sleep(0.5)
-        zip_path = _latest_zip_path()
-    zip_exists = bool(zip_path and os.path.exists(zip_path))
-
-    if proc.returncode != 0 or not zip_exists:
-        diag = {}
-        latest_bundle_dir = _latest_bundle_dir()
-        if latest_bundle_dir:
-            def _read_if(p):
-                try:
-                    with open(p, "r", encoding="utf-8", errors="ignore") as f:
-                        return f.read()[:5000]
-                except Exception:
-                    return None
-            diag["states"] = _read_if(os.path.join(latest_bundle_dir, "_meta", "states.log"))
-            diag["fatal_error"] = _read_if(os.path.join(latest_bundle_dir, "_meta", "fatal_error.txt"))
-            diag["zip_error"] = _read_if(os.path.join(latest_bundle_dir, "_meta", "zip_error.txt"))
-
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": "Bundle not created" if proc.returncode == 0 else "Script failed",
-                "zip_path": zip_path,
-                "zip_exists": zip_exists,
-                "script": str(script),
-                "stdout": stdout,
-                "stderr": stderr,
-                "return_code": proc.returncode,
-                "ps_exe": ps_exe,
-                "support_dir": str(SUPPORT_BUNDLES_DIR),
-                "diag": diag,
-            },
-        )
-
-    return {
-        "status": "ok",
-        "zip_path": zip_path,
-        "zip_exists": zip_exists,
-        "script": str(script),
-        "stdout": stdout,
-        "stderr": stderr,
-        "return_code": proc.returncode,
-        "ps_exe": ps_exe,
-    }
-
-
-@app.post("/admin/smoke", tags=["admin"])
-def admin_smoke(_admin: None = Depends(require_admin_scripts)):
-
-    runner = PROJECT_ROOT / "automation" / "run_smoke_and_email.py"
-    if not runner.exists():
-        raise HTTPException(status_code=500, detail=f"Runner not found: {runner}")
-
-    env = os.environ.copy()
-    env.setdefault("PYTHONIOENCODING", "utf-8")
-    env["RUN_CONTEXT"] = "api"
-
-    proc = subprocess.run(
-        [sys.executable, "-u", str(runner)],
-        cwd=str(runner.parent),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=900,
-        env=env,
-    )
-
-    # Try to find the latest bundle zip after the run
-    latest_zip = _latest_zip_path()
-
-    # Tail of stdout for quick UI feedback
-    stdout_tail = (proc.stdout or "")[-8000:]
-    stderr_tail = (proc.stderr or "")[-8000:]
-
-    return {
-        "status": "ok" if proc.returncode == 0 else "error",
-        "return_code": proc.returncode,
-        "latest_bundle_zip": latest_zip,
-        "stdout_tail": stdout_tail,
-        "stderr_tail": stderr_tail,
-    }
-
-
-@app.post("/admin/git-sync", tags=["admin"])
-def admin_git_sync(_admin: None = Depends(require_admin_scripts)):
-
-    # run the script
-    proc = subprocess.run(
-        [
-            "powershell",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy", "Bypass",
-            "-File", str(GIT_SCRIPT),
-        ],
-        cwd=str(PROJECT_ROOT),        # ensure we run in repo root
-        text=True,
-        capture_output=True,
-        encoding="utf-8",
-        errors="ignore",
-    )
-
-    log_path = _latest_log()
-    log_tail = ""
-    if log_path and log_path.exists():
-        try:
-            text = log_path.read_text(encoding="utf-8", errors="ignore")
-            log_tail = text[-4000:]  # last ~4k chars
-        except Exception:
-            log_tail = "<could not read log>"
-
-    return {
-        "status": "ok" if proc.returncode == 0 else "error",
-        "script": str(GIT_SCRIPT),
-        "return_code": proc.returncode,
-        "stdout": proc.stdout,     # often empty—use log_tail for real info
-        "stderr": proc.stderr,
-        "log_path": str(log_path) if log_path else None,
-        "log_tail": log_tail,
-    }
 
 
 @app.get("/api/v1/runs", tags=["api"])
@@ -4822,10 +6158,12 @@ def api_get_run_manifest(
 @app.get("/api/v1/runs/{run_id}/events", tags=["api"])
 def api_get_run_events(
     run_id: str,
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     year: int | None = Query(None),
     asset: str | None = Query(None),
+    mode: str = Query("all", pattern="^(all|gains|losses)$"),
+    q: str | None = Query(None, description="Search (asset or date prefix)"),
     session: SASession = Depends(get_session),
 ):
     """
@@ -4853,6 +6191,21 @@ def api_get_run_events(
         if a:
             where.append("asset = :asset")
             params["asset"] = a
+    
+    # Gain mode filter (gain stored as TEXT; cast for numeric compare)
+    m = (mode or "all").strip().lower()
+    if m == "gains":
+        where.append("CAST(gain AS REAL) > 0")
+    elif m == "losses":
+        where.append("CAST(gain AS REAL) < 0")
+
+    # Search: match either asset or timestamp (simple LIKE; fast with run_id+timestamp index)
+    if q:
+        s = str(q).strip()
+        if s:
+            params["q_asset"] = f"%{s.upper()}%"
+            params["q_ts"] = f"%{s}%"
+            where.append("(UPPER(asset) LIKE :q_asset OR timestamp LIKE :q_ts)")
 
     where_sql = " AND ".join(where)
 
@@ -4959,6 +6312,10 @@ def api_get_run_tax(
         except Exception:
             summary_obj = None
 
+    warnings: list[str] = []
+    fx_context: dict[str, Any] = {}
+    fee_valuation: dict[str, Any] = {}
+
     if isinstance(summary_obj, dict):
         maybe_totals = summary_obj.get("totals") or {}
         if isinstance(maybe_totals, dict):
@@ -4974,6 +6331,18 @@ def api_get_run_tax(
                 if val is not None:
                     totals[key] = str(val)
 
+        w = summary_obj.get("warnings")
+        if isinstance(w, list):
+            warnings = [str(x) for x in w if x is not None]
+
+        fx = summary_obj.get("fx_context")
+        if isinstance(fx, dict):
+            fx_context = fx
+
+        fv = summary_obj.get("fee_valuation")
+        if isinstance(fv, dict):
+            fee_valuation = fv
+
     return {
         "run_id": str(run.run_id or rid_int),
         "run_db_id": int(run.id),
@@ -4983,229 +6352,12 @@ def api_get_run_tax(
         "lot_method": run.lot_method,
         "fx_set_id": run.fx_set_id,
         "totals": totals,
+        "warnings": warnings,
+        "warnings_count": len(warnings),
+        "fx_context": fx_context,
+        "fee_valuation": fee_valuation,
         "source": source,
     }
-
-
-@app.get("/history", tags=["history"])
-def history_index(
-    request: Request,
-    format: str = Query(
-        "json",
-        description="json for API clients and tests, html for the Recent runs page",
-    ),
-):
-    """
-    Recent runs index.
-
-    - format=json (default): returns a plain JSON list (tests and API clients).
-    - format=html: renders the Recent runs page.
-    """
-    items = _list_calc_runs_meta()
-
-    if format.lower() == "html":
-        return templates.TemplateResponse(
-            "history.html",
-            {"request": request, "runs": items},
-        )
-    return JSONResponse(items)
-
-
-@app.get("/history/{run_id}/download", summary="Download calculation run as ZIP", tags=["history"])
-def history_download(run_id: str, request: Request, session: SASession = Depends(get_session)):
-    debug = request.query_params.get("debug") == "1"
-    with SessionLocal() as session:
-        rid_int = _resolve_db_run_id(session, run_id)
-    
-    with SessionLocal() as session:
-        # Get run_id row to pull started_at (preferred for manifest.created_at)
-        row = session.execute(
-            select(CalcRun.started_at).where(CalcRun.id == rid_int)
-        ).first()
-        started_at_dt = row[0] if row else None
-
-    created_at_iso = (
-        started_at_dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-        if started_at_dt else
-        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    )
-    
-    now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-    manifest = {
-        "id": rid_int,
-        "run_id": run_id,
-        "created_at": created_at_iso,
-        # keep whatever else you already put in your manifest
-        # e.g. "files": files_list, "notes": ..., etc.
-    }
-
-    # Build a minimal bundle for this run (reusing your existing bundle builder if you have one)
-    # Here we just produce a tiny ZIP with a manifest
-    buf = io.BytesIO()
-
-    # Build manifest using a fresh, open session
-    with SessionLocal() as s:
-        manifest = _build_manifest(s, rid_int, run_id)
-
-    # Now write the manifest into the zip
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-        zf.writestr(
-            "manifest.json",
-            json.dumps(manifest, ensure_ascii=False, separators=(",", ":"))
-        )
-
-    if debug:
-        return JSONResponse(content={"run_id": run_id, "id": rid_int})
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-    tmp.write(buf.getvalue()); tmp.flush(); tmp.close()
-    filename = f"run_{run_id}.zip"
-    return FileResponse(tmp.name, media_type="application/zip", filename=filename)
-
-
-@app.get("/history/run/{run_id}/download", include_in_schema=False)
-def history_download_compat(
-    run_id: str,
-    request: Request,
-    session: SASession = Depends(get_session),
-):
-    return history_download(run_id, request, session)
-
-
-@app.get("/history/runs", response_class=JSONResponse, tags=["history"])
-def history_list_runs():
-    """
-    List all stored calculation runs with light metadata.
-    """
-    return JSONResponse({"items": _list_calc_runs_meta()})
-
-
-@app.get("/history/run/{run_id}", response_class=JSONResponse, tags=["history"])
-def history_get_run(run_id: str = PathParam(..., description="The run_id (UUID) stored on disk")):
-    data = _load_calc_run(run_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return JSONResponse(data)
-
-
-@app.delete("/history/run/{run_id}", response_class=JSONResponse, tags=["history"])
-def history_delete_run(run_id: str = PathParam(...)):
-    ok = _delete_calc_run(run_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Run not found")
-    return JSONResponse({"status": "deleted", "run_id": run_id})
-
-
-@app.get("/history/run/{run_id}/events.csv")
-def history_events_csv(run_id: str, session: SASession = Depends(get_session)):
-    """
-    Return realized events for a run as CSV.
-    Always emit a CSV header even when there are zero rows.
-
-    This uses the same column structure as /export/events_csv.
-    """
-    # Resolve external run_id → internal integer id
-    try:
-        rid_int = _resolve_db_run_id(session, run_id)
-    except HTTPException:
-        # fall back if caller passed the numeric id directly
-        try:
-            rid_int = int(run_id)
-        except Exception:
-            header = "timestamp,asset,qty_sold,proceeds_eur,cost_basis_eur,gain_eur,quote_asset,fee_applied_eur,matches_json,jurisdiction,tax_year,fx_set_id,calc_run_id,run_ref\n"
-            return Response(header, media_type="text/csv; charset=utf-8")
-
-    with engine.begin() as conn:
-        # Run metadata (for audit context)
-        run_meta = conn.execute(
-            text(
-                """
-                SELECT id, jurisdiction, tax_year, fx_set_id, run_id AS run_ref
-                FROM calc_runs
-                WHERE id = :rid
-                """
-            ),
-            {"rid": rid_int},
-        ).mappings().first()
-
-        # Events for this run
-        rows = conn.execute(
-            text(
-                """
-                SELECT
-                    timestamp,
-                    asset,
-                    qty_sold,
-                    proceeds,
-                    cost_basis,
-                    gain,
-                    quote_asset,
-                    fee_applied,
-                    matches_json
-                FROM realized_events
-                WHERE run_id = :rid
-                ORDER BY id
-                """
-            ),
-            {"rid": rid_int},
-        ).mappings().all()
-
-    output = io.StringIO()
-    w = _csv.writer(output)
-
-    # Always emit header
-    w.writerow([
-        "timestamp",
-        "asset",
-        "qty_sold",
-        "proceeds_eur",
-        "cost_basis_eur",
-        "gain_eur",
-        "quote_asset",
-        "fee_applied_eur",
-        "matches_json",
-        "jurisdiction",
-        "tax_year",
-        "fx_set_id",
-        "calc_run_id",
-        "run_ref",
-    ])
-
-    if not rows or not run_meta:
-        output.seek(0)
-        filename = f"realized_events_run_{rid_int}.csv"
-        return StreamingResponse(
-            iter([output.read()]),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename}\"'}
-        )
-
-    for r in rows:
-        w.writerow([
-            r.get("timestamp") or "",
-            r.get("asset") or "",
-            r.get("qty_sold") or "",
-            r.get("proceeds") or "",
-            r.get("cost_basis") or "",
-            r.get("gain") or "",
-            r.get("quote_asset") or "",
-            r.get("fee_applied") or "",
-            r.get("matches_json") or "",
-            run_meta.get("jurisdiction") or "",
-            run_meta.get("tax_year") or "",
-            run_meta.get("fx_set_id") or "",
-            run_meta.get("id") or rid_int,
-            run_meta.get("run_ref") or "",
-        ])
-
-    output.seek(0)
-
-    filename = f"realized_events_run_{rid_int}.csv"
-    return StreamingResponse(
-        iter([output.read()]),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'}
-    )
 
 
 @app.get("/audit/history")
@@ -5230,171 +6382,6 @@ def audit_history(limit: int = 50):
         items.append(d)
 
     return items
-
-
-@app.get("/export", response_class=HTMLResponse, tags=["export"])
-def export_ui():
-    return """
-<!doctype html><html><head><meta charset="utf-8"><title>Project Export</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;max-width:720px;margin:2rem auto;padding:0 1rem}
-#app-logo, #footer-logo { max-height: 48px; height: auto; width: auto; }
-input[type="password"]{padding:.4rem .5rem; width: 320px; max-width: 100%;}
-small{color:#666}
-</style>
-</head><body>
-<h1>Project Export</h1>
-<p>Creates a zip with source, history, logs, and (if SQLite) a DB snapshot.</p>
-
-<p><strong>Admin token required</strong> (sent via <code>X-Admin-Token</code> header).</p>
-<label>Admin token:
-  <input type="password" id="admintoken" placeholder="Enter ADMIN_TOKEN">
-</label>
-<br><small>For production safety, avoid using tokens in URLs.</small><br><br>
-
-<form id="form">
-<label><input type="checkbox" id="history" checked> Include history</label><br>
-<label><input type="checkbox" id="db" checked> Include database</label><br>
-<label><input type="checkbox" id="logs" checked> Include logs</label><br>
-<label><input type="checkbox" id="env" checked> Include .env (redacted)</label><br>
-<label><input type="checkbox" id="req" checked> Include requirements.txt</label><br>
-<label><input type="checkbox" id="pyproj" checked> Include pyproject.toml</label><br>
-<label><input type="checkbox" id="git" checked> Include git metadata</label><br><br>
-<button type="submit">Create & Download Bundle</button>
-</form>
-
-<p id="status"></p>
-
-<script>
-const form=document.getElementById('form'); const status=document.getElementById('status');
-form.addEventListener('submit', async (e)=>{
-  e.preventDefault(); status.textContent='Building bundle...';
-
-  const token = (document.getElementById('admintoken').value || '').trim();
-  if (!token) { status.textContent='Admin token is required.'; return; }
-
-  const body = {
-    include_history: document.getElementById('history').checked,
-    include_db: document.getElementById('db').checked,
-    include_logs: document.getElementById('logs').checked,
-    include_env_redacted: document.getElementById('env').checked,
-    include_requirements: document.getElementById('req').checked,
-    include_pyproject: document.getElementById('pyproj').checked,
-    include_git_meta: document.getElementById('git').checked
-  };
-
-  const res = await fetch('/export/bundle', {
-    method:'POST',
-    headers:{'Content-Type':'application/json', 'X-Admin-Token': token},
-    body: JSON.stringify(body)
-  });
-
-  if (!res.ok) { status.textContent='Failed to build bundle.'; return; }
-  const blob = await res.blob(); const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'CryptoTaxCalc_Export.zip';
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); status.textContent='Done.';
-});
-</script></body></html>
-    """
-
-
-class ExportBody(BaseModel):
-    include_history: bool = True
-    include_db: bool = True
-    include_logs: bool = True
-    include_env_redacted: bool = True
-    include_requirements: bool = True
-    include_pyproject: bool = True
-    include_git_meta: bool = True
-
-
-@app.post("/export/bundle", tags=["export"])
-def export_bundle(body: ExportBody, request: Request, _admin: None = Depends(require_admin)):
-    debug = request.query_params.get("debug") == "1"
-
-    body_dict = body.model_dump()
-
-    # Build ExportOptions in a forward/backward compatible way.
-    # This prevents 500s when the request schema evolves faster than exporter.py.
-    import inspect
-    sig = inspect.signature(ExportOptions)
-    params = set(sig.parameters.keys())
-
-    # Compatibility mapping: env toggle name changed across versions
-    if "include_env_redacted" in body_dict and "include_env_redacted" not in params:
-        if "include_env" in params and "include_env" not in body_dict:
-            body_dict["include_env"] = body_dict["include_env_redacted"]
-        body_dict.pop("include_env_redacted", None)
-
-    if "include_env" in body_dict and "include_env" not in params and "include_env_redacted" in params:
-        if "include_env_redacted" not in body_dict:
-            body_dict["include_env_redacted"] = body_dict["include_env"]
-        body_dict.pop("include_env", None)
-
-    filtered = {k: v for k, v in body_dict.items() if k in params}
-    dropped = sorted(set(body_dict.keys()) - set(filtered.keys()))
-    if dropped:
-        get_logger("export").warning("Ignoring unknown export bundle options: %s", dropped)
-
-    opts = ExportOptions(**filtered)
-
-    # exporter.build_export_zip() (current) returns a Path to the zip file.
-    # Older implementations may return raw bytes. Support both.
-    result = build_export_zip(opts)
-
-    zip_path: Path | None = None
-    zip_bytes: bytes | None = None
-
-    if isinstance(result, (bytes, bytearray, memoryview)):
-        zip_bytes = bytes(result)
-    else:
-        try:
-            zip_path = Path(result)
-        except Exception:
-            zip_path = None
-
-    if debug:
-        out = {
-            "ok": True,
-            "opts": body.model_dump(),
-            "filtered_opts": filtered,
-            "ignored_opts": dropped,
-            "result_type": type(result).__name__,
-        }
-        if zip_bytes is not None:
-            out["size"] = len(zip_bytes)
-        elif zip_path is not None and zip_path.exists():
-            out["path"] = str(zip_path)
-            out["size"] = zip_path.stat().st_size
-        return JSONResponse(content=out)
-
-    # Bytes-based bundle (fallback)
-    if zip_bytes is not None:
-        import tempfile
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-        tmp.write(zip_bytes); tmp.flush(); tmp.close()
-        return FileResponse(tmp.name, media_type="application/zip", filename="CryptoTaxCalc_Export.zip")
-
-    # Path-based bundle (current exporter.py)
-    if zip_path is None or not zip_path.exists() or not zip_path.is_file():
-        raise HTTPException(status_code=500, detail="Export bundle failed: zip not created.")
-
-    # Delete after response to avoid filling TEMP with old bundles
-    from starlette.background import BackgroundTask
-
-    def _safe_unlink(p: str) -> None:
-        try:
-            Path(p).unlink(missing_ok=True)
-        except Exception:
-            pass
-
-    return FileResponse(
-        str(zip_path),
-        media_type="application/zip",
-        filename="CryptoTaxCalc_Export.zip",
-        background=BackgroundTask(_safe_unlink, str(zip_path)),
-    )
 
 
 @app.exception_handler(Exception)
@@ -5424,113 +6411,31 @@ logger.info(f"Loaded {len(route_list)} routes.")
 
 
 app.include_router(router)
+app.include_router(data_admin_router)
+app.include_router(ui_router)
+
+if (not IS_PROD) and ENABLE_ADMIN_ENDPOINTS and ENABLE_ADMIN_SCRIPTS:
+    app.include_router(admin_ops_router)
+    app.include_router(csv_admin_router)
+    app.include_router(ops_admin_router)
+    app.include_router(export_ui_router)
+    
+    # EXE builder is an admin-scripts surface (Swagger only).
+    app.include_router(demo_build_router)
+    
+from .history_routes import router as history_router
+app.include_router(history_router)
 
 # Mount demo routes only when DEMO_MODE is enabled,
 # so production deployments don't expose /demo/* by accident.
 allow_demo_in_prod = _truthy_env(os.getenv("ALLOW_DEMO_IN_PROD"))
 if is_demo_mode_enabled() and (not IS_PROD or allow_demo_in_prod):
     app.include_router(demo_router)
-    app.include_router(demo_build_router)
 
 
 # ---------------------------------------------------------------------------
 # Static assets and demo manifest auto-loader
 # ---------------------------------------------------------------------------
-
-
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    """
-    Serve a favicon if available under /static or project root.
-    """
-    for candidate in [
-        PROJECT_ROOT / "favicon.ico",
-        STATIC_DIR / "favicon.ico",
-        PROJECT_ROOT / "logo" / "favicon.ico"
-    ]:
-        if candidate.exists():
-            return FileResponse(candidate, media_type="image/x-icon")
-    raise HTTPException(status_code=404, detail="favicon not found")
-
-
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-def landing_page(request: Request):
-    return templates.TemplateResponse("landing.html", {"request": request})
-
-@app.get("/workspace", response_class=HTMLResponse, include_in_schema=False)
-def workspace_page(request: Request):
-    """
-    Main workspace for real users (non-demo).
-    Injects user_display_name for personalization in the hero.
-    """
-
-    # -------------------------------
-    # 1) Determine the username
-    # -------------------------------
-    # If you later add authentication, replace this block.
-    # For now, we simply use a placeholder or cookie-based extraction if present.
-
-    # Preferred order:
-    # - request.state.user.full_name (future)
-    # - request.state.user.email name part
-    # - fallback to None (will show generic text)
-
-    user_display_name = None
-
-    # If in the future you attach a user object in middleware:
-    if hasattr(request.state, "user") and request.state.user:
-        u = request.state.user
-        # Try full_name first
-        if hasattr(u, "full_name") and u.full_name:
-            user_display_name = u.full_name.strip()
-        # Else fallback to email prefix
-        elif hasattr(u, "email") and u.email:
-            user_display_name = u.email.split("@")[0]
-
-    # Temporary fallback (until login system is added)
-    # COMMENT THIS OUT when real auth exists
-    if user_display_name is None:
-        user_display_name = "User"
-
-    # -------------------------------
-    # 2) Render template with name
-    # -------------------------------
-    return templates.TemplateResponse(
-        "workspace.html",
-        {
-            "request": request,
-            "user_display_name": user_display_name,
-        }
-    )
-    
-
-@app.get("/workspace/results", response_class=HTMLResponse, include_in_schema=False)
-def workspace_results_page(
-    request: Request,
-    run_id: int | None = Query(None, description="Calc run DB id (from /calculate/v2)"),
-):
-    user_display_name = None
-
-    if hasattr(request.state, "user") and request.state.user:
-        u = request.state.user
-        if hasattr(u, "full_name") and u.full_name:
-            user_display_name = u.full_name.strip()
-        elif hasattr(u, "email") and u.email:
-            user_display_name = u.email.split("@")[0]
-
-    if user_display_name is None:
-        user_display_name = "User"
-
-    return templates.TemplateResponse(
-        "workspace_results.html",
-        {
-            "request": request,
-            "user_display_name": user_display_name,
-            "run_id": run_id,
-        }
-    )
-
-
 
 @app.get("/demo/logo", include_in_schema=False)
 async def demo_logo():
@@ -5672,41 +6577,6 @@ def demo_runs_recent(limit: int = Query(10, ge=1, le=50)):
 # ============================================================
 # ONE-TIME DB RESET ENDPOINT (Safe for Option A migration)
 # ============================================================
-@app.post(
-    "/admin/reset_database_option_a",
-    tags=["admin"],
-    summary="⚠️ Reset database for Option A migration",
-    description=(
-        "WARNING: This deletes ALL transactional data.\n"
-        "Use ONLY once before applying Option A migration.\n"
-        "Requires admin token + explicit confirmation."
-    ),
-    include_in_schema=False,
-)
-def reset_database_option_a(
-    confirm: str = Query("", description="Must be 'I_UNDERSTAND' to proceed"),
-    _admin: None = Depends(require_admin),
-):
-    if confirm != "I_UNDERSTAND":
-        raise HTTPException(
-            status_code=400,
-            detail="Confirmation missing. Add ?confirm=I_UNDERSTAND to proceed (this will delete ALL data).",
-        )
-
-    with SessionLocal() as session:
-        # Child tables first (FK → calc_runs)
-        session.query(RunInput).delete()
-        session.query(RealizedEvent).delete()
-        session.query(RunDigest).delete()
-        session.query(AuditLog).delete()
-
-        # Parents after children
-        session.query(CalcRun).delete()
-        session.query(TransactionRow).delete()
-        session.query(RawEvent).delete()
-        session.commit()
-
-    return {"status": "OK", "message": "Database fully reset for Option A migration."}
 
 
 def _compute_subset_tax_split(run: CalcRun, events: list[RealizedEvent]) -> tuple[Decimal, Decimal, Decimal]:
@@ -5910,6 +6780,7 @@ def summary_filtered(
     run_id: int,
     year: int | None = Query(None),
     asset: str | None = Query(None),
+    local_area: str | None = Query(None, description="Optional local area code (e.g. ZAGREB) for HR prirez ≤ 2023"),
     db: Session = Depends(get_db),
 ):
     """
@@ -5992,15 +6863,14 @@ def summary_filtered(
     tax_year_used = int(year) if year is not None else tax_year_fallback
 
     j = (run.jurisdiction or "HR").upper().strip()
-    if j == "HR":
-        national_rate = Decimal("0.12") if tax_year_used >= 2024 else Decimal("0.10")
-    elif j == "IT":
-        national_rate = Decimal("0.33") if tax_year_used >= 2026 else Decimal("0.26")
-    else:
-        national_rate = Decimal("0")
+    tax_ctx = _tax_context_for(jurisdiction=j, tax_year=tax_year_used, local_area=local_area)
 
-    local_rate = Decimal("0")
-    effective_rate = national_rate + local_rate
+    national_rate = tax_ctx.get("national_rate", Decimal("0"))
+    local_rate = tax_ctx.get("local_rate", Decimal("0"))
+    effective_rate = tax_ctx.get("effective_rate", national_rate + local_rate)
+    rate_model = str(tax_ctx.get("rate_model", "flat"))
+    local_surtax_pct = tax_ctx.get("local_surtax_pct", Decimal("0"))
+    local_area_code = str(tax_ctx.get("local_area", "") or "")
 
     taxable_base_eur = taxable if taxable > 0 else dec0
     tax_due_eur = (taxable_base_eur * effective_rate).quantize(Decimal("0.01"))
@@ -6029,8 +6899,15 @@ def summary_filtered(
             "taxable_base_eur": str(taxable_base_eur.quantize(q2)),
             "national_rate": str(national_rate),
             "local_rate": str(local_rate),
+            "local_area": local_area_code,
+            "local_surtax_pct": str(local_surtax_pct),
+            "rate_model": rate_model,
             "effective_rate": str(effective_rate),
             "tax_due_eur": str(tax_due_eur),
+            "tax_year_used": str(tax_ctx.get("tax_year_used", tax_year_used)),
+            "rate_model": str(tax_ctx.get("rate_model") or "flat"),
+            "local_surtax_pct": str(tax_ctx.get("local_surtax_pct") or "0"),
+            "local_area": str(tax_ctx.get("local_area") or (local_area or "")),
         },
     }
 
@@ -6074,5 +6951,3 @@ def filters_meta(
     assets_out = [str(a).strip().upper() for a in assets if a and str(a).strip()]
 
     return {"run_id": run_id, "years": years_out, "assets": assets_out}
-
- 

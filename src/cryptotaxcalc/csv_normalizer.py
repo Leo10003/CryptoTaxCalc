@@ -157,23 +157,71 @@ def _parse_ledger_csv(reader, header_map) -> Tuple[List[Transaction], List[str]]
                 raise ValueError("missing Currency Ticker")
 
             op_type_raw = (row.get(header_map.get("operation type", ""), "") or "").strip().upper()
-            if op_type_raw == "IN":
-                tx_type = "BUY"
-            elif op_type_raw == "OUT":
-                tx_type = "SELL"
-            else:
-                errors.append(f"row {i}: unsupported Operation Type {op_type_raw!r}")
-                continue
-
-            base_amount = _dec(row.get(header_map.get("operation amount", "")))
+            
+            # Operation Amount (base_amount) is required for all ledger rows
+            # Use mapped header if present; fallback to the literal CSV header.
+            amt_raw = row.get(header_map.get("operation amount", "Operation Amount"), "") or ""
+            base_amount = _dec(amt_raw)
             if base_amount is None:
                 raise ValueError("Operation Amount is required")
+            
+            # Drop zero-amount rows (they create phantom transfers and cannot be resolved meaningfully)
+            try:
+                if Decimal(str(base_amount)) == 0:
+                    continue
+            except Exception:
+                pass
+
+            # Ledger Operations:
+            # - IN/OUT are wallet movements => TRANSFER
+            # - BUY/SELL are resolved ledger rows => actual BUY/SELL trades
+            if op_type_raw in {"IN", "OUT"}:
+                tx_type = "TRANSFER"
+            elif op_type_raw in {"BUY", "SELL"}:
+                tx_type = op_type_raw  # keep as BUY/SELL
+            else:
+                # Skip fees / staking actions / unknown
+                continue
+
+            # Drop dust rows only for BUY/SELL (taxable rows), not for TRANSFER history rows
+            try:
+                if tx_type in {"BUY", "SELL"} and abs(Decimal(str(base_amount))) < Decimal("0.00000001"):
+                    continue
+            except Exception:
+                pass
+            
+            # Normalize sign for wallet movements:
+            # IN increases inventory (positive), OUT decreases inventory (negative).
+            try:
+                if op_type_raw == "OUT" and base_amount > 0:
+                    base_amount = -base_amount
+                elif op_type_raw == "IN" and base_amount < 0:
+                    base_amount = -base_amount
+            except Exception:
+                pass
 
             fee_amount = _dec(row.get(header_map.get("operation fees", "")))
-            fee_asset = base_asset if fee_amount is not None else None
+            fee_asset = base_asset if (fee_amount is not None and fee_amount > 0) else None
+            
+            # Resolved ledger rows (BUY/SELL) should not treat wallet network fees as trade fees.
+            if tx_type in {"BUY", "SELL"}:
+                fee_amount = None
+                fee_asset = None
+            
+            # Persist Ledger countervalue (for later auto-fill of taxable proceeds)
+            cv_ticker = _upper_or_none(row.get(header_map.get("countervalue ticker", "")))
+            cv_amount = _dec(row.get(header_map.get("countervalue at operation date", "")))
+            fair_value = (None if cv_amount is None else Decimal(str(cv_amount)))
 
-            quote_asset = _upper_or_none(row.get(header_map.get("countervalue ticker", "")))
-            quote_amount = _dec(row.get(header_map.get("countervalue at operation date", "")))
+            # Countervalue handling:
+            # - For TRANSFER rows: keep quote empty (informational only)
+            # - For BUY/SELL rows: treat countervalue as proceeds/cost in its native ticker (EUR or USD)
+            if tx_type in {"BUY", "SELL"}:
+                quote_asset = cv_ticker
+                quote_amount = cv_amount
+            else:
+                quote_asset = None
+                quote_amount = None
 
             # Optional memo: include hash + account name for audit
             memo_parts: List[str] = []
@@ -183,6 +231,8 @@ def _parse_ledger_csv(reader, header_map) -> Tuple[List[Transaction], List[str]]
             acc_name = row.get(header_map.get("account name", ""), "")
             if acc_name:
                 memo_parts.append(f"account={acc_name}")
+            if cv_ticker:
+                memo_parts.append(f"cv_ticker={cv_ticker}")
             memo = " | ".join(memo_parts) if memo_parts else ""
 
             tx = Transaction(
@@ -196,7 +246,7 @@ def _parse_ledger_csv(reader, header_map) -> Tuple[List[Transaction], List[str]]
                 fee_amount=(None if fee_amount is None else Decimal(str(fee_amount))),
                 exchange="LEDGER_LIVE",
                 memo=memo or None,
-                fair_value=None,
+                fair_value=fair_value,
             )
             out.append(tx)
 

@@ -16,7 +16,7 @@ from datetime import datetime, date, timezone
 from typing import Optional
 
 from sqlalchemy import (
-    Column, Date, DateTime, Integer, String, Text, Index, JSON, UniqueConstraint, Float, ForeignKey, 
+    Column, Date, DateTime, Integer, String, Text, Index, JSON, UniqueConstraint, ForeignKey,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import Numeric, TypeDecorator, String
@@ -171,7 +171,7 @@ class FXRate(Base):
     date = Column(Date, nullable=False)
     base = Column(String, nullable=False, default="USD")
     quote = Column(String, nullable=False, default="EUR")
-    rate = Column(Float, nullable=False)
+    rate = Column(SqliteDecimal, nullable=False)
     batch_id = Column(Integer, ForeignKey("fx_batches.id"), nullable=True)
 
     __table_args__ = (
@@ -288,3 +288,19 @@ class RunInput(Base):
 # =========================================================
 
 TransactionRow = Transaction
+
+class WalletOutOverride(Base):
+    __tablename__ = "wallet_out_overrides"
+
+    id = Column(Integer, primary_key=True)
+    transaction_id = Column(Integer, nullable=False, index=True)
+
+    # 'transfer' (default) or 'taxable'
+    classification = Column(String(16), nullable=False, default="transfer")
+
+    # Required only when classification == 'taxable'
+    proceeds_eur = Column(Numeric(18, 8), nullable=True)
+
+    note = Column(String(255), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
