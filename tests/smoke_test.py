@@ -434,6 +434,47 @@ def _insert_deterministic_oversell_row(asset: str, memo_tag: str) -> None:
         db.close()
 
 
+def _insert_deterministic_missing_fx_rows(asset: str, memo_tag: str) -> None:
+    """
+    Insert a deterministic dataset that requires non-EUR FX conversion.
+
+    The far-past date and USD quote currency are intended to exercise strict FX
+    behavior without relying on live network access.
+    """
+    db = SessionLocal()
+    try:
+        rows = [
+            Transaction(
+                timestamp=datetime(2011, 1, 3, 12, 0, 0, tzinfo=timezone.utc),
+                type=TxType.BUY,
+                base_asset=asset,
+                base_amount=Decimal("1.00"),
+                quote_asset="USD",
+                quote_amount=Decimal("100"),
+                fee_asset="USD",
+                fee_amount=Decimal("0"),
+                exchange="SmokeDeterministic",
+                memo=f"{memo_tag}: fx buy",
+            ),
+            Transaction(
+                timestamp=datetime(2011, 1, 4, 12, 0, 0, tzinfo=timezone.utc),
+                type=TxType.SELL,
+                base_asset=asset,
+                base_amount=Decimal("1.00"),
+                quote_asset="USD",
+                quote_amount=Decimal("150"),
+                fee_asset="USD",
+                fee_amount=Decimal("0"),
+                exchange="SmokeDeterministic",
+                memo=f"{memo_tag}: fx sell",
+            ),
+        ]
+        db.add_all(rows)
+        db.commit()
+    finally:
+        db.close()
+
+
 def _decimal_from_csv_row(row: dict, *names: str) -> Decimal | None:
     for name in names:
         if name not in row:
@@ -626,6 +667,45 @@ def _payload_mentions_problem(payload: dict, asset: str) -> bool:
     return asset_upper.lower() in text and any(word in text for word in problem_words)
 
 
+def _payload_mentions_fx_problem(payload: dict, asset: str) -> bool:
+    asset_upper = asset.upper()
+    problem_words = (
+        "fx",
+        "foreign exchange",
+        "exchange rate",
+        "rate",
+        "missing",
+        "strict",
+        "fallback",
+        "unavailable",
+        "not found",
+        "cannot",
+        "error",
+        "warning",
+    )
+
+    def walk(value) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            out = []
+            for k, v in value.items():
+                out.extend(walk(k))
+                out.extend(walk(v))
+            return out
+        if isinstance(value, list):
+            out = []
+            for item in value:
+                out.extend(walk(item))
+            return out
+        return [str(value)]
+
+    text = "\n".join(walk(payload)).lower()
+    return asset_upper.lower() in text and any(word in text for word in problem_words)
+
+
 def _try_download_zip(run_id: str):
     """Try both legacy and compact endpoints, return (content, url_used, status_code, text)."""
     paths = [f"/history/{run_id}/download", f"/history/run/{run_id}/download"]
@@ -726,6 +806,42 @@ def test_oversell_without_prior_buy_does_not_crash_or_silent_pass():
         "Oversell run returned 200 but did not visibly report a warning/error "
         f"for asset {asset}. Payload was: {payload!r}"
     )
+
+
+def test_strict_fx_missing_rate_does_not_silent_pass():
+    asset = f"SMKFX{uuid.uuid4().hex[:8].upper()}"
+    memo_tag = f"smoke-strict-fx-{uuid.uuid4().hex}"
+
+    _insert_deterministic_missing_fx_rows(asset=asset, memo_tag=memo_tag)
+
+    res = client.post(
+        "/calculate/v2",
+        json={
+            "jurisdiction": "HR",
+            "strict_fx": True,
+            "fx_source": "HNB",
+        },
+    )
+
+    assert res.status_code < 500, (
+        f"/calculate/v2 must not crash when strict FX data is unavailable. "
+        f"status={res.status_code}, body={res.text[:1000]}"
+    )
+
+    if res.status_code in (400, 409, 422):
+        # Accept explicit business/validation rejection.
+        return
+
+    assert res.status_code == 200, f"Unexpected strict FX response: {res.status_code} {res.text[:1000]}"
+
+    payload = res.json()
+    assert isinstance(payload, dict), "strict FX response should be a JSON object"
+
+    assert _payload_mentions_fx_problem(payload, asset), (
+        "strict_fx=True run returned 200 but did not visibly report an FX warning/error "
+        f"for asset {asset}. Payload was: {payload!r}"
+    )
+
 
 def test_calculate_creates_run_and_persists():
     run_id, payload = _call_calculate_v2_and_get_payload()
