@@ -1150,6 +1150,13 @@ def parse_csv_stream_with_meta(
 
             quote_asset = _upper_or_none(row.get(header_map.get("quote_asset", "")))
             quote_amount = _dec(row.get(header_map.get("quote_amount", "")))
+
+            if ttype in {"buy", "sell"}:
+                if not quote_asset:
+                    raise ValueError("quote_asset is required for BUY/SELL rows")
+                if quote_amount is None:
+                    raise ValueError("quote_amount is required for BUY/SELL rows")
+
             fee_asset = _upper_or_none(row.get(header_map.get("fee_asset", "")))
             fee_amount = _dec(row.get(header_map.get("fee_amount", "")))
 
@@ -1263,6 +1270,13 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
 
             quote_asset = _upper_or_none(row.get(header_map.get("quote_asset", "")))
             quote_amount = _dec(row.get(header_map.get("quote_amount", "")))
+
+            if ttype in {"buy", "sell"}:
+                if not quote_asset:
+                    raise ValueError("quote_asset is required for BUY/SELL rows")
+                if quote_amount is None:
+                    raise ValueError("quote_amount is required for BUY/SELL rows")
+
             fee_asset = _upper_or_none(row.get(header_map.get("fee_asset", "")))
             fee_amount = _dec(row.get(header_map.get("fee_amount", "")))
 

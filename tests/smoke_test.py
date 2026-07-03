@@ -1161,6 +1161,108 @@ def test_csv_upload_or_import_rejects_missing_required_type_field():
         )
 
 
+def test_csv_upload_or_import_rejects_missing_quote_asset_for_trade():
+    csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-06-01T12:00:00Z,SELL,BTC,0.04,,600,EUR,0,SmokeCSV,missing quote asset
+"""
+
+    r, endpoint = _try_csv_upload_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV endpoint {endpoint} must not crash on missing quote_asset. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected CSV endpoint status from {endpoint}: {r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV endpoint {endpoint} should return JSON for validation feedback. "
+        f"status={r.status_code}, content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV endpoint {endpoint} accepted missing quote_asset but did not report errors. "
+        f"Response was: {data!r}"
+    )
+
+    total_valid = data.get("total_valid")
+    if isinstance(total_valid, int):
+        assert total_valid == 0, (
+            f"CSV endpoint {endpoint} should not mark a trade row with missing quote_asset as valid. "
+            f"Response was: {data!r}"
+        )
+
+    preview = data.get("preview_first_5")
+    if isinstance(preview, list):
+        assert not preview, (
+            f"CSV endpoint {endpoint} should not preview a trade row with missing quote_asset as valid. "
+            f"Response was: {data!r}"
+        )
+
+
+def test_csv_upload_or_import_rejects_missing_quote_amount_for_trade():
+    csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,,EUR,0,SmokeCSV,missing quote amount
+"""
+
+    r, endpoint = _try_csv_upload_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV endpoint {endpoint} must not crash on missing quote_amount. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected CSV endpoint status from {endpoint}: {r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV endpoint {endpoint} should return JSON for validation feedback. "
+        f"status={r.status_code}, content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV endpoint {endpoint} accepted missing quote_amount but did not report errors. "
+        f"Response was: {data!r}"
+    )
+
+    total_valid = data.get("total_valid")
+    if isinstance(total_valid, int):
+        assert total_valid == 0, (
+            f"CSV endpoint {endpoint} should not mark a trade row with missing quote_amount as valid. "
+            f"Response was: {data!r}"
+        )
+
+    preview = data.get("preview_first_5")
+    if isinstance(preview, list):
+        assert not preview, (
+            f"CSV endpoint {endpoint} should not preview a trade row with missing quote_amount as valid. "
+            f"Response was: {data!r}"
+        )
+
+
 def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
     memo_tag = f"smoke-deterministic-{uuid.uuid4().hex}"
     _insert_deterministic_btc_buy_sell_rows(memo_tag)
