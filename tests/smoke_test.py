@@ -2909,6 +2909,103 @@ not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
     )
 
 
+def test_csv_import_multiple_success_meta_reports_global_imported_year_range():
+    first_memo_tag = f"smoke-success-meta-first-{uuid.uuid4().hex}"
+    second_memo_tag = f"smoke-success-meta-second-{uuid.uuid4().hex}"
+
+    first_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2023-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{first_memo_tag} buy
+2023-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{first_memo_tag} sell
+"""
+
+    second_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2025-02-01T12:00:00Z,BUY,ETH,1.50,EUR,3000,EUR,0,SmokeCSV,{second_memo_tag} buy
+2025-07-01T12:00:00Z,SELL,ETH,0.50,EUR,1400,EUR,0,SmokeCSV,{second_memo_tag} sell
+"""
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=first_csv_text,
+        csv_text_2=second_csv_text,
+        reset=False,
+        filename_1="smoke_success_meta_2023.csv",
+        filename_2="smoke_success_meta_2025.csv",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on successful metadata test. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV multi-import endpoint {endpoint} should return JSON for successful metadata validation. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    assert _count_transactions_by_memo_fragment(first_memo_tag) == 2, (
+        f"First successful metadata file should persist exactly 2 rows. "
+        f"Response was: {r.text[:1000]}"
+    )
+
+    assert _count_transactions_by_memo_fragment(second_memo_tag) == 2, (
+        f"Second successful metadata file should persist exactly 2 rows. "
+        f"Response was: {r.text[:1000]}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Successful multi-import response should include a meta object. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") == 2023, (
+        f"Successful multi-import should report global min_year=2023. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") == 2025, (
+        f"Successful multi-import should report global max_year=2025. "
+        f"Response was: {data!r}"
+    )
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"Successful multi-import should report one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    result_years = [
+        (
+            item.get("filename"),
+            item.get("min_year"),
+            item.get("max_year"),
+        )
+        for item in results
+        if isinstance(item, dict)
+    ]
+
+    assert ("smoke_success_meta_2023.csv", 2023, 2023) in result_years, (
+        f"First file should report per-file year range 2023..2023. "
+        f"Result years were: {result_years!r}. Response was: {data!r}"
+    )
+
+    assert ("smoke_success_meta_2025.csv", 2025, 2025) in result_years, (
+        f"Second file should report per-file year range 2025..2025. "
+        f"Result years were: {result_years!r}. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
