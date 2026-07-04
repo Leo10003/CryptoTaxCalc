@@ -2559,6 +2559,157 @@ not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
     )
 
 
+def test_csv_import_multiple_reset_preflight_results_include_source_metadata():
+    existing_memo_tag = f"smoke-reset-source-existing-{uuid.uuid4().hex}"
+    replacement_memo_tag = f"smoke-reset-source-valid-{uuid.uuid4().hex}"
+    bad_memo_tag = f"smoke-reset-source-bad-{uuid.uuid4().hex}"
+
+    existing_filename = "smoke_reset_source_existing.csv"
+    replacement_filename = "smoke_reset_source_valid.csv"
+    bad_filename = "smoke_reset_source_bad.csv"
+
+    existing_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,DOGE,1000,EUR,100,EUR,0,SmokeCSV,{existing_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,DOGE,400,EUR,80,EUR,0,SmokeCSV,{existing_memo_tag} sell
+"""
+
+    replacement_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-02-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{replacement_memo_tag} buy
+2024-07-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{replacement_memo_tag} sell
+"""
+
+    malformed_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
+"""
+
+    r1, endpoint = _try_csv_import_multiple_endpoint(
+        existing_csv_text,
+        reset=False,
+        filename=existing_filename,
+    )
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r1.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on setup import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+
+    assert r1.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint} rejected setup import: "
+        f"{r1.status_code} {r1.text[:1000]}"
+    )
+
+    existing_count_before_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    replacement_count_before_reset = _count_transactions_by_memo_fragment(replacement_memo_tag)
+    bad_count_before_reset = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    assert existing_count_before_reset == 2, (
+        f"Setup import should persist exactly 2 existing rows. "
+        f"count={existing_count_before_reset}, response={r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=replacement_csv_text,
+        csv_text_2=malformed_csv_text,
+        reset=True,
+        filename_1=replacement_filename,
+        filename_2=bad_filename,
+    )
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint2} must not crash on reset preflight metadata test. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    existing_count_after_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    replacement_count_after_reset = _count_transactions_by_memo_fragment(replacement_memo_tag)
+    bad_count_after_reset = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    assert existing_count_after_reset == existing_count_before_reset, (
+        f"reset=true malformed preflight should preserve existing rows. "
+        f"before={existing_count_before_reset}, after={existing_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert replacement_count_after_reset == replacement_count_before_reset, (
+        f"reset=true malformed preflight should not persist valid replacement rows. "
+        f"before={replacement_count_before_reset}, after={replacement_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert bad_count_after_reset == bad_count_before_reset, (
+        f"reset=true malformed preflight should not persist bad replacement rows. "
+        f"before={bad_count_before_reset}, after={bad_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    if r2.status_code in (400, 409, 422):
+        return
+
+    assert r2.status_code in (200, 201, 202), (
+        f"Unexpected reset preflight source metadata status from {endpoint2}: "
+        f"{r2.status_code} {r2.text[:1000]}"
+    )
+
+    ct = r2.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint2} should return JSON validation feedback. "
+        f"content-type={ct}, body={r2.text[:1000]}"
+    )
+
+    data = r2.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint2} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"CSV multi-import endpoint {endpoint2} should return result entries for both reset files. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == replacement_filename, (
+        f"First result should correspond to the valid replacement file. "
+        f"Expected {replacement_filename!r}, got {results[0].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == bad_filename, (
+        f"Second result should correspond to the malformed replacement file. "
+        f"Expected {bad_filename!r}, got {results[1].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    for index in (0, 1):
+        result = results[index]
+
+        assert result.get("recognized_source_id"), (
+            f"Result {index} should include recognized_source_id. Response was: {data!r}"
+        )
+
+        assert result.get("recognized_source_name"), (
+            f"Result {index} should include recognized_source_name. Response was: {data!r}"
+        )
+
+        assert result.get("recognized_source_status"), (
+            f"Result {index} should include recognized_source_status. Response was: {data!r}"
+        )
+
+        confidence = result.get("recognized_source_confidence")
+        assert isinstance(confidence, (int, float)), (
+            f"Result {index} should include numeric recognized_source_confidence. "
+            f"Response was: {data!r}"
+        )
+
+    assert _csv_response_reports_errors({"results": [results[1]]}), (
+        f"Malformed reset file result should still report errors. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
