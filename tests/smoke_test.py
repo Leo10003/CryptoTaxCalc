@@ -3412,6 +3412,54 @@ def test_csv_import_wrapper_duplicate_file_does_not_create_duplicate_transaction
     )
 
 
+def test_csv_import_wrapper_returns_deprecation_warning_header():
+    memo_tag = f"smoke-wrapper-warning-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    r, endpoint = _try_csv_import_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/csv"), (
+        f"This deprecation warning test should use /import/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on deprecation warning test. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV import endpoint {endpoint} rejected valid wrapper warning import: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    warning = r.headers.get("warning") or r.headers.get("Warning")
+    assert warning, (
+        f"Deprecated CSV import endpoint {endpoint} should return a Warning header. "
+        f"Headers were: {dict(r.headers)!r}"
+    )
+
+    warning_lower = warning.lower()
+
+    assert "deprecated" in warning_lower, (
+        f"Warning header should mention deprecation. Warning was: {warning!r}"
+    )
+
+    assert "import/multiple" in warning_lower, (
+        f"Warning header should tell clients to use /import/multiple. Warning was: {warning!r}"
+    )
+
+    assert _count_transactions_by_memo_fragment(memo_tag) == 2, (
+        f"Wrapper warning import should still persist exactly 2 rows. Response was: {r.text[:1000]}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
