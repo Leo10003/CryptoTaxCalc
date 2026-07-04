@@ -888,6 +888,58 @@ def _try_csv_upload_endpoint(csv_text: str):
     pytest.skip("No CSV upload/import endpoint is available in this build")
 
 
+def _try_csv_import_endpoint(csv_text: str):
+    """
+    Try known CSV import/save endpoints.
+
+    Returns:
+      (response, endpoint_used)
+
+    The test skips if this build does not expose a CSV import endpoint.
+    """
+    endpoints = [
+        "/import/csv",
+        "/api/import/csv",
+        "/api/v1/import/csv",
+    ]
+
+    for endpoint in endpoints:
+        files = {
+            "file": (
+                "smoke_transactions.csv",
+                csv_text.encode("utf-8"),
+                "text/csv",
+            )
+        }
+
+        r = client.post(endpoint, files=files)
+
+        if r.status_code not in (404, 405):
+            return r, endpoint
+
+    pytest.skip("No CSV import/save endpoint is available in this build")
+
+
+def _count_transactions_by_memo_fragment(fragment: str) -> int:
+    db = SessionLocal()
+    try:
+        return int(
+            db.execute(
+                text(
+                    """
+                    SELECT COUNT(*)
+                    FROM transactions
+                    WHERE memo LIKE :memo_fragment
+                    """
+                ),
+                {"memo_fragment": f"%{fragment}%"},
+            ).scalar()
+            or 0
+        )
+    finally:
+        db.close()
+
+
 def _csv_response_reports_success(data: dict) -> bool:
     """
     Accept multiple response shapes from preview/import endpoints.
@@ -967,6 +1019,41 @@ def _csv_response_reports_errors(data: dict) -> bool:
 # --------------------------------------------------------------------------------------
 # Tests
 # --------------------------------------------------------------------------------------
+def test_csv_import_persists_valid_buy_sell_rows():
+    memo_tag = f"smoke-import-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on valid CSV. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (404, 405):
+        pytest.skip(f"CSV import endpoint {endpoint} is not available in this build")
+
+    assert r.status_code in (200, 201, 202, 204), (
+        f"CSV import endpoint {endpoint} rejected valid CSV: {r.status_code} {r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    assert after_count - before_count == 2, (
+        f"CSV import endpoint {endpoint} should persist exactly 2 rows with memo tag {memo_tag!r}. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
