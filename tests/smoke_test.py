@@ -3144,6 +3144,82 @@ def test_csv_import_multiple_reset_success_meta_reports_global_replacement_year_
     )
 
 
+def test_csv_import_wrapper_success_meta_reports_imported_year_range():
+    memo_tag = f"smoke-wrapper-success-meta-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    r, endpoint = _try_csv_import_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/csv"), (
+        f"This wrapper metadata test should use /import/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on wrapper metadata import. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV import endpoint {endpoint} should return JSON for wrapper metadata validation. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV import endpoint {endpoint} should return JSON. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV import endpoint {endpoint} should return a JSON object"
+
+    assert _count_transactions_by_memo_fragment(memo_tag) == 2, (
+        f"Wrapper import should persist exactly 2 rows. Response was: {r.text[:1000]}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Wrapper import response should include a meta object. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") == 2022, (
+        f"Wrapper import should report global min_year=2022. Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") == 2024, (
+        f"Wrapper import should report global max_year=2024. Response was: {data!r}"
+    )
+
+    results = data.get("results")
+    assert isinstance(results, list) and results, (
+        f"Wrapper import should return a non-empty results list. Response was: {data!r}"
+    )
+
+    first_result = results[0]
+    assert first_result.get("filename") == "smoke_transactions.csv", (
+        f"Wrapper import result should report uploaded filename. Response was: {data!r}"
+    )
+
+    assert first_result.get("inserted") == 2, (
+        f"Wrapper import should report inserted=2. Response was: {data!r}"
+    )
+
+    assert first_result.get("min_year") == 2022, (
+        f"Wrapper import result should report min_year=2022. Response was: {data!r}"
+    )
+
+    assert first_result.get("max_year") == 2024, (
+        f"Wrapper import result should report max_year=2024. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
