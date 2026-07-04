@@ -3528,6 +3528,105 @@ not-a-date,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} invalid sell
     )
 
 
+def test_csv_import_wrapper_duplicate_response_returns_deprecation_warning_header():
+    memo_tag = f"smoke-wrapper-dupe-warning-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    r1, endpoint = _try_csv_import_endpoint(csv_text)
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/csv"), (
+        f"This duplicate deprecation warning test should use /import/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r1.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on first duplicate warning import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+
+    assert r1.status_code in (200, 201, 202), (
+        f"CSV import endpoint {endpoint} rejected first duplicate warning import: "
+        f"{r1.status_code} {r1.text[:1000]}"
+    )
+
+    assert _count_transactions_by_memo_fragment(memo_tag) == 2, (
+        f"First wrapper duplicate warning import should persist exactly 2 rows. "
+        f"Response was: {r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_endpoint(csv_text)
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV import endpoint {endpoint2} must not crash on duplicate warning import. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    assert r2.status_code in (200, 201, 202), (
+        f"CSV import endpoint {endpoint2} rejected duplicate warning import unexpectedly: "
+        f"{r2.status_code} {r2.text[:1000]}"
+    )
+
+    assert _count_transactions_by_memo_fragment(memo_tag) == 2, (
+        f"Duplicate wrapper warning import should not create additional rows. "
+        f"Response was: {r2.text[:1000]}"
+    )
+
+    warning = r2.headers.get("warning") or r2.headers.get("Warning")
+    assert warning, (
+        f"Deprecated CSV import endpoint {endpoint2} should return a Warning header on duplicate import. "
+        f"Headers were: {dict(r2.headers)!r}"
+    )
+
+    warning_lower = warning.lower()
+
+    assert "deprecated" in warning_lower, (
+        f"Warning header should mention deprecation. Warning was: {warning!r}"
+    )
+
+    assert "import/multiple" in warning_lower, (
+        f"Warning header should tell clients to use /import/multiple. Warning was: {warning!r}"
+    )
+
+    ct = r2.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"Duplicate wrapper warning response should be JSON. "
+        f"content-type={ct}, body={r2.text[:1000]}"
+    )
+
+    data = r2.json()
+    assert isinstance(data, dict), f"Duplicate wrapper warning response should be a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and results, (
+        f"Duplicate wrapper warning response should include results. Response was: {data!r}"
+    )
+
+    first_result = results[0]
+
+    inserted = first_result.get("inserted")
+    if isinstance(inserted, int):
+        assert inserted == 0, (
+            f"Duplicate wrapper warning import should report inserted=0. Response was: {data!r}"
+        )
+
+    skipped_duplicates = first_result.get("skipped_duplicates")
+    if isinstance(skipped_duplicates, int):
+        assert skipped_duplicates >= 2, (
+            f"Duplicate wrapper warning import should report skipped_duplicates>=2. "
+            f"Response was: {data!r}"
+        )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
