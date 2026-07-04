@@ -920,6 +920,49 @@ def _try_csv_import_endpoint(csv_text: str):
     pytest.skip("No CSV import/save endpoint is available in this build")
 
 
+def _try_csv_import_multiple_endpoint(
+    csv_text: str,
+    reset: bool = False,
+    filename: str = "smoke_transactions.csv",
+):
+    """
+    Try known CSV multi-file import/save endpoints.
+
+    Returns:
+      (response, endpoint_used)
+
+    The test skips if this build does not expose a CSV multi-import endpoint.
+    """
+    endpoints = [
+        "/import/multiple",
+        "/api/import/multiple",
+        "/api/v1/import/multiple",
+    ]
+
+    for endpoint in endpoints:
+        files = [
+            (
+                "files",
+                (
+                    filename,
+                    csv_text.encode("utf-8"),
+                    "text/csv",
+                ),
+            )
+        ]
+
+        r = client.post(
+            endpoint,
+            params={"reset": "true" if reset else "false"},
+            files=files,
+        )
+
+        if r.status_code not in (404, 405):
+            return r, endpoint
+
+    pytest.skip("No CSV multi-import endpoint is available in this build")
+
+
 def _count_transactions_by_memo_fragment(fragment: str) -> int:
     db = SessionLocal()
     try:
@@ -1189,6 +1232,94 @@ def test_csv_import_duplicate_file_does_not_create_duplicate_transactions():
                 if isinstance(skipped_duplicates, int):
                     assert skipped_duplicates >= 2, (
                         f"Duplicate import should report at least 2 skipped duplicates. "
+                        f"Response was: {data!r}"
+                    )
+
+
+def test_csv_import_multiple_reset_replaces_existing_transactions():
+    old_memo_tag = f"smoke-reset-old-{uuid.uuid4().hex}"
+    new_memo_tag = f"smoke-reset-new-{uuid.uuid4().hex}"
+
+    old_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{old_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{old_memo_tag} sell
+"""
+
+    new_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-02-01T12:00:00Z,BUY,ETH,1.50,EUR,3000,EUR,0,SmokeCSV,{new_memo_tag} buy
+2024-07-01T12:00:00Z,SELL,ETH,0.50,EUR,1400,EUR,0,SmokeCSV,{new_memo_tag} sell
+"""
+
+    r1, endpoint = _try_csv_import_multiple_endpoint(
+        old_csv_text,
+        reset=False,
+        filename="smoke_reset_old.csv",
+    )
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r1.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on initial import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+
+    assert r1.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint} rejected initial valid import: "
+        f"{r1.status_code} {r1.text[:1000]}"
+    )
+
+    old_count_after_first = _count_transactions_by_memo_fragment(old_memo_tag)
+    assert old_count_after_first == 2, (
+        f"Initial multi-import should persist exactly 2 old rows. "
+        f"count={old_count_after_first}, response={r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_multiple_endpoint(
+        new_csv_text,
+        reset=True,
+        filename="smoke_reset_new.csv",
+    )
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint2} must not crash on reset import. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    assert r2.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint2} rejected valid reset import: "
+        f"{r2.status_code} {r2.text[:1000]}"
+    )
+
+    old_count_after_reset = _count_transactions_by_memo_fragment(old_memo_tag)
+    new_count_after_reset = _count_transactions_by_memo_fragment(new_memo_tag)
+
+    assert old_count_after_reset == 0, (
+        f"reset=true should remove old imported transaction rows. "
+        f"old_count_after_reset={old_count_after_reset}, response={r2.text[:1000]}"
+    )
+
+    assert new_count_after_reset == 2, (
+        f"reset=true should persist exactly 2 replacement rows. "
+        f"new_count_after_reset={new_count_after_reset}, response={r2.text[:1000]}"
+    )
+
+    if r2.status_code != 204:
+        ct = r2.headers.get("content-type", "").lower()
+        if "application/json" in ct:
+            data = r2.json()
+            assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint2} should return JSON"
+
+            results = data.get("results")
+            if isinstance(results, list) and results:
+                inserted = results[0].get("inserted")
+                if isinstance(inserted, int):
+                    assert inserted == 2, (
+                        f"reset import should report inserted=2 for replacement file. "
                         f"Response was: {data!r}"
                     )
 
