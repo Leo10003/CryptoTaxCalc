@@ -3460,6 +3460,74 @@ def test_csv_import_wrapper_returns_deprecation_warning_header():
     )
 
 
+def test_csv_import_wrapper_malformed_response_returns_deprecation_warning_header():
+    memo_tag = f"smoke-wrapper-bad-warning-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} valid-looking buy
+not-a-date,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} invalid sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/csv"), (
+        f"This malformed deprecation warning test should use /import/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on malformed warning test. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"Malformed wrapper warning import should not persist rows. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    warning = r.headers.get("warning") or r.headers.get("Warning")
+    assert warning, (
+        f"Deprecated CSV import endpoint {endpoint} should return a Warning header even on malformed input. "
+        f"Headers were: {dict(r.headers)!r}"
+    )
+
+    warning_lower = warning.lower()
+
+    assert "deprecated" in warning_lower, (
+        f"Warning header should mention deprecation. Warning was: {warning!r}"
+    )
+
+    assert "import/multiple" in warning_lower, (
+        f"Warning header should tell clients to use /import/multiple. Warning was: {warning!r}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected malformed wrapper warning status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"Malformed wrapper warning response should be JSON. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"Malformed wrapper warning response should be a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"Malformed wrapper warning response should report validation errors. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
