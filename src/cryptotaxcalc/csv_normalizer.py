@@ -1171,6 +1171,17 @@ def parse_csv_stream_with_meta(
             if None in row:
                 raise ValueError("row has more columns than the CSV header")
 
+            missing_column_values = [
+                str(header)
+                for header, value in row.items()
+                if header is not None and value is None
+            ]
+            if missing_column_values:
+                raise ValueError(
+                    "row has fewer columns than the CSV header: "
+                    + ", ".join(missing_column_values)
+                )
+
             ts = _parse_ts(row[header_map["timestamp"]])
 
             ttype = (row.get(header_map.get("type", ""), "") or "").strip().lower()
@@ -1344,6 +1355,17 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
         try:
             if None in row:
                 raise ValueError("row has more columns than the CSV header")
+
+            missing_column_values = [
+                str(header)
+                for header, value in row.items()
+                if header is not None and value is None
+            ]
+            if missing_column_values:
+                raise ValueError(
+                    "row has fewer columns than the CSV header: "
+                    + ", ".join(missing_column_values)
+                )
 
             ts = _parse_ts(row[header_map["timestamp"]])
 
