@@ -2710,6 +2710,82 @@ not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
     )
 
 
+def test_csv_import_multiple_malformed_preflight_meta_has_no_imported_year_range():
+    valid_memo_tag = f"smoke-meta-valid-{uuid.uuid4().hex}"
+    bad_memo_tag = f"smoke-meta-bad-{uuid.uuid4().hex}"
+
+    valid_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{valid_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{valid_memo_tag} sell
+"""
+
+    malformed_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
+"""
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=valid_csv_text,
+        csv_text_2=malformed_csv_text,
+        reset=False,
+        filename_1="smoke_meta_valid.csv",
+        filename_2="smoke_meta_bad.csv",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on malformed preflight meta test. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert _count_transactions_by_memo_fragment(valid_memo_tag) == 0, (
+        f"Malformed preflight batch should not persist valid file rows. "
+        f"Response was: {r.text[:1000]}"
+    )
+
+    assert _count_transactions_by_memo_fragment(bad_memo_tag) == 0, (
+        f"Malformed preflight batch should not persist bad file rows. "
+        f"Response was: {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected malformed preflight meta status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON validation feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"Malformed preflight batch should report validation errors. Response was: {data!r}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Malformed preflight response should include a meta object. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") is None, (
+        f"Malformed preflight response should not expose global min_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") is None, (
+        f"Malformed preflight response should not expose global max_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
