@@ -3139,7 +3139,11 @@ async def import_multiple(
     # Batch preflight: parse every file before any transaction rows are deleted
     # or inserted. This makes /import/multiple atomic at the batch level:
     # if any file has validation errors, no file in the same request is imported.
-    preflight_errors: list[dict[str, Any]] = []
+    #
+    # Keep one result entry per uploaded file so the UI can map validation cards
+    # back to the original upload order.
+    preflight_results: list[dict[str, Any]] = []
+    preflight_has_errors = False
 
     for file in files:
         filename = file.filename or "(no-name)"
@@ -3148,7 +3152,7 @@ async def import_multiple(
             await file.seek(0)
             text_stream = io.TextIOWrapper(file.file, encoding="utf-8-sig", errors="replace", newline="")
             try:
-                _valid_rows, parse_errors, csv_meta = parse_csv_stream_with_meta(
+                valid_rows, parse_errors, csv_meta = parse_csv_stream_with_meta(
                     text_stream,
                     filename=filename,
                 )
@@ -3159,7 +3163,8 @@ async def import_multiple(
                     pass
 
             if parse_errors:
-                preflight_errors.append({
+                preflight_has_errors = True
+                preflight_results.append({
                     "filename": filename,
                     "inserted": 0,
                     "skipped_duplicates": 0,
@@ -3167,9 +3172,35 @@ async def import_multiple(
                     "errors": parse_errors[:20],
                     **(csv_meta or {}),
                 })
+            else:
+                file_min_year = None
+                file_max_year = None
+
+                for tx in valid_rows:
+                    try:
+                        y = tx.timestamp.year
+                    except Exception:
+                        continue
+
+                    if file_min_year is None or y < file_min_year:
+                        file_min_year = y
+
+                    if file_max_year is None or y > file_max_year:
+                        file_max_year = y
+
+                preflight_results.append({
+                    "filename": filename,
+                    "inserted": 0,
+                    "skipped_duplicates": 0,
+                    "skipped_errors": 0,
+                    "min_year": file_min_year,
+                    "max_year": file_max_year,
+                    **(csv_meta or {}),
+                })
 
         except CSVFormatError as e:
-            preflight_errors.append({
+            preflight_has_errors = True
+            preflight_results.append({
                 "filename": filename,
                 "inserted": 0,
                 "skipped_duplicates": 0,
@@ -3179,7 +3210,8 @@ async def import_multiple(
             })
 
         except Exception as e:
-            preflight_errors.append({
+            preflight_has_errors = True
+            preflight_results.append({
                 "filename": filename,
                 "inserted": 0,
                 "skipped_duplicates": 0,
@@ -3193,9 +3225,9 @@ async def import_multiple(
             except Exception:
                 pass
 
-    if preflight_errors:
+    if preflight_has_errors:
         return {
-            "results": preflight_errors,
+            "results": preflight_results,
             "meta": {
                 "min_year": None,
                 "max_year": None,

@@ -2218,6 +2218,106 @@ not-a-date,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{first_memo_tag} invalid timesta
     )
 
 
+def test_csv_import_multiple_reports_mixed_batch_results_in_upload_order():
+    valid_memo_tag = f"smoke-mixed-order-valid-{uuid.uuid4().hex}"
+    bad_memo_tag = f"smoke-mixed-order-bad-{uuid.uuid4().hex}"
+
+    valid_filename = "smoke_mixed_order_valid.csv"
+    bad_filename = "smoke_mixed_order_bad.csv"
+
+    valid_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{valid_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{valid_memo_tag} sell
+"""
+
+    malformed_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
+"""
+
+    before_valid_count = _count_transactions_by_memo_fragment(valid_memo_tag)
+    before_bad_count = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=valid_csv_text,
+        csv_text_2=malformed_csv_text,
+        reset=False,
+        filename_1=valid_filename,
+        filename_2=bad_filename,
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on mixed ordered multi-file import. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_valid_count = _count_transactions_by_memo_fragment(valid_memo_tag)
+    after_bad_count = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    assert after_valid_count == before_valid_count, (
+        f"Mixed malformed batch should not persist rows from the valid file. "
+        f"before={before_valid_count}, after={after_valid_count}, response={r.text[:1000]}"
+    )
+
+    assert after_bad_count == before_bad_count, (
+        f"Mixed malformed batch should not persist rows from the malformed file. "
+        f"before={before_bad_count}, after={after_bad_count}, response={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected mixed ordered CSV multi-import status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON validation feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list), (
+        f"CSV multi-import endpoint {endpoint} should return a results list. "
+        f"Response was: {data!r}"
+    )
+
+    assert len(results) >= 2, (
+        f"Mixed malformed batch should report one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == valid_filename, (
+        f"First result should correspond to first uploaded valid file. "
+        f"Expected {valid_filename!r}, got {results[0].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == bad_filename, (
+        f"Second result should correspond to second uploaded malformed file. "
+        f"Expected {bad_filename!r}, got {results[1].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    first_inserted = results[0].get("inserted")
+    if isinstance(first_inserted, int):
+        assert first_inserted == 0, (
+            f"Preflight failure should report inserted=0 for valid file in malformed batch. "
+            f"Response was: {data!r}"
+        )
+
+    assert _csv_response_reports_errors({"results": [results[1]]}), (
+        f"Malformed file result should report errors. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
