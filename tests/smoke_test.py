@@ -963,6 +963,59 @@ def _try_csv_import_multiple_endpoint(
     pytest.skip("No CSV multi-import endpoint is available in this build")
 
 
+def _try_csv_import_multiple_two_files_endpoint(
+    csv_text_1: str,
+    csv_text_2: str,
+    reset: bool = False,
+    filename_1: str = "smoke_transactions.csv",
+    filename_2: str = "smoke_transactions.csv",
+):
+    """
+    Try known CSV multi-file import/save endpoints with two uploaded files.
+
+    Returns:
+      (response, endpoint_used)
+
+    The test skips if this build does not expose a CSV multi-import endpoint.
+    """
+    endpoints = [
+        "/import/multiple",
+        "/api/import/multiple",
+        "/api/v1/import/multiple",
+    ]
+
+    for endpoint in endpoints:
+        files = [
+            (
+                "files",
+                (
+                    filename_1,
+                    csv_text_1.encode("utf-8"),
+                    "text/csv",
+                ),
+            ),
+            (
+                "files",
+                (
+                    filename_2,
+                    csv_text_2.encode("utf-8"),
+                    "text/csv",
+                ),
+            ),
+        ]
+
+        r = client.post(
+            endpoint,
+            params={"reset": "true" if reset else "false"},
+            files=files,
+        )
+
+        if r.status_code not in (404, 405):
+            return r, endpoint
+
+    pytest.skip("No CSV multi-import endpoint is available in this build")
+
+
 def _count_transactions_by_memo_fragment(fragment: str) -> int:
     db = SessionLocal()
     try:
@@ -1322,6 +1375,77 @@ def test_csv_import_multiple_reset_replaces_existing_transactions():
                         f"reset import should report inserted=2 for replacement file. "
                         f"Response was: {data!r}"
                     )
+
+
+def test_csv_import_multiple_duplicate_filenames_do_not_duplicate_transactions():
+    memo_tag = f"smoke-multifile-dupe-name-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=csv_text,
+        csv_text_2=csv_text,
+        reset=False,
+        filename_1="same_name.csv",
+        filename_2="same_name.csv",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on duplicate filenames. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        # Explicit duplicate-filename / duplicate-content rejection is acceptable.
+        return
+
+    assert r.status_code in (200, 201, 202, 204), (
+        f"Unexpected CSV multi-import status from {endpoint}: {r.status_code} {r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    assert after_count - before_count == 2, (
+        f"Two identical files with duplicate filenames should not create duplicate transaction rows. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    if r.status_code != 204:
+        ct = r.headers.get("content-type", "").lower()
+        if "application/json" in ct:
+            data = r.json()
+            assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return JSON"
+
+            results = data.get("results")
+            if isinstance(results, list) and len(results) >= 2:
+                total_inserted = sum(
+                    item.get("inserted", 0)
+                    for item in results
+                    if isinstance(item, dict) and isinstance(item.get("inserted", 0), int)
+                )
+                total_skipped_duplicates = sum(
+                    item.get("skipped_duplicates", 0)
+                    for item in results
+                    if isinstance(item, dict) and isinstance(item.get("skipped_duplicates", 0), int)
+                )
+
+                assert total_inserted == 2, (
+                    f"Duplicate same-content files should insert only 2 total rows. "
+                    f"Response was: {data!r}"
+                )
+
+                assert total_skipped_duplicates >= 2, (
+                    f"Second duplicate file should report at least 2 skipped duplicates. "
+                    f"Response was: {data!r}"
+                )
 
 
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
