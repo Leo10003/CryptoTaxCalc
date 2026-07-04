@@ -3136,6 +3136,72 @@ async def import_multiple(
     global_min_year = None
     global_max_year = None
 
+    # Batch preflight: parse every file before any transaction rows are deleted
+    # or inserted. This makes /import/multiple atomic at the batch level:
+    # if any file has validation errors, no file in the same request is imported.
+    preflight_errors: list[dict[str, Any]] = []
+
+    for file in files:
+        filename = file.filename or "(no-name)"
+
+        try:
+            await file.seek(0)
+            text_stream = io.TextIOWrapper(file.file, encoding="utf-8-sig", errors="replace", newline="")
+            try:
+                _valid_rows, parse_errors, csv_meta = parse_csv_stream_with_meta(
+                    text_stream,
+                    filename=filename,
+                )
+            finally:
+                try:
+                    text_stream.detach()
+                except Exception:
+                    pass
+
+            if parse_errors:
+                preflight_errors.append({
+                    "filename": filename,
+                    "inserted": 0,
+                    "skipped_duplicates": 0,
+                    "skipped_errors": len(parse_errors),
+                    "errors": parse_errors[:20],
+                    **(csv_meta or {}),
+                })
+
+        except CSVFormatError as e:
+            preflight_errors.append({
+                "filename": filename,
+                "inserted": 0,
+                "skipped_duplicates": 0,
+                "skipped_errors": 1,
+                "errors": [str(e)],
+                **(e.meta or {}),
+            })
+
+        except Exception as e:
+            preflight_errors.append({
+                "filename": filename,
+                "inserted": 0,
+                "skipped_duplicates": 0,
+                "skipped_errors": 1,
+                "errors": [f"Failed to parse CSV: {e}"],
+            })
+
+        finally:
+            try:
+                await file.seek(0)
+            except Exception:
+                pass
+
+    if preflight_errors:
+        return {
+            "results": preflight_errors,
+            "meta": {
+                "min_year": None,
+                "max_year": None,
+            },
+        }
+
     # For workspace / paid flows we call /import/multiple?reset=1 so that
     # the new dataset replaces any previous uploads. In demo mode we keep
     # the same behavior as before.

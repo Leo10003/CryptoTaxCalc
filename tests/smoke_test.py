@@ -1448,6 +1448,78 @@ def test_csv_import_multiple_duplicate_filenames_do_not_duplicate_transactions()
                 )
 
 
+def test_csv_import_multiple_rejects_malformed_batch_without_partial_persistence():
+    valid_memo_tag = f"smoke-batch-valid-{uuid.uuid4().hex}"
+    bad_memo_tag = f"smoke-batch-bad-{uuid.uuid4().hex}"
+
+    valid_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{valid_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{valid_memo_tag} sell
+"""
+
+    malformed_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
+"""
+
+    before_valid_count = _count_transactions_by_memo_fragment(valid_memo_tag)
+    before_bad_count = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=valid_csv_text,
+        csv_text_2=malformed_csv_text,
+        reset=False,
+        filename_1="smoke_batch_valid.csv",
+        filename_2="smoke_batch_bad.csv",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on mixed valid/malformed batch. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (404, 405):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} is not available in this build")
+
+    after_valid_count = _count_transactions_by_memo_fragment(valid_memo_tag)
+    after_bad_count = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    assert after_valid_count == before_valid_count, (
+        f"CSV multi-import endpoint {endpoint} should not persist the valid file "
+        f"when another file in the same batch is malformed. "
+        f"before={before_valid_count}, after={after_valid_count}, response={r.text[:1000]}"
+    )
+
+    assert after_bad_count == before_bad_count, (
+        f"CSV multi-import endpoint {endpoint} should not persist malformed file rows. "
+        f"before={before_bad_count}, after={after_bad_count}, response={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected mixed-batch CSV import status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON validation feedback. "
+        f"status={r.status_code}, content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV multi-import endpoint {endpoint} accepted a malformed batch but did not report errors. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
