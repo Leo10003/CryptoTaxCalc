@@ -1101,6 +1101,23 @@ def parse_csv_stream_with_meta(
                 normalized_headers.append(normalized)
             header_map[normalized] = str(h)
 
+    blank_headers = [
+        str(h)
+        for h in (reader.fieldnames or [])
+        if h is None or not str(h).strip()
+    ]
+    if blank_headers:
+        meta_obj = detect_csv_source(
+            headers=headers_raw,
+            filename=filename,
+            delimiter=getattr(dialect, "delimiter", None),
+            quotechar=getattr(dialect, "quotechar", None),
+        )
+        raise CSVFormatError(
+            "Blank CSV header(s) are not allowed",
+            meta=_source_meta_to_dict(meta_obj),
+        )
+
     duplicate_headers = sorted(
         {h for h in normalized_headers if normalized_headers.count(h) > 1}
     )
@@ -1252,6 +1269,23 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             if normalized:
                 normalized_headers.append(normalized)
             header_map[normalized] = str(h)
+
+    blank_headers = [
+        str(h)
+        for h in (reader.fieldnames or [])
+        if h is None or not str(h).strip()
+    ]
+    if blank_headers:
+        meta_obj = detect_csv_source(
+            headers=headers_raw,
+            filename=filename,
+            delimiter=getattr(dialect, "delimiter", None),
+            quotechar=getattr(dialect, "quotechar", None),
+        )
+        raise CSVFormatError(
+            "Blank CSV header(s) are not allowed",
+            meta=_source_meta_to_dict(meta_obj),
+        )
 
     duplicate_headers = sorted(
         {h for h in normalized_headers if normalized_headers.count(h) > 1}
