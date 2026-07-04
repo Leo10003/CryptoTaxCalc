@@ -983,6 +983,10 @@ def _csv_response_reports_errors(data: dict) -> bool:
     Accept multiple response shapes from CSV preview/import validation.
 
     We want malformed CSVs to be visibly rejected or reported with errors.
+    Supports both top-level preview responses and nested import responses:
+      {"errors": [...]}
+      {"total_errors": 1}
+      {"results": [{"errors": [...], "skipped_errors": 1}]}
     """
     numeric_error_fields = (
         "total_errors",
@@ -993,25 +997,32 @@ def _csv_response_reports_errors(data: dict) -> bool:
         "rows_invalid",
     )
 
-    for field in numeric_error_fields:
-        value = data.get(field)
-        if isinstance(value, int) and value >= 1:
-            return True
+    def object_reports_errors(obj) -> bool:
+        if not isinstance(obj, dict):
+            return False
 
-    errors = data.get("errors")
-    if isinstance(errors, list) and len(errors) >= 1:
+        for field in numeric_error_fields:
+            value = obj.get(field)
+            if isinstance(value, int) and value >= 1:
+                return True
+
+        for field in ("errors", "issues", "detail"):
+            value = obj.get(field)
+
+            if isinstance(value, list) and len(value) >= 1:
+                return True
+
+            if isinstance(value, str) and value.strip():
+                return True
+
+        return False
+
+    if object_reports_errors(data):
         return True
 
-    issues = data.get("issues")
-    if isinstance(issues, list) and len(issues) >= 1:
-        return True
-
-    detail = data.get("detail")
-    if isinstance(detail, list) and len(detail) >= 1:
-        return True
-
-    if isinstance(detail, str) and detail.strip():
-        return True
+    results = data.get("results")
+    if isinstance(results, list):
+        return any(object_reports_errors(item) for item in results)
 
     return False
 
@@ -1051,6 +1062,59 @@ def test_csv_import_persists_valid_buy_sell_rows():
     assert after_count - before_count == 2, (
         f"CSV import endpoint {endpoint} should persist exactly 2 rows with memo tag {memo_tag!r}. "
         f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+
+def test_csv_import_rejects_malformed_file_without_partial_persistence():
+    memo_tag = f"smoke-import-bad-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} valid-looking buy
+not-a-date,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} invalid sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on malformed CSV. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (404, 405):
+        pytest.skip(f"CSV import endpoint {endpoint} is not available in this build")
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    assert after_count == before_count, (
+        f"CSV import endpoint {endpoint} should not partially persist rows from malformed files. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected malformed CSV import status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV import endpoint {endpoint} should return JSON validation feedback. "
+        f"status={r.status_code}, content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV import endpoint {endpoint} accepted malformed CSV but did not report errors. "
+        f"Response was: {data!r}"
     )
 
 

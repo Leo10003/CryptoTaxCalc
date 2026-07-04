@@ -3195,7 +3195,18 @@ async def import_multiple(
                     pass
             
             skipped_errors += len(parse_errors)
-            
+
+            if parse_errors:
+                results.append({
+                    "filename": filename,
+                    "inserted": 0,
+                    "skipped_duplicates": 0,
+                    "skipped_errors": len(parse_errors),
+                    "errors": parse_errors[:20],
+                    **(csv_meta or {}),
+                })
+                continue
+
             # Detect year range in this file for smart defaults in the wizard
             file_min_year = None
             file_max_year = None
