@@ -1168,6 +1168,9 @@ def parse_csv_stream_with_meta(
 
     for i, row in enumerate(reader, start=2):  # header is row 1
         try:
+            if None in row:
+                raise ValueError("row has more columns than the CSV header")
+
             ts = _parse_ts(row[header_map["timestamp"]])
 
             ttype = (row.get(header_map.get("type", ""), "") or "").strip().lower()
@@ -1339,6 +1342,9 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
 
     for i, row in enumerate(reader, start=2):  # header is row 1
         try:
+            if None in row:
+                raise ValueError("row has more columns than the CSV header")
+
             ts = _parse_ts(row[header_map["timestamp"]])
 
             ttype = (row.get(header_map.get("type", ""), "") or "").strip().lower()
