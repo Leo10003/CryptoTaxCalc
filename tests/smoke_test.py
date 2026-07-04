@@ -2460,6 +2460,105 @@ not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
     )
 
 
+def test_csv_import_multiple_mixed_preflight_results_include_source_metadata():
+    valid_memo_tag = f"smoke-source-valid-{uuid.uuid4().hex}"
+    bad_memo_tag = f"smoke-source-bad-{uuid.uuid4().hex}"
+
+    valid_filename = "smoke_source_valid.csv"
+    bad_filename = "smoke_source_bad.csv"
+
+    valid_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{valid_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{valid_memo_tag} sell
+"""
+
+    malformed_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
+"""
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=valid_csv_text,
+        csv_text_2=malformed_csv_text,
+        reset=False,
+        filename_1=valid_filename,
+        filename_2=bad_filename,
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on mixed preflight source metadata test. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected mixed preflight source metadata status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON validation feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"CSV multi-import endpoint {endpoint} should return result entries for both files. "
+        f"Response was: {data!r}"
+    )
+
+    for index, expected_filename in enumerate((valid_filename, bad_filename)):
+        result = results[index]
+
+        assert result.get("filename") == expected_filename, (
+            f"Result {index} should correspond to {expected_filename!r}. "
+            f"Response was: {data!r}"
+        )
+
+        assert result.get("recognized_source_id"), (
+            f"Result {index} should include recognized_source_id. "
+            f"Response was: {data!r}"
+        )
+
+        assert result.get("recognized_source_name"), (
+            f"Result {index} should include recognized_source_name. "
+            f"Response was: {data!r}"
+        )
+
+        assert result.get("recognized_source_status"), (
+            f"Result {index} should include recognized_source_status. "
+            f"Response was: {data!r}"
+        )
+
+        confidence = result.get("recognized_source_confidence")
+        assert isinstance(confidence, (int, float)), (
+            f"Result {index} should include numeric recognized_source_confidence. "
+            f"Response was: {data!r}"
+        )
+
+    assert _csv_response_reports_errors({"results": [results[1]]}), (
+        f"Malformed file result should still report errors. Response was: {data!r}"
+    )
+
+    assert _count_transactions_by_memo_fragment(valid_memo_tag) == 0, (
+        f"Mixed malformed preflight batch should not persist valid file rows. "
+        f"Response was: {r.text[:1000]}"
+    )
+
+    assert _count_transactions_by_memo_fragment(bad_memo_tag) == 0, (
+        f"Mixed malformed preflight batch should not persist malformed file rows. "
+        f"Response was: {r.text[:1000]}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
