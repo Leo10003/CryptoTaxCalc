@@ -1722,6 +1722,93 @@ def test_csv_import_multiple_reset_with_duplicate_files_replaces_once():
                 )
 
 
+def test_csv_import_multiple_accepts_two_different_valid_files():
+    btc_memo_tag = f"smoke-multifile-btc-{uuid.uuid4().hex}"
+    eth_memo_tag = f"smoke-multifile-eth-{uuid.uuid4().hex}"
+
+    btc_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{btc_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{btc_memo_tag} sell
+"""
+
+    eth_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-02-01T12:00:00Z,BUY,ETH,1.50,EUR,3000,EUR,0,SmokeCSV,{eth_memo_tag} buy
+2024-07-01T12:00:00Z,SELL,ETH,0.50,EUR,1400,EUR,0,SmokeCSV,{eth_memo_tag} sell
+"""
+
+    btc_before_count = _count_transactions_by_memo_fragment(btc_memo_tag)
+    eth_before_count = _count_transactions_by_memo_fragment(eth_memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=btc_csv_text,
+        csv_text_2=eth_csv_text,
+        reset=False,
+        filename_1="smoke_multifile_btc.csv",
+        filename_2="smoke_multifile_eth.csv",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on two valid files. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint} rejected two valid files: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    btc_after_count = _count_transactions_by_memo_fragment(btc_memo_tag)
+    eth_after_count = _count_transactions_by_memo_fragment(eth_memo_tag)
+
+    assert btc_after_count - btc_before_count == 2, (
+        f"First valid file should persist exactly 2 BTC rows. "
+        f"before={btc_before_count}, after={btc_after_count}, response={r.text[:1000]}"
+    )
+
+    assert eth_after_count - eth_before_count == 2, (
+        f"Second valid file should persist exactly 2 ETH rows. "
+        f"before={eth_before_count}, after={eth_after_count}, response={r.text[:1000]}"
+    )
+
+    if r.status_code != 204:
+        ct = r.headers.get("content-type", "").lower()
+        if "application/json" in ct:
+            data = r.json()
+            assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return JSON"
+
+            results = data.get("results")
+            if isinstance(results, list):
+                assert len(results) >= 2, (
+                    f"CSV multi-import endpoint {endpoint} should report one result per uploaded file. "
+                    f"Response was: {data!r}"
+                )
+
+                total_inserted = sum(
+                    item.get("inserted", 0)
+                    for item in results
+                    if isinstance(item, dict) and isinstance(item.get("inserted", 0), int)
+                )
+
+                total_errors = sum(
+                    item.get("skipped_errors", 0)
+                    for item in results
+                    if isinstance(item, dict) and isinstance(item.get("skipped_errors", 0), int)
+                )
+
+                assert total_inserted == 4, (
+                    f"Two different valid files should report 4 inserted rows total. "
+                    f"Response was: {data!r}"
+                )
+
+                assert total_errors == 0, (
+                    f"Two different valid files should not report parse errors. "
+                    f"Response was: {data!r}"
+                )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
