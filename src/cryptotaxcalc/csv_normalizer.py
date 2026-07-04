@@ -1140,6 +1140,9 @@ def parse_csv_stream_with_meta(
             if ttype in {"transfer_in", "transfer_out", "transfer-in", "transfer-out"}:
                 ttype = "transfer"
 
+            if ttype not in {"buy", "sell", "transfer"}:
+                raise ValueError(f"unsupported type: {ttype!r}")
+
             base_asset = _upper_or_none(row.get(header_map.get("base_asset", "")))
             if not base_asset:
                 raise ValueError("base_asset is required")
@@ -1271,6 +1274,10 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             # Normalize transfer variants to a single canonical type.
             if ttype in {"transfer_in", "transfer_out", "transfer-in", "transfer-out"}:
                 ttype = "transfer"
+
+            if ttype not in {"buy", "sell", "transfer"}:
+                raise ValueError(f"unsupported type: {ttype!r}")
+
             base_asset = _upper_or_none(row.get(header_map.get("base_asset", "")))
             if not base_asset:
                 raise ValueError("base_asset is required")
