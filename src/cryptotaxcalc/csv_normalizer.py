@@ -1089,12 +1089,32 @@ def parse_csv_stream_with_meta(
     # Map headers (case-insensitive)
     header_map: dict[str, str] = {}
     headers_raw: List[str] = []
+    normalized_headers: List[str] = []
+
     if reader.fieldnames:
         headers_raw = [str(h) for h in reader.fieldnames if h is not None]
         for h in reader.fieldnames:
             if h is None:
                 continue
-            header_map[str(h).lower().strip()] = str(h)
+            normalized = str(h).lower().strip()
+            if normalized:
+                normalized_headers.append(normalized)
+            header_map[normalized] = str(h)
+
+    duplicate_headers = sorted(
+        {h for h in normalized_headers if normalized_headers.count(h) > 1}
+    )
+    if duplicate_headers:
+        meta_obj = detect_csv_source(
+            headers=headers_raw,
+            filename=filename,
+            delimiter=getattr(dialect, "delimiter", None),
+            quotechar=getattr(dialect, "quotechar", None),
+        )
+        raise CSVFormatError(
+            f"Duplicate CSV header(s): {', '.join(duplicate_headers)}",
+            meta=_source_meta_to_dict(meta_obj),
+        )
 
     meta_obj = detect_csv_source(
         headers=headers_raw,
@@ -1221,12 +1241,32 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
     # Map headers (case-insensitive)
     header_map: dict[str, str] = {}
     headers_raw: List[str] = []
+    normalized_headers: List[str] = []
+
     if reader.fieldnames:
         headers_raw = [str(h) for h in reader.fieldnames if h is not None]
         for h in reader.fieldnames:
             if h is None:
                 continue
-            header_map[str(h).lower().strip()] = str(h)
+            normalized = str(h).lower().strip()
+            if normalized:
+                normalized_headers.append(normalized)
+            header_map[normalized] = str(h)
+
+    duplicate_headers = sorted(
+        {h for h in normalized_headers if normalized_headers.count(h) > 1}
+    )
+    if duplicate_headers:
+        meta_obj = detect_csv_source(
+            headers=headers_raw,
+            filename=filename,
+            delimiter=getattr(dialect, "delimiter", None),
+            quotechar=getattr(dialect, "quotechar", None),
+        )
+        raise CSVFormatError(
+            f"Duplicate CSV header(s): {', '.join(duplicate_headers)}",
+            meta=_source_meta_to_dict(meta_obj),
+        )
 
     meta_obj = detect_csv_source(
         headers=headers_raw,
