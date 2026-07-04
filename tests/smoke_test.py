@@ -1969,6 +1969,54 @@ def test_csv_upload_or_import_rejects_non_csv_filename_cleanly():
     )
 
 
+def test_csv_upload_or_import_handles_header_only_file_cleanly():
+    csv_text = "timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo\n"
+
+    r, endpoint = _try_csv_upload_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV endpoint {endpoint} must not crash on header-only CSV. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        # Explicit validation/business rejection is acceptable.
+        return
+
+    assert r.status_code in (200, 201, 202, 204), (
+        f"Unexpected CSV endpoint status from {endpoint}: {r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code == 204:
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV endpoint {endpoint} should return JSON for header-only CSV feedback. "
+        f"status={r.status_code}, content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV endpoint {endpoint} should return a JSON object"
+
+    total_valid = data.get("total_valid")
+    if isinstance(total_valid, int):
+        assert total_valid == 0, (
+            f"CSV endpoint {endpoint} should not mark header-only CSV as having valid rows. "
+            f"Response was: {data!r}"
+        )
+
+    preview = data.get("preview_first_5")
+    if isinstance(preview, list):
+        assert preview == [], (
+            f"CSV endpoint {endpoint} should not preview rows for header-only CSV. "
+            f"Response was: {data!r}"
+        )
+
+
 def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
     memo_tag = f"smoke-deterministic-{uuid.uuid4().hex}"
     _insert_deterministic_btc_buy_sell_rows(memo_tag)
