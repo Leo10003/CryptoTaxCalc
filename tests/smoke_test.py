@@ -2122,6 +2122,102 @@ def test_csv_import_multiple_reports_results_in_upload_order():
     )
 
 
+def test_csv_import_multiple_reports_malformed_results_in_upload_order():
+    first_memo_tag = f"smoke-bad-order-first-{uuid.uuid4().hex}"
+    second_memo_tag = f"smoke-bad-order-second-{uuid.uuid4().hex}"
+
+    first_filename = "smoke_bad_order_first.csv"
+    second_filename = "smoke_bad_order_second.csv"
+
+    first_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+not-a-date,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{first_memo_tag} invalid timestamp
+"""
+
+    second_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-02-01T12:00:00Z,SELL,,0.50,EUR,1400,EUR,0,SmokeCSV,{second_memo_tag} missing asset
+"""
+
+    before_first_count = _count_transactions_by_memo_fragment(first_memo_tag)
+    before_second_count = _count_transactions_by_memo_fragment(second_memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=first_csv_text,
+        csv_text_2=second_csv_text,
+        reset=False,
+        filename_1=first_filename,
+        filename_2=second_filename,
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on ordered malformed multi-file import. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_first_count = _count_transactions_by_memo_fragment(first_memo_tag)
+    after_second_count = _count_transactions_by_memo_fragment(second_memo_tag)
+
+    assert after_first_count == before_first_count, (
+        f"Malformed first file should not persist rows. "
+        f"before={before_first_count}, after={after_first_count}, response={r.text[:1000]}"
+    )
+
+    assert after_second_count == before_second_count, (
+        f"Malformed second file should not persist rows. "
+        f"before={before_second_count}, after={after_second_count}, response={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        return
+
+    assert r.status_code in (200, 201, 202), (
+        f"Unexpected malformed ordered CSV multi-import status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON validation feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list), (
+        f"CSV multi-import endpoint {endpoint} should return a results list. "
+        f"Response was: {data!r}"
+    )
+
+    assert len(results) >= 2, (
+        f"CSV multi-import endpoint {endpoint} should report one result per malformed uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == first_filename, (
+        f"First error result should correspond to first uploaded malformed file. "
+        f"Expected {first_filename!r}, got {results[0].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == second_filename, (
+        f"Second error result should correspond to second uploaded malformed file. "
+        f"Expected {second_filename!r}, got {results[1].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert _csv_response_reports_errors({"results": [results[0]]}), (
+        f"First malformed file result should report errors. Response was: {data!r}"
+    )
+
+    assert _csv_response_reports_errors({"results": [results[1]]}), (
+        f"Second malformed file result should report errors. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
