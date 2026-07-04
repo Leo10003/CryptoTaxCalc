@@ -3006,6 +3006,144 @@ def test_csv_import_multiple_success_meta_reports_global_imported_year_range():
     )
 
 
+def test_csv_import_multiple_reset_success_meta_reports_global_replacement_year_range():
+    old_memo_tag = f"smoke-reset-success-meta-old-{uuid.uuid4().hex}"
+    first_memo_tag = f"smoke-reset-success-meta-first-{uuid.uuid4().hex}"
+    second_memo_tag = f"smoke-reset-success-meta-second-{uuid.uuid4().hex}"
+
+    old_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,DOGE,1000,EUR,100,EUR,0,SmokeCSV,{old_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,DOGE,400,EUR,80,EUR,0,SmokeCSV,{old_memo_tag} sell
+"""
+
+    first_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2023-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{first_memo_tag} buy
+2023-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{first_memo_tag} sell
+"""
+
+    second_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2025-02-01T12:00:00Z,BUY,ETH,1.50,EUR,3000,EUR,0,SmokeCSV,{second_memo_tag} buy
+2025-07-01T12:00:00Z,SELL,ETH,0.50,EUR,1400,EUR,0,SmokeCSV,{second_memo_tag} sell
+"""
+
+    r1, endpoint = _try_csv_import_multiple_endpoint(
+        old_csv_text,
+        reset=False,
+        filename="smoke_reset_success_meta_old.csv",
+    )
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r1.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on setup import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+
+    assert r1.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint} rejected setup import: "
+        f"{r1.status_code} {r1.text[:1000]}"
+    )
+
+    old_count_after_setup = _count_transactions_by_memo_fragment(old_memo_tag)
+    assert old_count_after_setup == 2, (
+        f"Setup import should persist exactly 2 old rows. "
+        f"count={old_count_after_setup}, response={r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=first_csv_text,
+        csv_text_2=second_csv_text,
+        reset=True,
+        filename_1="smoke_reset_success_meta_2023.csv",
+        filename_2="smoke_reset_success_meta_2025.csv",
+    )
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint2} must not crash on reset metadata import. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    assert r2.status_code in (200, 201, 202), (
+        f"CSV multi-import endpoint {endpoint2} should return JSON for reset metadata validation. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    ct = r2.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint2} should return JSON. "
+        f"content-type={ct}, body={r2.text[:1000]}"
+    )
+
+    data = r2.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint2} should return a JSON object"
+
+    old_count_after_reset = _count_transactions_by_memo_fragment(old_memo_tag)
+    first_count_after_reset = _count_transactions_by_memo_fragment(first_memo_tag)
+    second_count_after_reset = _count_transactions_by_memo_fragment(second_memo_tag)
+
+    assert old_count_after_reset == 0, (
+        f"reset=true should remove old rows before successful replacement import. "
+        f"old_count_after_reset={old_count_after_reset}, response={r2.text[:1000]}"
+    )
+
+    assert first_count_after_reset == 2, (
+        f"First reset metadata file should persist exactly 2 rows. "
+        f"count={first_count_after_reset}, response={r2.text[:1000]}"
+    )
+
+    assert second_count_after_reset == 2, (
+        f"Second reset metadata file should persist exactly 2 rows. "
+        f"count={second_count_after_reset}, response={r2.text[:1000]}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Successful reset multi-import response should include a meta object. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") == 2023, (
+        f"Successful reset multi-import should report replacement min_year=2023. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") == 2025, (
+        f"Successful reset multi-import should report replacement max_year=2025. "
+        f"Response was: {data!r}"
+    )
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"Successful reset multi-import should report one result per replacement file. "
+        f"Response was: {data!r}"
+    )
+
+    result_years = [
+        (
+            item.get("filename"),
+            item.get("min_year"),
+            item.get("max_year"),
+        )
+        for item in results
+        if isinstance(item, dict)
+    ]
+
+    assert ("smoke_reset_success_meta_2023.csv", 2023, 2023) in result_years, (
+        f"First replacement file should report per-file year range 2023..2023. "
+        f"Result years were: {result_years!r}. Response was: {data!r}"
+    )
+
+    assert ("smoke_reset_success_meta_2025.csv", 2025, 2025) in result_years, (
+        f"Second replacement file should report per-file year range 2025..2025. "
+        f"Result years were: {result_years!r}. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
