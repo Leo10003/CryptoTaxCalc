@@ -3627,6 +3627,64 @@ def test_csv_import_wrapper_duplicate_response_returns_deprecation_warning_heade
         )
 
 
+def test_csv_import_multiple_rejects_non_csv_filename_cleanly():
+    memo_tag = f"smoke-multiple-non-csv-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} valid content wrong extension
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_endpoint(
+        csv_text,
+        reset=False,
+        filename="smoke_transactions.txt",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on non-CSV filename. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"CSV multi-import endpoint {endpoint} should not persist rows from non-CSV filename. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected non-CSV filename status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for non-CSV filename feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV multi-import endpoint {endpoint} accepted non-CSV filename but did not report errors. "
+        f"Response was: {data!r}"
+    )
+
+    text = json.dumps(data, default=str).lower()
+    assert ".csv" in text or "csv" in text or "file" in text, (
+        f"CSV multi-import endpoint {endpoint} should explain non-CSV filename rejection. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy

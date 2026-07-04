@@ -3148,6 +3148,25 @@ async def import_multiple(
     for file in files:
         filename = file.filename or "(no-name)"
 
+        if not filename.lower().endswith(".csv"):
+            preflight_has_errors = True
+            preflight_results.append({
+                "filename": filename,
+                "inserted": 0,
+                "skipped_duplicates": 0,
+                "skipped_errors": 1,
+                "errors": ["Only .csv files are supported"],
+                "recognized_source_id": "unknown",
+                "recognized_source_name": "Unknown",
+                "recognized_source_status": "unsupported",
+                "recognized_source_confidence": 0.0,
+            })
+            try:
+                await file.seek(0)
+            except Exception:
+                pass
+            continue
+
         try:
             await file.seek(0)
             text_stream = io.TextIOWrapper(file.file, encoding="utf-8-sig", errors="replace", newline="")
@@ -3250,6 +3269,20 @@ async def import_multiple(
         inserted = 0
         skipped_duplicates = 0
         skipped_errors = 0
+
+        if not filename.lower().endswith(".csv"):
+            results.append({
+                "filename": filename,
+                "inserted": 0,
+                "skipped_duplicates": 0,
+                "skipped_errors": 1,
+                "errors": ["Only .csv files are supported"],
+                "recognized_source_id": "unknown",
+                "recognized_source_name": "Unknown",
+                "recognized_source_status": "unsupported",
+                "recognized_source_confidence": 0.0,
+            })
+            continue
 
         blob_path = None
         raw_event_id = None
