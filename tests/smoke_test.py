@@ -2043,6 +2043,85 @@ not-a-date,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{bad_memo_tag} invalid timestamp
     )
 
 
+def test_csv_import_multiple_reports_results_in_upload_order():
+    first_memo_tag = f"smoke-order-first-{uuid.uuid4().hex}"
+    second_memo_tag = f"smoke-order-second-{uuid.uuid4().hex}"
+
+    first_filename = "smoke_order_first.csv"
+    second_filename = "smoke_order_second.csv"
+
+    first_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{first_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{first_memo_tag} sell
+"""
+
+    second_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-02-01T12:00:00Z,BUY,ETH,1.50,EUR,3000,EUR,0,SmokeCSV,{second_memo_tag} buy
+2024-07-01T12:00:00Z,SELL,ETH,0.50,EUR,1400,EUR,0,SmokeCSV,{second_memo_tag} sell
+"""
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=first_csv_text,
+        csv_text_2=second_csv_text,
+        reset=False,
+        filename_1=first_filename,
+        filename_2=second_filename,
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on ordered multi-file import. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV multi-import endpoint {endpoint} should return JSON for ordered result validation. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list), (
+        f"CSV multi-import endpoint {endpoint} should return a results list. "
+        f"Response was: {data!r}"
+    )
+
+    assert len(results) >= 2, (
+        f"CSV multi-import endpoint {endpoint} should report one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == first_filename, (
+        f"First result should correspond to first uploaded file. "
+        f"Expected {first_filename!r}, got {results[0].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == second_filename, (
+        f"Second result should correspond to second uploaded file. "
+        f"Expected {second_filename!r}, got {results[1].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert _count_transactions_by_memo_fragment(first_memo_tag) == 2, (
+        f"First ordered file should persist exactly 2 rows. Response was: {r.text[:1000]}"
+    )
+
+    assert _count_transactions_by_memo_fragment(second_memo_tag) == 2, (
+        f"Second ordered file should persist exactly 2 rows. Response was: {r.text[:1000]}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
