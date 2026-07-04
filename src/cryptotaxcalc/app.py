@@ -2922,7 +2922,7 @@ async def import_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
     """
     # Reuse the same function you use inside /import/multiple for a single file.
     # NOTE: /import/multiple is async, so we await it.
-    result = await import_multiple([file])
+    result = await import_multiple([file], reset=False)
 
     # Add a gentle deprecation warning header.
     return JSONResponse(result, headers={"Warning": '299 - "Deprecated; use /import/multiple"'})

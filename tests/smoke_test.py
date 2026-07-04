@@ -1118,6 +1118,81 @@ not-a-date,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} invalid sell
     )
 
 
+def test_csv_import_duplicate_file_does_not_create_duplicate_transactions():
+    memo_tag = f"smoke-import-dupe-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r1, endpoint = _try_csv_import_endpoint(csv_text)
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert r1.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on first duplicate test import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+    assert r1.status_code in (200, 201, 202, 204), (
+        f"CSV import endpoint {endpoint} rejected first valid import: {r1.status_code} {r1.text[:1000]}"
+    )
+
+    after_first_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_first_count - before_count == 2, (
+        f"First CSV import should persist exactly 2 rows. "
+        f"before={before_count}, after_first={after_first_count}, response={r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_endpoint(csv_text)
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV import endpoint {endpoint2} must not crash on duplicate import. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+    assert r2.status_code in (200, 201, 202, 204), (
+        f"CSV import endpoint {endpoint2} rejected duplicate import unexpectedly: "
+        f"{r2.status_code} {r2.text[:1000]}"
+    )
+
+    after_second_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_second_count == after_first_count, (
+        f"Duplicate CSV import should not create additional transaction rows. "
+        f"after_first={after_first_count}, after_second={after_second_count}, response={r2.text[:1000]}"
+    )
+
+    if r2.status_code != 204:
+        ct = r2.headers.get("content-type", "").lower()
+        if "application/json" in ct:
+            data = r2.json()
+            assert isinstance(data, dict), f"CSV import endpoint {endpoint2} should return a JSON object"
+
+            results = data.get("results")
+            if isinstance(results, list) and results:
+                first_result = results[0]
+                inserted = first_result.get("inserted")
+                skipped_duplicates = first_result.get("skipped_duplicates")
+
+                if isinstance(inserted, int):
+                    assert inserted == 0, (
+                        f"Duplicate import should report inserted=0. "
+                        f"Response was: {data!r}"
+                    )
+
+                if isinstance(skipped_duplicates, int):
+                    assert skipped_duplicates >= 2, (
+                        f"Duplicate import should report at least 2 skipped duplicates. "
+                        f"Response was: {data!r}"
+                    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
