@@ -1583,6 +1583,64 @@ def test_csv_upload_or_import_rejects_unsupported_transaction_type():
         )
 
 
+def test_csv_upload_or_import_accepts_transfer_aliases():
+    csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2024-06-01T12:00:00Z,transfer_in,BTC,0.04,,,BTC,0.0001,SmokeCSV,transfer alias in
+2024-06-02T12:00:00Z,transfer-out,BTC,0.02,,,BTC,0.0001,SmokeCSV,transfer alias out
+"""
+
+    r, endpoint = _try_csv_upload_endpoint(csv_text)
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV endpoint {endpoint} must not crash on transfer aliases. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 422):
+        pytest.fail(
+            f"CSV endpoint {endpoint} rejected valid transfer aliases: {r.text[:1000]}"
+        )
+
+    assert r.status_code in (200, 201, 202, 204), (
+        f"Unexpected CSV endpoint status from {endpoint}: {r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code == 204:
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV endpoint {endpoint} should return JSON for validation feedback. "
+        f"status={r.status_code}, content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV endpoint {endpoint} should return a JSON object"
+
+    total_valid = data.get("total_valid")
+    if isinstance(total_valid, int):
+        assert total_valid >= 2, (
+            f"CSV endpoint {endpoint} should mark transfer aliases as valid rows. "
+            f"Response was: {data!r}"
+        )
+
+    preview = data.get("preview_first_5")
+    if isinstance(preview, list):
+        assert len(preview) >= 2, (
+            f"CSV endpoint {endpoint} should preview both transfer alias rows. "
+            f"Response was: {data!r}"
+        )
+
+        preview_types = {str(row.get("type") or "").lower() for row in preview}
+        assert preview_types == {"transfer"}, (
+            f"CSV endpoint {endpoint} should normalize transfer aliases to transfer. "
+            f"Preview types were: {preview_types!r}. Response was: {data!r}"
+        )
+
+
 def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
     memo_tag = f"smoke-deterministic-{uuid.uuid4().hex}"
     _insert_deterministic_btc_buy_sell_rows(memo_tag)
