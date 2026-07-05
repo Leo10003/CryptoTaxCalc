@@ -3920,6 +3920,168 @@ def test_csv_import_multiple_rejects_mixed_csv_and_non_csv_batch_atomically():
     )
 
 
+def test_csv_import_multiple_reset_rejects_mixed_csv_and_non_csv_batch_without_data_loss():
+    existing_memo_tag = f"smoke-reset-mixed-non-csv-existing-{uuid.uuid4().hex}"
+    csv_memo_tag = f"smoke-reset-mixed-non-csv-valid-{uuid.uuid4().hex}"
+    txt_memo_tag = f"smoke-reset-mixed-non-csv-bad-{uuid.uuid4().hex}"
+
+    csv_filename = "smoke_reset_mixed_non_csv_valid.csv"
+    txt_filename = "smoke_reset_mixed_non_csv_bad.txt"
+
+    existing_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,DOGE,1000,EUR,100,EUR,0,SmokeCSV,{existing_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,DOGE,400,EUR,80,EUR,0,SmokeCSV,{existing_memo_tag} sell
+"""
+
+    replacement_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{csv_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{csv_memo_tag} sell
+"""
+
+    txt_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2023-01-01T12:00:00Z,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{txt_memo_tag} valid content wrong extension
+"""
+
+    r1, endpoint = _try_csv_import_multiple_endpoint(
+        existing_csv_text,
+        reset=False,
+        filename="smoke_reset_mixed_non_csv_existing.csv",
+    )
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r1.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on setup import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+
+    assert r1.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint} rejected setup import: "
+        f"{r1.status_code} {r1.text[:1000]}"
+    )
+
+    existing_count_before_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    csv_count_before_reset = _count_transactions_by_memo_fragment(csv_memo_tag)
+    txt_count_before_reset = _count_transactions_by_memo_fragment(txt_memo_tag)
+
+    assert existing_count_before_reset == 2, (
+        f"Setup import should persist exactly 2 existing rows. "
+        f"count={existing_count_before_reset}, response={r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=replacement_csv_text,
+        csv_text_2=txt_text,
+        reset=True,
+        filename_1=csv_filename,
+        filename_2=txt_filename,
+    )
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint2} must not crash on reset mixed CSV/non-CSV batch. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    existing_count_after_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    csv_count_after_reset = _count_transactions_by_memo_fragment(csv_memo_tag)
+    txt_count_after_reset = _count_transactions_by_memo_fragment(txt_memo_tag)
+
+    assert existing_count_after_reset == existing_count_before_reset, (
+        f"reset=true mixed CSV/non-CSV batch must preserve existing rows. "
+        f"before={existing_count_before_reset}, after={existing_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert csv_count_after_reset == csv_count_before_reset, (
+        f"reset=true mixed CSV/non-CSV batch must not persist valid replacement CSV rows. "
+        f"before={csv_count_before_reset}, after={csv_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert txt_count_after_reset == txt_count_before_reset, (
+        f"reset=true mixed CSV/non-CSV batch must not persist non-CSV replacement rows. "
+        f"before={txt_count_before_reset}, after={txt_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert r2.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected reset mixed CSV/non-CSV batch status from {endpoint2}: "
+        f"{r2.status_code} {r2.text[:1000]}"
+    )
+
+    if r2.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r2.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint2} should return JSON for reset mixed CSV/non-CSV feedback. "
+        f"content-type={ct}, body={r2.text[:1000]}"
+    )
+
+    data = r2.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint2} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV multi-import endpoint {endpoint2} accepted reset mixed CSV/non-CSV batch without errors. "
+        f"Response was: {data!r}"
+    )
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"Reset mixed CSV/non-CSV batch should return one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == csv_filename, (
+        f"First result should correspond to first uploaded replacement CSV file. "
+        f"Expected {csv_filename!r}, got {results[0].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == txt_filename, (
+        f"Second result should correspond to second uploaded non-CSV replacement file. "
+        f"Expected {txt_filename!r}, got {results[1].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    first_inserted = results[0].get("inserted")
+    if isinstance(first_inserted, int):
+        assert first_inserted == 0, (
+            f"Preflight failure should report inserted=0 for valid CSV file in reset mixed non-CSV batch. "
+            f"Response was: {data!r}"
+        )
+
+    assert _csv_response_reports_errors({"results": [results[1]]}), (
+        f"Non-CSV replacement file result should report validation errors. Response was: {data!r}"
+    )
+
+    text = json.dumps(results[1], default=str).lower()
+    assert ".csv" in text or "csv" in text or "file" in text, (
+        f"Non-CSV replacement file result should explain CSV/file validation failure. "
+        f"Response was: {data!r}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Reset mixed CSV/non-CSV response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") is None, (
+        f"Reset mixed CSV/non-CSV rejected response should not expose global min_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") is None, (
+        f"Reset mixed CSV/non-CSV rejected response should not expose global max_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
