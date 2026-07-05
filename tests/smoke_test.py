@@ -4258,6 +4258,74 @@ def test_csv_import_multiple_rejects_uppercase_non_csv_final_extension():
     )
 
 
+def test_csv_import_multiple_accepts_uppercase_csv_extension():
+    memo_tag = f"smoke-multiple-upper-csv-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_endpoint(
+        csv_text,
+        reset=False,
+        filename="smoke_transactions.CSV",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on uppercase .CSV extension. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV multi-import endpoint {endpoint} should accept uppercase .CSV extension. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count - before_count == 2, (
+        f"CSV multi-import endpoint {endpoint} should persist exactly 2 rows from uppercase .CSV file. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for uppercase .CSV import. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and results, (
+        f"Uppercase .CSV response should include results. Response was: {data!r}"
+    )
+
+    first_result = results[0]
+
+    assert first_result.get("filename") == "smoke_transactions.CSV", (
+        f"Uppercase .CSV response should preserve the uploaded filename. Response was: {data!r}"
+    )
+
+    inserted = first_result.get("inserted")
+    if isinstance(inserted, int):
+        assert inserted == 2, (
+            f"Uppercase .CSV import should report inserted=2. Response was: {data!r}"
+        )
+
+    skipped_errors = first_result.get("skipped_errors")
+    if isinstance(skipped_errors, int):
+        assert skipped_errors == 0, (
+            f"Uppercase .CSV import should report skipped_errors=0. Response was: {data!r}"
+        )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
