@@ -3799,6 +3799,127 @@ def test_csv_import_multiple_reset_rejects_non_csv_filename_without_data_loss():
     )
 
 
+def test_csv_import_multiple_rejects_mixed_csv_and_non_csv_batch_atomically():
+    csv_memo_tag = f"smoke-mixed-non-csv-valid-{uuid.uuid4().hex}"
+    txt_memo_tag = f"smoke-mixed-non-csv-bad-{uuid.uuid4().hex}"
+
+    csv_filename = "smoke_mixed_non_csv_valid.csv"
+    txt_filename = "smoke_mixed_non_csv_bad.txt"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{csv_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{csv_memo_tag} sell
+"""
+
+    txt_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2023-01-01T12:00:00Z,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{txt_memo_tag} valid content wrong extension
+"""
+
+    before_csv_count = _count_transactions_by_memo_fragment(csv_memo_tag)
+    before_txt_count = _count_transactions_by_memo_fragment(txt_memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=csv_text,
+        csv_text_2=txt_text,
+        reset=False,
+        filename_1=csv_filename,
+        filename_2=txt_filename,
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on mixed CSV/non-CSV batch. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_csv_count = _count_transactions_by_memo_fragment(csv_memo_tag)
+    after_txt_count = _count_transactions_by_memo_fragment(txt_memo_tag)
+
+    assert after_csv_count == before_csv_count, (
+        f"Mixed CSV/non-CSV batch should not persist rows from the valid CSV file. "
+        f"before={before_csv_count}, after={after_csv_count}, response={r.text[:1000]}"
+    )
+
+    assert after_txt_count == before_txt_count, (
+        f"Mixed CSV/non-CSV batch should not persist rows from the non-CSV file. "
+        f"before={before_txt_count}, after={after_txt_count}, response={r.text[:1000]}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected mixed CSV/non-CSV batch status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for mixed CSV/non-CSV feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV multi-import endpoint {endpoint} accepted mixed CSV/non-CSV batch without errors. "
+        f"Response was: {data!r}"
+    )
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"Mixed CSV/non-CSV batch should return one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == csv_filename, (
+        f"First result should correspond to first uploaded CSV file. "
+        f"Expected {csv_filename!r}, got {results[0].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == txt_filename, (
+        f"Second result should correspond to second uploaded non-CSV file. "
+        f"Expected {txt_filename!r}, got {results[1].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    first_inserted = results[0].get("inserted")
+    if isinstance(first_inserted, int):
+        assert first_inserted == 0, (
+            f"Preflight failure should report inserted=0 for valid CSV file in mixed non-CSV batch. "
+            f"Response was: {data!r}"
+        )
+
+    assert _csv_response_reports_errors({"results": [results[1]]}), (
+        f"Non-CSV file result should report validation errors. Response was: {data!r}"
+    )
+
+    text = json.dumps(results[1], default=str).lower()
+    assert ".csv" in text or "csv" in text or "file" in text, (
+        f"Non-CSV file result should explain CSV/file validation failure. "
+        f"Response was: {data!r}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Mixed CSV/non-CSV response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") is None, (
+        f"Mixed CSV/non-CSV rejected response should not expose global min_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") is None, (
+        f"Mixed CSV/non-CSV rejected response should not expose global max_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
