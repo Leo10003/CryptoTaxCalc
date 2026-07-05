@@ -3685,6 +3685,120 @@ def test_csv_import_multiple_rejects_non_csv_filename_cleanly():
     )
 
 
+def test_csv_import_multiple_reset_rejects_non_csv_filename_without_data_loss():
+    existing_memo_tag = f"smoke-reset-non-csv-existing-{uuid.uuid4().hex}"
+    bad_memo_tag = f"smoke-reset-non-csv-bad-{uuid.uuid4().hex}"
+
+    existing_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,DOGE,1000,EUR,100,EUR,0,SmokeCSV,{existing_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,DOGE,400,EUR,80,EUR,0,SmokeCSV,{existing_memo_tag} sell
+"""
+
+    bad_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{bad_memo_tag} valid content wrong extension
+"""
+
+    r1, endpoint = _try_csv_import_multiple_endpoint(
+        existing_csv_text,
+        reset=False,
+        filename="smoke_reset_non_csv_existing.csv",
+    )
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r1.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on setup import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+
+    assert r1.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint} rejected setup import: "
+        f"{r1.status_code} {r1.text[:1000]}"
+    )
+
+    existing_count_before_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    bad_count_before_reset = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    assert existing_count_before_reset == 2, (
+        f"Setup import should persist exactly 2 existing rows. "
+        f"count={existing_count_before_reset}, response={r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_multiple_endpoint(
+        bad_csv_text,
+        reset=True,
+        filename="smoke_transactions.txt",
+    )
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint2} must not crash on reset non-CSV filename. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    existing_count_after_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    bad_count_after_reset = _count_transactions_by_memo_fragment(bad_memo_tag)
+
+    assert existing_count_after_reset == existing_count_before_reset, (
+        f"reset=true with non-CSV filename must preserve existing rows. "
+        f"before={existing_count_before_reset}, after={existing_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert bad_count_after_reset == bad_count_before_reset, (
+        f"reset=true with non-CSV filename must not import replacement rows. "
+        f"before={bad_count_before_reset}, after={bad_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert r2.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected reset non-CSV filename status from {endpoint2}: "
+        f"{r2.status_code} {r2.text[:1000]}"
+    )
+
+    if r2.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r2.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint2} should return JSON for reset non-CSV feedback. "
+        f"content-type={ct}, body={r2.text[:1000]}"
+    )
+
+    data = r2.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint2} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV multi-import endpoint {endpoint2} accepted reset non-CSV filename but did not report errors. "
+        f"Response was: {data!r}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"reset non-CSV response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") is None, (
+        f"reset non-CSV response should not expose global min_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") is None, (
+        f"reset non-CSV response should not expose global max_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    text = json.dumps(data, default=str).lower()
+    assert ".csv" in text or "csv" in text or "file" in text, (
+        f"CSV multi-import endpoint {endpoint2} should explain reset non-CSV filename rejection. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
