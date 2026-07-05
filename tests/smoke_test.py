@@ -4326,6 +4326,119 @@ def test_csv_import_multiple_accepts_uppercase_csv_extension():
         )
 
 
+def test_csv_import_wrapper_accepts_uppercase_csv_extension_with_warning_header():
+    memo_tag = f"smoke-wrapper-upper-csv-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    endpoints = [
+        "/import/csv",
+        "/api/import/csv",
+        "/api/v1/import/csv",
+    ]
+
+    selected_response = None
+    selected_endpoint = None
+
+    for endpoint in endpoints:
+        files = {
+            "file": (
+                "smoke_transactions.CSV",
+                csv_text.encode("utf-8"),
+                "text/csv",
+            )
+        }
+
+        r = client.post(endpoint, files=files)
+
+        if r.status_code not in (404, 405):
+            selected_response = r
+            selected_endpoint = endpoint
+            break
+
+    if selected_response is None:
+        pytest.skip("No CSV import wrapper endpoint is available in this build")
+
+    r = selected_response
+    endpoint = selected_endpoint
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/csv"), (
+        f"This wrapper uppercase .CSV test should use /import/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on uppercase .CSV filename. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV import endpoint {endpoint} should accept uppercase .CSV filename. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count - before_count == 2, (
+        f"CSV import endpoint {endpoint} should persist exactly 2 rows from uppercase .CSV file. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    warning = r.headers.get("warning") or r.headers.get("Warning")
+    assert warning, (
+        f"Deprecated CSV import endpoint {endpoint} should return a Warning header on uppercase .CSV import. "
+        f"Headers were: {dict(r.headers)!r}"
+    )
+
+    warning_lower = warning.lower()
+
+    assert "deprecated" in warning_lower, (
+        f"Warning header should mention deprecation. Warning was: {warning!r}"
+    )
+
+    assert "import/multiple" in warning_lower, (
+        f"Warning header should tell clients to use /import/multiple. Warning was: {warning!r}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV import endpoint {endpoint} should return JSON for uppercase .CSV import. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and results, (
+        f"Wrapper uppercase .CSV response should include results. Response was: {data!r}"
+    )
+
+    first_result = results[0]
+
+    assert first_result.get("filename") == "smoke_transactions.CSV", (
+        f"Wrapper uppercase .CSV response should preserve uploaded filename. Response was: {data!r}"
+    )
+
+    inserted = first_result.get("inserted")
+    if isinstance(inserted, int):
+        assert inserted == 2, (
+            f"Wrapper uppercase .CSV import should report inserted=2. Response was: {data!r}"
+        )
+
+    skipped_errors = first_result.get("skipped_errors")
+    if isinstance(skipped_errors, int):
+        assert skipped_errors == 0, (
+            f"Wrapper uppercase .CSV import should report skipped_errors=0. Response was: {data!r}"
+        )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
