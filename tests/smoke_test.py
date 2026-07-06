@@ -4688,6 +4688,86 @@ def test_csv_upload_preview_rejects_non_csv_filename_without_persistence():
     )
 
 
+def test_csv_upload_preview_accepts_uppercase_csv_extension_without_persistence():
+    memo_tag = f"smoke-preview-upper-csv-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} preview buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} preview sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    endpoints = [
+        "/upload/csv",
+        "/api/upload/csv",
+        "/api/v1/upload/csv",
+    ]
+
+    selected_response = None
+    selected_endpoint = None
+
+    for endpoint in endpoints:
+        files = {
+            "file": (
+                "smoke_preview.CSV",
+                csv_text.encode("utf-8"),
+                "text/csv",
+            )
+        }
+
+        r = client.post(endpoint, files=files)
+
+        if r.status_code not in (404, 405):
+            selected_response = r
+            selected_endpoint = endpoint
+            break
+
+    if selected_response is None:
+        pytest.skip("No CSV upload preview endpoint is available in this build")
+
+    r = selected_response
+    endpoint = selected_endpoint
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV upload preview endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/upload/csv"), (
+        f"This preview uppercase .CSV test should use /upload/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV upload preview endpoint {endpoint} must not crash on uppercase .CSV filename. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV upload preview endpoint {endpoint} should accept uppercase .CSV filename. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"CSV upload preview endpoint {endpoint} must not persist uppercase .CSV preview rows. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV upload preview endpoint {endpoint} should return JSON for uppercase .CSV preview. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV upload preview endpoint {endpoint} should return a JSON object"
+
+    text = json.dumps(data, default=str).lower()
+    assert "btc" in text or "rows" in text or "preview" in text or "recognized_source" in text, (
+        f"CSV upload preview endpoint {endpoint} should return useful preview/source information. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
