@@ -4519,6 +4519,88 @@ def test_csv_upload_preview_does_not_persist_transactions():
     )
 
 
+def test_csv_upload_preview_malformed_file_does_not_persist_partial_rows():
+    memo_tag = f"smoke-preview-bad-no-persist-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} valid-looking preview buy
+not-a-date,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} invalid preview sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    endpoints = [
+        "/upload/csv",
+        "/api/upload/csv",
+        "/api/v1/upload/csv",
+    ]
+
+    selected_response = None
+    selected_endpoint = None
+
+    for endpoint in endpoints:
+        files = {
+            "file": (
+                "smoke_preview_bad_no_persist.csv",
+                csv_text.encode("utf-8"),
+                "text/csv",
+            )
+        }
+
+        r = client.post(endpoint, files=files)
+
+        if r.status_code not in (404, 405):
+            selected_response = r
+            selected_endpoint = endpoint
+            break
+
+    if selected_response is None:
+        pytest.skip("No CSV upload preview endpoint is available in this build")
+
+    r = selected_response
+    endpoint = selected_endpoint
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV upload preview endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/upload/csv"), (
+        f"This malformed preview non-persistence test should use /upload/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV upload preview endpoint {endpoint} must not crash on malformed preview CSV. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"CSV upload preview endpoint {endpoint} must not persist partial rows from malformed preview. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected malformed preview status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV upload preview endpoint {endpoint} should return JSON for malformed preview feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV upload preview endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV upload preview endpoint {endpoint} should report malformed preview validation errors. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_or_import_accepts_valid_buy_sell_file():
     csv_text = """timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2024-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,smoke csv buy
