@@ -898,6 +898,14 @@ def test_delete_transactions_by_memo_fragment_is_idempotent():
         _delete_transactions_by_memo_fragment(delete_memo_tag)
 
 
+def test_delete_transactions_by_memo_fragment_rejects_blank_fragment():
+    with pytest.raises(ValueError):
+        _delete_transactions_by_memo_fragment("")
+
+    with pytest.raises(ValueError):
+        _delete_transactions_by_memo_fragment("   ")
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
@@ -1244,6 +1252,10 @@ def _count_transactions_by_memo_fragment(fragment: str) -> int:
 
 
 def _delete_transactions_by_memo_fragment(fragment: str) -> int:
+    fragment_text = str(fragment or "").strip()
+    if not fragment_text:
+        raise ValueError("memo fragment must be non-empty for targeted cleanup")
+
     db = SessionLocal()
     try:
         result = db.execute(
@@ -1253,7 +1265,7 @@ def _delete_transactions_by_memo_fragment(fragment: str) -> int:
                 WHERE memo LIKE :memo_fragment
                 """
             ),
-            {"memo_fragment": f"%{fragment}%"},
+            {"memo_fragment": f"%{fragment_text}%"},
         )
         db.commit()
         return int(result.rowcount or 0)
