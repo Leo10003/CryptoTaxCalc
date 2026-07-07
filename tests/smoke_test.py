@@ -906,6 +906,17 @@ def test_delete_transactions_by_memo_fragment_rejects_blank_fragment():
         _delete_transactions_by_memo_fragment("   ")
 
 
+def test_delete_transactions_by_memo_fragment_rejects_non_uuid_fragment():
+    with pytest.raises(ValueError):
+        _delete_transactions_by_memo_fragment("BTC")
+
+    with pytest.raises(ValueError):
+        _delete_transactions_by_memo_fragment("smoke")
+
+    with pytest.raises(ValueError):
+        _delete_transactions_by_memo_fragment("smoke-cleanup-delete")
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
@@ -1251,10 +1262,22 @@ def _count_transactions_by_memo_fragment(fragment: str) -> int:
         db.close()
 
 
+def _memo_fragment_contains_uuid(fragment: str) -> bool:
+    return bool(
+        re.search(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}",
+            fragment,
+        )
+    )
+
+
 def _delete_transactions_by_memo_fragment(fragment: str) -> int:
     fragment_text = str(fragment or "").strip()
     if not fragment_text:
         raise ValueError("memo fragment must be non-empty for targeted cleanup")
+
+    if not _memo_fragment_contains_uuid(fragment_text):
+        raise ValueError("memo fragment must contain a UUID for targeted cleanup")
 
     db = SessionLocal()
     try:
