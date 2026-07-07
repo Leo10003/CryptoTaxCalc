@@ -837,6 +837,34 @@ def test_delete_transactions_by_memo_fragment_only_removes_matching_smoke_rows()
     _delete_transactions_by_memo_fragment(keep_memo_tag)
 
 
+def test_deterministic_fifo_cleanup_leaves_no_tagged_rows_after_run():
+    memo_tag = f"smoke-cleanup-after-fifo-{uuid.uuid4().hex}"
+
+    _delete_transactions_by_memo_fragment(memo_tag)
+
+    try:
+        _insert_deterministic_btc_buy_sell_rows(memo_tag)
+
+        assert _count_transactions_by_memo_fragment(memo_tag) == 2
+
+        run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
+
+        assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
+        assert run_id > 0, "run_id should be a positive integer"
+
+        r = client.get(f"/history/run/{run_id}/events.csv")
+        if r.status_code in (404, 405, 422):
+            pytest.skip("events.csv endpoint not available")
+
+        assert r.status_code == 200, f"events.csv failed for cleanup run: {r.text}"
+        _assert_csv_contains_expected_btc_fifo_result(r.text)
+
+    finally:
+        _delete_transactions_by_memo_fragment(memo_tag)
+
+    assert _count_transactions_by_memo_fragment(memo_tag) == 0
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
