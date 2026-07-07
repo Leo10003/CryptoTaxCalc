@@ -1165,6 +1165,7 @@ def parse_csv_stream_with_meta(
 
     out: List[Transaction] = []
     errors: List[str] = []
+    error_details: List[dict[str, object]] = []
 
     for i, row in enumerate(reader, start=2):  # header is row 1
         try:
@@ -1245,12 +1246,23 @@ def parse_csv_stream_with_meta(
             out.append(tx)
 
         except Exception as e:
-            snippet = {
-                k: row.get(v)
-                for k, v in header_map.items()
-                if k in {"timestamp", "type", "base_asset", "base_amount"}
-            }
+            detail = _build_csv_error_detail(
+                row_number=i,
+                error=e,
+                row=row,
+                header_map=header_map,
+            )
+            error_details.append(detail)
+
+            snippet = detail.get("snippet", {})
             errors.append(f"row {i}: {e} | snippet={snippet}")
+
+    if error_details:
+        meta["error_details"] = error_details[:25]
+        meta["error_summary"] = {
+            "total_error_rows": len(error_details),
+            "shown_error_rows": min(len(error_details), 25),
+        }
 
     return out, errors, meta
 
@@ -1531,12 +1543,12 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             snippet = detail.get("snippet", {})
             errors.append(f"row {i}: {e} | snippet={snippet}")
 
-        if error_details:
-            meta["error_details"] = error_details[:25]
-            meta["error_summary"] = {
-                "total_error_rows": len(error_details),
-                "shown_error_rows": min(len(error_details), 25),
-            }
+    if error_details:
+        meta["error_details"] = error_details[:25]
+        meta["error_summary"] = {
+            "total_error_rows": len(error_details),
+            "shown_error_rows": min(len(error_details), 25),
+        }
 
     return out, errors, meta
 
