@@ -953,6 +953,34 @@ def test_delete_transactions_by_memo_fragment_accepts_compact_uuid_fragment():
         _delete_transactions_by_memo_fragment(memo_tag)
 
 
+def test_delete_transactions_by_memo_fragment_accepts_hyphenated_uuid_fragment():
+    memo_tag = f"smoke-cleanup-hyphenated-{uuid.uuid4()}"
+
+    _delete_transactions_by_memo_fragment(memo_tag)
+
+    try:
+        _insert_deterministic_btc_buy_sell_rows(memo_tag)
+
+        assert _count_transactions_by_memo_fragment(memo_tag) == 2
+
+        deleted = _delete_transactions_by_memo_fragment(memo_tag)
+
+        assert deleted == 2, (
+            f"Cleanup helper should accept hyphenated uuid4 fragments and delete exactly 2 rows, "
+            f"deleted={deleted}"
+        )
+
+        assert _count_transactions_by_memo_fragment(memo_tag) == 0
+
+        second_deleted = _delete_transactions_by_memo_fragment(memo_tag)
+        assert second_deleted == 0, (
+            f"Second cleanup for hyphenated uuid tag should delete 0 rows, deleted={second_deleted}"
+        )
+
+    finally:
+        _delete_transactions_by_memo_fragment(memo_tag)
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
