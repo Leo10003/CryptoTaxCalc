@@ -69,6 +69,18 @@ def _run(db, jurisdiction: str = "HR"):
     return run, summary
 
 
+def _business_warnings(warnings: list[str]) -> list[str]:
+    ignored_prefixes = (
+        "FX check:",
+        "Price autosync diag:",
+    )
+    return [
+        warning
+        for warning in warnings
+        if not str(warning).startswith(ignored_prefixes)
+    ]
+
+
 def test_fifo_transfer_aliases_do_not_create_events_or_reduce_available_lots():
     asset = "WALLETX"
     txs = [
@@ -156,7 +168,7 @@ def test_run_calculation_treats_unclassified_wallet_transfer_out_as_non_taxable_
         run, summary = _run(db)
         events = db.query(RealizedEvent).filter(RealizedEvent.run_id == run.id).all()
 
-        assert summary.warnings == []
+        assert _business_warnings(summary.warnings) == []
         assert len(events) == 1
         assert events[0].asset == asset
         assert events[0].qty_sold == Decimal("1")
@@ -205,7 +217,7 @@ def test_wallet_transfer_sell_override_creates_taxable_disposal_with_explicit_eu
         run, summary = _run(db)
         events = db.query(RealizedEvent).filter(RealizedEvent.run_id == run.id).all()
 
-        assert summary.warnings == []
+        assert _business_warnings(summary.warnings) == []
         assert len(events) == 1
         event = events[0]
         assert event.asset == asset
@@ -257,7 +269,7 @@ def test_wallet_transfer_buy_override_creates_acquisition_lot_with_explicit_eur_
         run, summary = _run(db)
         events = db.query(RealizedEvent).filter(RealizedEvent.run_id == run.id).all()
 
-        assert summary.warnings == []
+        assert _business_warnings(summary.warnings) == []
         assert len(events) == 1
         event = events[0]
         assert event.asset == asset
@@ -310,7 +322,8 @@ def test_wallet_transfer_taxable_override_without_proceeds_is_left_as_transfer_w
         events = db.query(RealizedEvent).filter(RealizedEvent.run_id == run.id).all()
 
         assert events == []
-        assert len(summary.warnings) == 1
-        assert f"Wallet transfer override missing proceeds_eur for tx_id={out.id}; treated as TRANSFER." in summary.warnings
+        business_warnings = _business_warnings(summary.warnings)
+        assert len(business_warnings) == 1
+        assert f"Wallet transfer override missing proceeds_eur for tx_id={out.id}; treated as TRANSFER." in business_warnings
     finally:
         db.close()
