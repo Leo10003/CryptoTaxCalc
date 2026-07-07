@@ -192,6 +192,7 @@ def _ensure_compatibility_objects(conn) -> None:
 
     # Legacy DBs may have been created before the newer CalcRun metadata fields existed.
     # Keep this additive and idempotent so startup/smoke tests can repair old SQLite files.
+    _ensure_column(conn, "calc_runs", "run_id", "TEXT")
     _ensure_column(conn, "calc_runs", "tax_year", "INTEGER")
     _ensure_column(conn, "calc_runs", "input_hash", "TEXT")
     _ensure_column(conn, "calc_runs", "output_hash", "TEXT")
@@ -268,6 +269,9 @@ def _ensure_compatibility_objects(conn) -> None:
 
         conn.execute(text("DROP TABLE run_digests"))
         conn.execute(text("ALTER TABLE run_digests_new RENAME TO run_digests"))
+
+    _ensure_index(conn, "ix_run_digests_run_id", "run_digests", "(run_id)")
+    _ensure_index(conn, "ix_run_digests_created_at", "run_digests", "(created_at)")
 
 def ensure_calc_runs_run_id(engine: Engine) -> None:
     """Guarantee unique run_id for all rows and enforce unique index."""
