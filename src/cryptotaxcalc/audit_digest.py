@@ -252,10 +252,23 @@ def compute_digests(manifest: Dict[str, Any]) -> Dict[str, str]:
     input_hash = _sha256_hex(_json_c14n(inputs_part))
     output_hash = _sha256_hex(_json_c14n(outputs_part))
 
-    # Manifest hash must ignore volatile build timestamp
+    # Manifest hash must ignore volatile/run-local fields so repeated runs over
+    # the same input/config/output are reproducible at the API layer. The full
+    # manifest still carries these fields for human audit traceability.
     manifest_copy = dict(manifest)
     manifest_copy.pop("timestamp_built", None)
     manifest_copy.pop("trust", None)
+    manifest_copy.pop("run_id", None)
+
+    manifest_run = dict(manifest_copy.get("run") or {})
+    for volatile_key in ("id", "started_at", "finished_at"):
+        manifest_run.pop(volatile_key, None)
+    manifest_copy["run"] = manifest_run
+
+    manifest_inputs = dict(manifest_copy.get("inputs") or {})
+    manifest_inputs.pop("cutoff_finished_at", None)
+    manifest_copy["inputs"] = manifest_inputs
+
     manifest_hash = _sha256_hex(_json_c14n(manifest_copy))
 
     digests = {
