@@ -1,0 +1,5 @@
+﻿timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T00:00:00+00:00,buy,BTC,0.5,EUR,10000,,,GOLDEN,old exempt lot
+2025-01-01T00:00:00+00:00,buy,BTC,0.75,EUR,30000,,,GOLDEN,short-term taxable lot
+2025-01-15T00:00:00+00:00,transfer,BTC,0.25,BTC,0.25,,,GOLDEN,internal wallet move
+2025-06-01T00:00:00+00:00,sell,BTC,1.0,EUR,50000,EUR,100,GOLDEN,mixed holding-period sale

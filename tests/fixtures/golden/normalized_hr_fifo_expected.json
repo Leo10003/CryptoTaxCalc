@@ -1,0 +1,54 @@
+﻿{
+  "source": {
+    "recognized_source_id": "cryptotaxcalc_generic",
+    "valid_rows": 4,
+    "errors": []
+  },
+  "events": [
+    {
+      "timestamp": "2025-06-01T00:00:00+00:00",
+      "asset": "BTC",
+      "qty_sold": "1",
+      "proceeds": "49900",
+      "cost_basis": "30000",
+      "gain": "19900",
+      "quote_asset": "EUR",
+      "fee_applied": "100",
+      "matches": [
+        {
+          "from_qty": "0.5",
+          "lot_cost_per_unit": "20000",
+          "lot_cost_total": "10000",
+          "acquired_at": "2022-01-01T00:00:00+00:00"
+        },
+        {
+          "from_qty": "0.5",
+          "lot_cost_per_unit": "40000",
+          "lot_cost_total": "20000",
+          "acquired_at": "2025-01-01T00:00:00+00:00"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "by_quote_asset": {
+      "EUR": {
+        "proceeds": "49900.00000000",
+        "cost_basis": "30000.00000000",
+        "gain": "19900.00000000"
+      }
+    },
+    "totals": {
+      "proceeds": "49900",
+      "cost_basis": "30000",
+      "gain": "19900"
+    }
+  },
+  "jurisdiction": {
+    "HR": {
+      "tax_year": 2025,
+      "taxable_gain_eur": "4950.00",
+      "exempt_gain_eur": "14950.00"
+    }
+  }
+}
