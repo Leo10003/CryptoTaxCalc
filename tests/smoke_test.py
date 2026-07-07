@@ -865,6 +865,39 @@ def test_deterministic_fifo_cleanup_leaves_no_tagged_rows_after_run():
     assert _count_transactions_by_memo_fragment(memo_tag) == 0
 
 
+def test_delete_transactions_by_memo_fragment_is_idempotent():
+    keep_memo_tag = f"smoke-cleanup-idempotent-keep-{uuid.uuid4().hex}"
+    delete_memo_tag = f"smoke-cleanup-idempotent-delete-{uuid.uuid4().hex}"
+
+    _delete_transactions_by_memo_fragment(keep_memo_tag)
+    _delete_transactions_by_memo_fragment(delete_memo_tag)
+
+    try:
+        _insert_deterministic_btc_buy_sell_rows(keep_memo_tag)
+        _insert_deterministic_btc_buy_sell_rows(delete_memo_tag)
+
+        assert _count_transactions_by_memo_fragment(keep_memo_tag) == 2
+        assert _count_transactions_by_memo_fragment(delete_memo_tag) == 2
+
+        first_deleted = _delete_transactions_by_memo_fragment(delete_memo_tag)
+        second_deleted = _delete_transactions_by_memo_fragment(delete_memo_tag)
+
+        assert first_deleted == 2, (
+            f"First targeted cleanup should delete exactly 2 matching rows, deleted={first_deleted}"
+        )
+
+        assert second_deleted == 0, (
+            f"Second targeted cleanup should delete 0 rows after the first cleanup, deleted={second_deleted}"
+        )
+
+        assert _count_transactions_by_memo_fragment(delete_memo_tag) == 0
+        assert _count_transactions_by_memo_fragment(keep_memo_tag) == 2
+
+    finally:
+        _delete_transactions_by_memo_fragment(keep_memo_tag)
+        _delete_transactions_by_memo_fragment(delete_memo_tag)
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
