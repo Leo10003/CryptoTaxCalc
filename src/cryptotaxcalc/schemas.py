@@ -9,7 +9,7 @@ Goals of this optimized pass:
 - Keep schemas independent of ORM models.
 """
 
-from typing import Optional, List, Any, Literal
+from typing import Optional, List, Any, Literal, Dict
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from enum import Enum
@@ -181,6 +181,10 @@ class CSVPreviewResponse(BaseModel):
     total_errors: int
     preview_first_5: List[Transaction]
     errors: List[Any]
+
+    # Structured row diagnostics for user-facing CSV repair UX.
+    error_details: List[Dict[str, Any]] | None = None
+    error_summary: Dict[str, Any] | None = None
 
     # CSV source recognition (non-breaking additions)
     recognized_source_id: str | None = None
