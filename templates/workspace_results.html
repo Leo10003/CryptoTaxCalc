@@ -2772,6 +2772,42 @@
     background: rgba(245, 197, 66, 0.08);
   }
 
+    .rs-event-issue-note {
+        margin-top: 4px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        max-width: 100%;
+        padding: 3px 7px;
+        border-radius: 999px;
+        border: 1px solid rgba(245, 197, 66, 0.32);
+        background: rgba(245, 197, 66, 0.08);
+        color: color-mix(in srgb, #f5c542 68%, var(--text));
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.2;
+        white-space: normal;
+    }
+
+        .rs-event-issue-note::before {
+            content: "!";
+            width: 13px;
+            height: 13px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            border: 1px solid rgba(245, 197, 66, 0.45);
+            font-size: 9px;
+            font-weight: 900;
+        }
+
+    html[data-theme="light"] .rs-event-issue-note {
+        background: rgba(245, 197, 66, 0.14);
+        color: rgba(118, 83, 0, 0.92);
+    }
+
   .rs-events-search-wrap {
     position: relative;
     width: 100%;
@@ -9778,6 +9814,34 @@
     if (eventsModeLossesBtn) eventsModeLossesBtn.addEventListener('click', () => setEventsGainMode('losses'));
   }
 
+  function explainEventIssue({ asset, ts, proceedsN, costN, gainN }) {
+    const issues = [];
+
+    if (!asset) {
+      issues.push('missing asset');
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}/.test(String(ts || ''))) {
+      issues.push('invalid timestamp');
+    }
+
+    if (!Number.isFinite(proceedsN)) {
+      issues.push('missing proceeds');
+    }
+
+    if (!Number.isFinite(costN)) {
+      issues.push('missing cost basis');
+    }
+
+    if (!Number.isFinite(gainN)) {
+      issues.push('missing gain');
+    }
+
+    if (!issues.length) return '';
+
+    return `Issue: ${issues.join(', ')}`;
+  }
+
   function renderEventsPreview() {
     const tbody = document.getElementById('eventsTbody');
     if (!tbody) return;
@@ -9817,16 +9881,12 @@
       if (wantGains && !(Number.isFinite(gainN) && gainN > 0)) continue;
       if (wantLosses && !(Number.isFinite(gainN) && gainN < 0)) continue;
 
-      const isIssue =
-        !asset ||
-        !dateRe.test(ts) ||
-        !Number.isFinite(proceedsN) ||
-        !Number.isFinite(costN) ||
-        !Number.isFinite(gainN);
+      const issueText = explainEventIssue({ asset, ts, proceedsN, costN, gainN });
+      const isIssue = !!issueText;
 
       if (isIssue) issuesAll += 1;
 
-      rows.push({ ev, isIssue, proceedsN, costN, gainN });
+      rows.push({ ev, isIssue, issueText, proceedsN, costN, gainN });
     }
 
     // If issues disappear due to filters/search, drop out of issues-only mode.
@@ -9938,9 +9998,12 @@
         : '';
 
       const rowCls = r.isIssue ? 'rs-row-issue' : '';
+      const issueNote = r.isIssue && r.issueText
+        ? `<div class="rs-event-issue-note">${escapeHtml(String(r.issueText))}</div>`
+        : '';
 
       html += `<tr class="${rowCls}">
-        <td>${escapeHtml(ts)}</td>
+        <td>${escapeHtml(ts)}${issueNote}</td>
         <td>${escapeHtml(asset)}</td>
         <td>${escapeHtml(qty)}</td>
         <td>${fmtEUR(r.proceedsN)}</td>
