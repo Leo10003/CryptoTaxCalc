@@ -1838,6 +1838,37 @@ if _allow_origins:
     )
 
 
+_SENSITIVE_LOG_QUERY_KEYS = {
+    "token",
+    "admin_token",
+    "bundle_token",
+    "api_key",
+    "key",
+    "secret",
+    "password",
+    "authorization",
+}
+
+
+def _safe_query_for_log(request: Request) -> str:
+    """
+    Return a redacted query string for logs.
+
+    Keeps debugging useful without leaking admin/support tokens.
+    """
+    try:
+        pairs = []
+        for key, value in request.query_params.multi_items():
+            k = str(key)
+            if k.lower() in _SENSITIVE_LOG_QUERY_KEYS or "token" in k.lower() or "secret" in k.lower():
+                pairs.append(f"{k}=<redacted>")
+            else:
+                pairs.append(f"{k}={value}")
+        return ("?" + "&".join(pairs)) if pairs else ""
+    except Exception:
+        return ""
+
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     """Add safe, low-friction security headers.
@@ -1886,19 +1917,66 @@ if LOGO_DIR.exists():
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     import time
+
     logger = get_logger("app")
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+
     start_time = time.time()
     response = None
+    error = None
+
+    path_for_log = f"{request.url.path}{_safe_query_for_log(request)}"
+    client_host = getattr(request.client, "host", "") if request.client else ""
+
     try:
         response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
         return response
-    finally:
+    except Exception as exc:
+        error = exc
         process_time = round(time.time() - start_time, 3)
-        logger.info(
-            f"{request.method} {request.url.path} -> "
-            f"{getattr(response, 'status_code', '?')} "
-            f"in {process_time}s"
+        logger.exception(
+            "request_id=%s %s %s failed in %.3fs client=%s error=%s",
+            request_id,
+            request.method,
+            path_for_log,
+            process_time,
+            client_host,
+            exc,
+            extra={
+                "ctc_request_id": request_id,
+                "ctc_method": request.method,
+                "ctc_path": request.url.path,
+                "ctc_query": _safe_query_for_log(request),
+                "ctc_status_code": 500,
+                "ctc_duration_s": process_time,
+                "ctc_client": client_host,
+            },
         )
+        raise
+    finally:
+        if error is None:
+            process_time = round(time.time() - start_time, 3)
+            status_code = getattr(response, "status_code", "?")
+            logger.info(
+                "request_id=%s %s %s -> %s in %.3fs client=%s",
+                request_id,
+                request.method,
+                path_for_log,
+                status_code,
+                process_time,
+                client_host,
+                extra={
+                    "ctc_request_id": request_id,
+                    "ctc_method": request.method,
+                    "ctc_path": request.url.path,
+                    "ctc_query": _safe_query_for_log(request),
+                    "ctc_status_code": status_code,
+                    "ctc_duration_s": process_time,
+                    "ctc_client": client_host,
+                },
+            )
 
 
 router = APIRouter()

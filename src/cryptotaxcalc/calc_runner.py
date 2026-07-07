@@ -24,11 +24,12 @@ from cryptotaxcalc.models import TransactionRow, RealizedEvent, RunInput, Wallet
 from cryptotaxcalc.fifo_engine import compute_fifo
 from cryptotaxcalc.fx_utils import ensure_rate_or_default_lookup, get_or_create_current_fx_batch_id
 from cryptotaxcalc.logging_setup import get_logger, _atomic_write_json, _now_iso_z
+from cryptotaxcalc.runtime_paths import PROJECT_ROOT
 
 logger = get_logger("calc")
-WORKSPACE_LOG_DIR = Path("logs/workspace")
+WORKSPACE_LOG_DIR = PROJECT_ROOT / "logs" / "workspace"
 WORKSPACE_ERRORS_TXT = WORKSPACE_LOG_DIR / "errors.txt"
-WORKSPACE_ERROR_PATH_POINTER = WORKSPACE_LOG_DIR.parent / "workspace_error_log_path.txt"
+WORKSPACE_ERROR_PATH_POINTER = PROJECT_ROOT / "logs" / "workspace_error_log_path.txt"
 
 
 def log_workspace_error(
@@ -60,10 +61,35 @@ def log_workspace_error(
         "run_id": run_id,
         "error_type": type(error).__name__,
         "error_message": str(error),
+        "error_text_log_path": str(WORKSPACE_ERRORS_TXT.resolve()),
+        "latest_error_json_path": str((WORKSPACE_LOG_DIR / "last_error.json").resolve()),
+        "error_log_pointer_path": str(WORKSPACE_ERROR_PATH_POINTER.resolve()),
     }
 
     if extra:
         payload["extra"] = extra
+
+    try:
+        exc_info = (
+            (type(error), error, error.__traceback__)
+            if getattr(error, "__traceback__", None)
+            else None
+        )
+        logger.error(
+            "Workspace error stage=%s run_id=%s error=%s error_log=%s",
+            stage,
+            run_id,
+            error,
+            WORKSPACE_ERRORS_TXT.resolve(),
+            exc_info=exc_info,
+            extra={
+                "ctc_stage": stage,
+                "ctc_run_id": run_id,
+                "ctc_error_log_path": str(WORKSPACE_ERRORS_TXT.resolve()),
+            },
+        )
+    except Exception:
+        pass
 
     # Capture stack trace only when we're inside an exception path.
     try:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 import traceback
@@ -22,10 +23,35 @@ from typing import Any, Dict, Optional
 # Configuration / paths
 # ----------------------------
 
+def _project_root_from_here() -> Path:
+    """
+    Resolve the project root without relying on the process working directory.
+
+    This keeps logs stable when the app is launched from PowerShell, tests,
+    uvicorn, CI, or a packaged executable wrapper.
+    """
+    env = os.getenv("CRYPTOTAXCALC_PROJECT_ROOT")
+    if env and str(env).strip():
+        return Path(env).expanduser().resolve()
+
+    here = Path(__file__).resolve()
+    candidates = [here.parent, *here.parents]
+
+    for base in candidates:
+        if (base / "pyproject.toml").exists():
+            return base
+        if (base / "src" / "cryptotaxcalc").exists():
+            return base
+        if (base / ".git").exists():
+            return base
+
+    return Path.cwd().resolve()
+
+
 def get_logs_root() -> Path:
     """Determine and ensure the logs root directory."""
     env = os.getenv("CRYPTOTAXCALC_LOGS_DIR")
-    root = Path(env) if env else Path.cwd() / "logs"
+    root = Path(env).expanduser().resolve() if env else _project_root_from_here() / "logs"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -77,8 +103,13 @@ def get_logger(component: str = "app", level: int = logging.INFO) -> logging.Log
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
 
-    # Text file handler
-    fh = logging.FileHandler(text_log, encoding="utf-8")
+    # Text file handler with bounded rotation
+    fh = RotatingFileHandler(
+        text_log,
+        maxBytes=int(os.getenv("CRYPTOTAXCALC_LOG_MAX_BYTES", "5242880")),
+        backupCount=int(os.getenv("CRYPTOTAXCALC_LOG_BACKUP_COUNT", "5")),
+        encoding="utf-8",
+    )
     fh.setLevel(level)
     fh.setFormatter(fmt)
 
@@ -101,6 +132,14 @@ def get_logger(component: str = "app", level: int = logging.INFO) -> logging.Log
                     "message": record.getMessage(),
                     "logger": record.name,
                 }
+
+                for key, value in getattr(record, "__dict__", {}).items():
+                    if key.startswith("ctc_"):
+                        payload[key[4:]] = value
+
+                if record.exc_info:
+                    payload["exception_type"] = record.exc_info[0].__name__ if record.exc_info[0] else None
+                    payload["stacktrace"] = "".join(traceback.format_exception(*record.exc_info))
                 (json_log.parent).mkdir(parents=True, exist_ok=True)
                 with open(json_log, "a", encoding="utf-8") as f:
                     f.write(json.dumps(payload, ensure_ascii=False) + "\n")
