@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import fnmatch
 import subprocess
 from pathlib import Path
@@ -42,9 +44,28 @@ REQUIRED_GITIGNORE_PATTERNS = (
 )
 
 
+def _git_executable() -> str:
+    candidates = [
+        os.environ.get("GIT_EXE"),
+        os.environ.get("GIT"),
+        shutil.which("git"),
+        shutil.which("git.exe"),
+        r"C:\Program Files\Git\bin\git.exe",
+        r"C:\Program Files\Git\cmd\git.exe",
+        r"C:\Program Files (x86)\Git\bin\git.exe",
+        r"C:\Program Files (x86)\Git\cmd\git.exe",
+    ]
+
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return candidate
+
+    pytest.skip("git executable is not available in this test environment")
+
+
 def _git(*args: str) -> str:
     result = subprocess.run(
-        ["git", *args],
+        [_git_executable(), *args],
         cwd=PROJECT_ROOT,
         text=True,
         stdout=subprocess.PIPE,
