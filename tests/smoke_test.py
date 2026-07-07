@@ -5223,6 +5223,73 @@ def test_csv_import_wrapper_missing_file_field_returns_warning_validation_error(
     )
 
 
+def test_csv_import_multiple_missing_files_field_returns_clean_validation_error():
+    memo_tag = f"smoke-multiple-missing-files-{uuid.uuid4().hex}"
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    endpoints = [
+        "/import/multiple",
+        "/api/import/multiple",
+        "/api/v1/import/multiple",
+    ]
+
+    selected_response = None
+    selected_endpoint = None
+
+    for endpoint in endpoints:
+        r = client.post(endpoint, files={})
+
+        if r.status_code not in (404, 405):
+            selected_response = r
+            selected_endpoint = endpoint
+            break
+
+    if selected_response is None:
+        pytest.skip("No CSV multi-import endpoint is available in this build")
+
+    r = selected_response
+    endpoint = selected_endpoint
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/multiple"), (
+        f"This missing-files multi-import test should use /import/multiple-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash when multipart files field is missing. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"CSV multi-import endpoint {endpoint} must not persist rows when files field is missing. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422), (
+        f"CSV multi-import endpoint {endpoint} should reject missing files field with a clean 4xx. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for missing files field. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    text = json.dumps(data, default=str).lower()
+    assert "files" in text or "file" in text or "field" in text or "missing" in text or "required" in text, (
+        f"CSV multi-import endpoint {endpoint} should explain that the files field is missing. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
