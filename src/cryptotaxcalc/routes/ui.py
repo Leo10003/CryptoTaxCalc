@@ -24,6 +24,7 @@ def csv_formats_page(request: Request):
     except Exception:
         sources = []
     return templates.TemplateResponse(
+        request,
         "csv_formats.html",
         {
             "request": request,
@@ -71,6 +72,7 @@ def workspace_page(request: Request):
         user_display_name = "User"
 
     return templates.TemplateResponse(
+        request,
         "workspace.html",
         {
             "request": request,
@@ -97,6 +99,7 @@ def workspace_results_page(
         user_display_name = "User"
 
     return templates.TemplateResponse(
+        request,
         "workspace_results.html",
         {
             "request": request,
