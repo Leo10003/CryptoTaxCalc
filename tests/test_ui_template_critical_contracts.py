@@ -94,7 +94,7 @@ def test_workspace_results_keeps_export_links_integrity_strip_and_blocker_acknow
         'id="rsEbFixList"',
         'id="rsEbTech"',
         'id="rsEbAck"',
-        "I understand this export may be materially inaccurate due to missing cost basis",
+        "I understand the warnings shown above and still want to proceed with this export.",
         'id="rsEbProceed"',
         "Proceed anyway",
     ]
