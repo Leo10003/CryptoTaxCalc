@@ -5140,6 +5140,89 @@ def test_csv_upload_preview_missing_file_field_returns_clean_validation_error():
     )
 
 
+def test_csv_import_wrapper_missing_file_field_returns_warning_validation_error():
+    memo_tag = f"smoke-wrapper-missing-file-{uuid.uuid4().hex}"
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    endpoints = [
+        "/import/csv",
+        "/api/import/csv",
+        "/api/v1/import/csv",
+    ]
+
+    selected_response = None
+    selected_endpoint = None
+
+    for endpoint in endpoints:
+        r = client.post(endpoint, files={})
+
+        if r.status_code not in (404, 405):
+            selected_response = r
+            selected_endpoint = endpoint
+            break
+
+    if selected_response is None:
+        pytest.skip("No CSV import wrapper endpoint is available in this build")
+
+    r = selected_response
+    endpoint = selected_endpoint
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/csv"), (
+        f"This missing-file wrapper test should use /import/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash when multipart file field is missing. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"CSV import endpoint {endpoint} must not persist rows when file field is missing. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    warning = r.headers.get("warning") or r.headers.get("Warning")
+    assert warning, (
+        f"Deprecated CSV import endpoint {endpoint} should return a Warning header when file field is missing. "
+        f"Headers were: {dict(r.headers)!r}"
+    )
+
+    warning_lower = warning.lower()
+
+    assert "deprecated" in warning_lower, (
+        f"Warning header should mention deprecation. Warning was: {warning!r}"
+    )
+
+    assert "import/multiple" in warning_lower, (
+        f"Warning header should tell clients to use /import/multiple. Warning was: {warning!r}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422), (
+        f"CSV import endpoint {endpoint} should reject missing file field with a clean 4xx. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV import endpoint {endpoint} should return JSON for missing file field. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV import endpoint {endpoint} should return a JSON object"
+
+    text = json.dumps(data, default=str).lower()
+    assert "file" in text or "field" in text or "missing" in text or "required" in text, (
+        f"CSV import endpoint {endpoint} should explain that the file field is missing. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
