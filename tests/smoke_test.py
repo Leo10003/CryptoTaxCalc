@@ -4886,6 +4886,79 @@ def test_csv_import_wrapper_rejects_empty_filename_with_warning_header():
     )
 
 
+def test_csv_import_multiple_rejects_empty_filename_without_persistence():
+    memo_tag = f"smoke-multiple-empty-filename-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} valid content empty filename
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_endpoint(
+        csv_text,
+        reset=False,
+        filename="",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on empty filename. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"CSV multi-import endpoint {endpoint} must not persist rows from empty filename. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected multi-import empty-filename status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for empty-filename feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV multi-import endpoint {endpoint} accepted empty filename without reporting errors. "
+        f"Response was: {data!r}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Multi-import empty-filename response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") is None, (
+        f"Multi-import empty-filename response should not expose global min_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") is None, (
+        f"Multi-import empty-filename response should not expose global max_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    text = json.dumps(data, default=str).lower()
+    assert "filename" in text or "file" in text or ".csv" in text or "csv" in text, (
+        f"CSV multi-import endpoint {endpoint} should explain empty filename rejection. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
