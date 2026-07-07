@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import subprocess
+import re
 from pathlib import Path as FSPath
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,6 +15,46 @@ from .security import require_admin_scripts, require_bundle_admin
 
 
 router = APIRouter(tags=["admin"])
+
+
+_SENSITIVE_TEXT_KEY_RE = re.compile(
+    r"(DATABASE_URL|SQLALCHEMY_DATABASE_URL|DB_URL|TOKEN|SECRET|PASSWORD|PASS|KEY|AUTH|BEARER|COOKIE|SESSION)",
+    re.IGNORECASE,
+)
+_SENSITIVE_ASSIGNMENT_RE = re.compile(
+    r"(?P<key>"
+    r"(?:DATABASE_URL|SQLALCHEMY_DATABASE_URL|DB_URL)"
+    r"|(?:[A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASS|KEY|AUTH|BEARER|COOKIE|SESSION)[A-Za-z0-9_]*)"
+    r")"
+    r"(?P<sep>\s*[=:]\s*)"
+    r"(?P<quote>['\"]?)"
+    r"(?P<value>[^\s,'\"]+)",
+    re.IGNORECASE,
+)
+
+
+def _redact_sensitive_text(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _redact_sensitive_text(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_sensitive_text(item) for item in value]
+
+    text_value = str(value)
+
+    def replace_assignment(match: re.Match[str]) -> str:
+        return f"{match.group('key')}{match.group('sep')}{match.group('quote')}<redacted>"
+
+    redacted = _SENSITIVE_ASSIGNMENT_RE.sub(replace_assignment, text_value)
+
+    for key, env_value in os.environ.items():
+        if not env_value or len(env_value) < 8:
+            continue
+        if _SENSITIVE_TEXT_KEY_RE.search(key):
+            redacted = redacted.replace(env_value, "<redacted>")
+
+    return redacted
 
 
 def _latest_zip_path() -> str | None:
@@ -73,8 +114,8 @@ def create_support_bundle(
         env=env,
     )
 
-    stdout = proc.stdout or ""
-    stderr = proc.stderr or ""
+    stdout = _redact_sensitive_text(proc.stdout or "")
+    stderr = _redact_sensitive_text(proc.stderr or "")
 
     zip_path = None
     for line in stdout.splitlines():
@@ -107,7 +148,7 @@ def create_support_bundle(
             def _read_if(p: str) -> str | None:
                 try:
                     with open(p, "r", encoding="utf-8", errors="ignore") as f:
-                        return f.read()[:5000]
+                        return _redact_sensitive_text(f.read()[:5000])
                 except Exception:
                     return None
 
