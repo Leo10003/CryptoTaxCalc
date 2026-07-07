@@ -60,3 +60,5 @@ tmp_smoke.db-shm
 tmp_smoke.db-wal
 
 # === END: autosync safety additions ===
+/logs/audit
+/logs/audit
