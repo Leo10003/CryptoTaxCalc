@@ -5675,6 +5675,108 @@ def test_csv_import_multiple_accepts_duplicate_filename_with_different_content()
     )
 
 
+def test_csv_import_multiple_deduplicates_same_content_with_different_filenames():
+    memo_tag = f"smoke-dupe-content-diff-name-{uuid.uuid4().hex}"
+
+    first_filename = "smoke_duplicate_content_first.csv"
+    second_filename = "smoke_duplicate_content_second.csv"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{memo_tag} sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=csv_text,
+        csv_text_2=csv_text,
+        reset=False,
+        filename_1=first_filename,
+        filename_2=second_filename,
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on duplicate content with different filenames. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV multi-import endpoint {endpoint} should handle duplicate content with different filenames. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    assert after_count - before_count == 2, (
+        f"Duplicate content with different filenames should persist exactly one copy of 2 rows. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for duplicate content import. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"Duplicate content response should include one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == first_filename, (
+        f"First result should preserve first uploaded filename. Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == second_filename, (
+        f"Second result should preserve second uploaded filename. Response was: {data!r}"
+    )
+
+    first_inserted = results[0].get("inserted")
+    if isinstance(first_inserted, int):
+        assert first_inserted == 2, (
+            f"First duplicate-content file should report inserted=2. Response was: {data!r}"
+        )
+
+    second_inserted = results[1].get("inserted")
+    if isinstance(second_inserted, int):
+        assert second_inserted == 0, (
+            f"Second duplicate-content file should report inserted=0. Response was: {data!r}"
+        )
+
+    second_skipped_duplicates = results[1].get("skipped_duplicates")
+    if isinstance(second_skipped_duplicates, int):
+        assert second_skipped_duplicates >= 2, (
+            f"Second duplicate-content file should report skipped_duplicates>=2. Response was: {data!r}"
+        )
+
+    second_skipped_errors = results[1].get("skipped_errors")
+    if isinstance(second_skipped_errors, int):
+        assert second_skipped_errors == 0, (
+            f"Second duplicate-content file should not report skipped_errors. Response was: {data!r}"
+        )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Duplicate content response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") == 2022, (
+        f"Duplicate content global min_year should reflect imported rows. Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") == 2024, (
+        f"Duplicate content global max_year should reflect imported rows. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
