@@ -75,6 +75,42 @@ def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
         sys.stderr.write(f"[WARN] Failed atomic write to {path}: {e}\n")
 
 
+def _write_latest_error_location(component: str, *, latest_error_path: Path) -> None:
+    """
+    Write root-level pointers telling the operator where the latest component error lives.
+
+    These files intentionally live directly under logs/ so debugging starts from one
+    predictable place, even when the detailed error is inside logs/<component>/.
+    """
+    try:
+        logs_root = get_logs_root()
+        comp_dir = get_component_dir(component)
+
+        payload = {
+            "timestamp": _now_iso_z(),
+            "component": component,
+            "component_log_dir": str(comp_dir.resolve()),
+            "latest_error_json": str(latest_error_path.resolve()),
+            "text_log": str((comp_dir / "events.log").resolve()),
+            "json_log": str((comp_dir / "events.jsonl").resolve()),
+        }
+
+        _atomic_write_json(logs_root / "latest_error_location.json", payload)
+
+        lines = [
+            f"timestamp={payload['timestamp']}",
+            f"component={payload['component']}",
+            f"component_log_dir={payload['component_log_dir']}",
+            f"latest_error_json={payload['latest_error_json']}",
+            f"text_log={payload['text_log']}",
+            f"json_log={payload['json_log']}",
+            "",
+        ]
+        (logs_root / "latest_error_location.txt").write_text("\n".join(lines), encoding="utf-8")
+    except Exception as e:
+        sys.stderr.write(f"[WARN] Failed to write latest error location: {e}\n")
+
+
 def _now_iso_z() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -182,6 +218,7 @@ def log_exception_and_record_latest(
         "context": context or {},
     }
     _atomic_write_json(latest_error, payload)
+    _write_latest_error_location(component, latest_error_path=latest_error)
 
 
 def log_success_and_clear_latest(
@@ -228,6 +265,7 @@ def log_error_message(component: str, message: str, *, context: Optional[Dict[st
         "context": context or {},
     }
     _atomic_write_json(latest_error, payload)
+    _write_latest_error_location(component, latest_error_path=latest_error)
 
 
 # ----------------------------

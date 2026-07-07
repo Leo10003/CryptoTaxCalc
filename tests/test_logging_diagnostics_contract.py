@@ -117,3 +117,42 @@ def test_http_responses_include_request_id_header():
 
     assert response.status_code == 200
     assert response.headers["X-Request-ID"] == "req-contract-123"
+
+
+def test_root_latest_error_location_points_to_component_log_folder(tmp_path, monkeypatch):
+    monkeypatch.setenv("CRYPTOTAXCALC_LOGS_DIR", str(tmp_path / "logs"))
+
+    component = f"pointer_{uuid.uuid4().hex}"
+
+    try:
+        raise RuntimeError("root pointer check")
+    except RuntimeError as exc:
+        log_exception_and_record_latest(
+            component,
+            exc,
+            message="pointer failure",
+            context={"stage": "unit_test"},
+        )
+
+    logs_root = tmp_path / "logs"
+    txt_pointer = logs_root / "latest_error_location.txt"
+    json_pointer = logs_root / "latest_error_location.json"
+
+    assert txt_pointer.exists()
+    assert json_pointer.exists()
+
+    payload = json.loads(json_pointer.read_text(encoding="utf-8"))
+
+    component_dir = logs_root / component
+    latest_error = component_dir / "latest_error.json"
+
+    assert payload["component"] == component
+    assert payload["component_log_dir"] == str(component_dir.resolve())
+    assert payload["latest_error_json"] == str(latest_error.resolve())
+    assert payload["text_log"] == str((component_dir / "events.log").resolve())
+    assert payload["json_log"] == str((component_dir / "events.jsonl").resolve())
+
+    txt = txt_pointer.read_text(encoding="utf-8")
+    assert f"component={component}" in txt
+    assert f"component_log_dir={component_dir.resolve()}" in txt
+    assert f"latest_error_json={latest_error.resolve()}" in txt
