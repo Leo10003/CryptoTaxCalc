@@ -1255,6 +1255,94 @@ def parse_csv_stream_with_meta(
     return out, errors, meta
 
 
+def _safe_row_value(row: dict[str, str], header_map: dict[str, str], field: str) -> str | None:
+    header = header_map.get(field)
+    if not header:
+        return None
+    value = row.get(header)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _infer_error_field(message: str, row: dict[str, str], header_map: dict[str, str]) -> str | None:
+    lower = message.lower()
+
+    known_fields = (
+        "timestamp",
+        "type",
+        "base_asset",
+        "base_amount",
+        "quote_asset",
+        "quote_amount",
+        "fee_asset",
+        "fee_amount",
+        "fair_value",
+    )
+
+    for field in known_fields:
+        if field in lower:
+            return field
+
+    for amount_field in ("base_amount", "quote_amount", "fee_amount", "fair_value"):
+        raw_value = _safe_row_value(row, header_map, amount_field)
+        if raw_value is not None and raw_value.strip() and "decimal" in lower:
+            return amount_field
+
+    if "date" in lower or "time" in lower:
+        return "timestamp"
+
+    return None
+
+
+def _diagnostic_hint(field: str | None, message: str) -> str:
+    lower = message.lower()
+
+    if field == "timestamp":
+        return "Use an ISO-like timestamp such as 2024-01-31T12:30:00Z or 2024-01-31 12:30:00."
+
+    if field in {"base_amount", "quote_amount", "fee_amount", "fair_value"}:
+        return "Enter a numeric amount using a dot as the decimal separator, for example 0.25."
+
+    if field in {"base_asset", "quote_asset", "fee_asset"}:
+        return "Use an asset ticker such as BTC, ETH, EUR, or USDT."
+
+    if field == "type":
+        return "Use a supported transaction type such as buy, sell, trade, transfer, reward, stake, or airdrop."
+
+    if "required" in lower:
+        return "Fill in the required field for this row."
+
+    return "Review this row against the CryptoTaxCalc normalized CSV template."
+
+
+def _build_csv_error_detail(
+    *,
+    row_number: int,
+    error: Exception,
+    row: dict[str, str],
+    header_map: dict[str, str],
+) -> dict[str, object]:
+    message = str(error)
+    field = _infer_error_field(message, row, header_map)
+
+    snippet_fields = ("timestamp", "type", "base_asset", "base_amount")
+    snippet = {
+        field_name: _safe_row_value(row, header_map, field_name)
+        for field_name in snippet_fields
+        if field_name in header_map
+    }
+
+    return {
+        "row_number": row_number,
+        "field": field,
+        "message": message,
+        "raw_value": _safe_row_value(row, header_map, field) if field else None,
+        "hint": _diagnostic_hint(field, message),
+        "snippet": snippet,
+    }
+
+
 def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[List[Transaction], List[str], Dict[str, Any]]:
     """
     Parse a CSV payload into normalized Transaction objects and return structural metadata.
@@ -1350,6 +1438,7 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
 
     out: List[Transaction] = []
     errors: List[str] = []
+    error_details: List[dict[str, object]] = []
 
     for i, row in enumerate(reader, start=2):  # header is row 1
         try:
@@ -1431,9 +1520,23 @@ def parse_csv_with_meta(raw_bytes: bytes, filename: str | None = None) -> Tuple[
             out.append(tx)
 
         except Exception as e:
-            # Attach the original row to the error to speed up debugging
-            snippet = {k: row.get(v) for k, v in header_map.items() if k in {"timestamp","type","base_asset","base_amount"}}
+            detail = _build_csv_error_detail(
+                row_number=i,
+                error=e,
+                row=row,
+                header_map=header_map,
+            )
+            error_details.append(detail)
+
+            snippet = detail.get("snippet", {})
             errors.append(f"row {i}: {e} | snippet={snippet}")
+
+        if error_details:
+            meta["error_details"] = error_details[:25]
+            meta["error_summary"] = {
+                "total_error_rows": len(error_details),
+                "shown_error_rows": min(len(error_details), 25),
+            }
 
     return out, errors, meta
 
