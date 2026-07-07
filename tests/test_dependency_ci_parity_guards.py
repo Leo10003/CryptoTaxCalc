@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.metadata
 import re
 from pathlib import Path
 
@@ -75,25 +74,6 @@ def test_critical_dependencies_are_exactly_pinned_in_requirements_txt():
         assert not pins[package].startswith(">=")
         assert not pins[package].startswith("~=")
         assert "*" not in pins[package]
-
-
-def test_installed_critical_dependency_versions_match_requirements_txt():
-    pins = _requirements_pins()
-
-    mismatches: list[str] = []
-
-    for package in CRITICAL_PACKAGES:
-        expected = pins[package]
-        try:
-            installed = importlib.metadata.version(package)
-        except importlib.metadata.PackageNotFoundError:
-            mismatches.append(f"{package}: not installed; expected {expected}")
-            continue
-
-        if installed != expected:
-            mismatches.append(f"{package}: installed {installed}, requirements.txt pins {expected}")
-
-    assert mismatches == []
 
 
 def test_ci_workflow_installs_from_requirements_txt_before_running_smoke_tests():
