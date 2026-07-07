@@ -276,7 +276,7 @@ class RunInput(Base):
     """Frozen input transaction hash set for a given run (stability for audit manifests)."""
     __tablename__ = "run_inputs"
 
-    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("calc_runs.id"), primary_key=True)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("calc_runs.id", ondelete="CASCADE"), primary_key=True)
     tx_hash: Mapped[str] = mapped_column(String(128), primary_key=True)
 
     __table_args__ = (
