@@ -801,6 +801,28 @@ def test_populated_btc_fifo_calculation_finds_expected_result_amid_duplicate_val
     _assert_csv_contains_expected_btc_fifo_result(r.text)
 
 
+def test_delete_transactions_by_memo_fragment_only_removes_matching_smoke_rows():
+    keep_memo_tag = f"smoke-cleanup-keep-{uuid.uuid4().hex}"
+    delete_memo_tag = f"smoke-cleanup-delete-{uuid.uuid4().hex}"
+
+    _insert_deterministic_btc_buy_sell_rows(keep_memo_tag)
+    _insert_deterministic_btc_buy_sell_rows(delete_memo_tag)
+
+    assert _count_transactions_by_memo_fragment(keep_memo_tag) == 2
+    assert _count_transactions_by_memo_fragment(delete_memo_tag) == 2
+
+    deleted = _delete_transactions_by_memo_fragment(delete_memo_tag)
+
+    assert deleted == 2, (
+        f"Cleanup helper should delete exactly 2 rows for the selected memo tag, deleted={deleted}"
+    )
+
+    assert _count_transactions_by_memo_fragment(delete_memo_tag) == 0
+    assert _count_transactions_by_memo_fragment(keep_memo_tag) == 2
+
+    _delete_transactions_by_memo_fragment(keep_memo_tag)
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
@@ -1142,6 +1164,24 @@ def _count_transactions_by_memo_fragment(fragment: str) -> int:
             ).scalar()
             or 0
         )
+    finally:
+        db.close()
+
+
+def _delete_transactions_by_memo_fragment(fragment: str) -> int:
+    db = SessionLocal()
+    try:
+        result = db.execute(
+            text(
+                """
+                DELETE FROM transactions
+                WHERE memo LIKE :memo_fragment
+                """
+            ),
+            {"memo_fragment": f"%{fragment}%"},
+        )
+        db.commit()
+        return int(result.rowcount or 0)
     finally:
         db.close()
 
