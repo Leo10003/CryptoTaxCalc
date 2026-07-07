@@ -906,6 +906,19 @@ def test_delete_transactions_by_memo_fragment_rejects_blank_fragment():
         _delete_transactions_by_memo_fragment("   ")
 
 
+def test_memo_fragment_uuid_detector_accepts_compact_and_hyphenated_uuid_tags():
+    compact_tag = "smoke-unrelated-btc-94663d55baad42d393091fe8b4104e8f"
+    hyphenated_tag = "smoke-unrelated-btc-94663d55-baad-42d3-9309-1fe8b4104e8f"
+
+    assert _memo_fragment_contains_uuid(compact_tag)
+    assert _memo_fragment_contains_uuid(hyphenated_tag)
+
+    assert not _memo_fragment_contains_uuid("")
+    assert not _memo_fragment_contains_uuid("smoke")
+    assert not _memo_fragment_contains_uuid("BTC")
+    assert not _memo_fragment_contains_uuid("smoke-cleanup-delete")
+
+
 def test_delete_transactions_by_memo_fragment_rejects_non_uuid_fragment():
     with pytest.raises(ValueError):
         _delete_transactions_by_memo_fragment("BTC")
