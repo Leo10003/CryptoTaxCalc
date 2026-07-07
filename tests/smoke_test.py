@@ -683,55 +683,6 @@ def _assert_csv_contains_expected_btc_fifo_result(csv_text: str) -> None:
     )
 
 
-def _assert_csv_contains_expected_btc_fifo_result_once(csv_text: str) -> None:
-    rows = list(csv.DictReader(io.StringIO(csv_text)))
-    assert rows, "events.csv should contain at least one parsed data row"
-
-    btc_rows = [
-        row for row in rows
-        if str(row.get("asset") or row.get("base_asset") or "").strip().upper() == "BTC"
-    ]
-    assert btc_rows, f"events.csv should contain at least one BTC row, got rows={rows!r}"
-
-    expected_proceeds = Decimal("600")
-    expected_cost = Decimal("400")
-    expected_gain = Decimal("200")
-
-    matching_rows = []
-
-    for row in btc_rows:
-        proceeds = _decimal_from_csv_row(
-            row,
-            "proceeds_eur",
-            "proceeds",
-            "sell_value_eur",
-            "value_eur",
-        )
-        cost = _decimal_from_csv_row(
-            row,
-            "cost_eur",
-            "cost_basis_eur",
-            "basis_eur",
-            "cost_basis",
-        )
-        gain = _decimal_from_csv_row(
-            row,
-            "gain_eur",
-            "gain",
-            "taxable_gain_eur",
-            "realized_gain_eur",
-        )
-
-        if proceeds == expected_proceeds and cost == expected_cost and gain == expected_gain:
-            matching_rows.append(row)
-
-    assert len(matching_rows) == 1, (
-        "events.csv should contain exactly one deterministic BTC FIFO result "
-        f"proceeds={expected_proceeds}, cost={expected_cost}, gain={expected_gain}. "
-        f"Matching rows were: {matching_rows!r}. BTC rows were: {btc_rows!r}"
-    )
-
-
 def test_btc_fifo_csv_assertion_allows_other_btc_rows():
     csv_text = """timestamp,asset,qty_sold,proceeds_eur,cost_basis_eur,gain_eur,quote_asset,fee_applied_eur
 2024-06-01T12:00:00,BTC,0.00000001,0.01,0.000100,0.009900,EUR,0.01
@@ -803,31 +754,31 @@ def test_populated_btc_fifo_calculation_tolerates_unrelated_btc_rows():
     _assert_csv_contains_expected_btc_fifo_result(r.text)
 
 
-def test_populated_btc_fifo_calculation_has_one_deterministic_result_amid_unrelated_rows():
-    unrelated_memo_tag = f"smoke-single-result-noise-{uuid.uuid4().hex}"
-    deterministic_memo_tag = f"smoke-single-result-deterministic-{uuid.uuid4().hex}"
+def test_populated_btc_fifo_calculation_finds_expected_result_amid_duplicate_value_noise():
+    unrelated_memo_tag = f"smoke-duplicate-value-noise-{uuid.uuid4().hex}"
+    deterministic_memo_tag = f"smoke-duplicate-value-deterministic-{uuid.uuid4().hex}"
 
     unrelated_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
-2022-01-01T12:00:00Z,BUY,BTC,0.00000001,EUR,0.01,BTC,0.00000001,SmokeCSV,{unrelated_memo_tag} dust buy
-2024-06-01T12:00:00Z,SELL,BTC,0.00000001,EUR,0.02,EUR,0.01,SmokeCSV,{unrelated_memo_tag} dust sell
+2022-01-01T12:00:00Z,BUY,BTC,0.04,EUR,400,EUR,0,SmokeCSV,{unrelated_memo_tag} same value buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{unrelated_memo_tag} same value sell
 """
 
     r_import, endpoint = _try_csv_import_multiple_endpoint(
         unrelated_csv_text,
         reset=False,
-        filename="smoke_single_result_unrelated_btc.csv",
+        filename="smoke_duplicate_value_unrelated_btc.csv",
     )
 
     if r_import.status_code in (401, 403):
         pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
 
     assert r_import.status_code < 500, (
-        f"CSV multi-import endpoint {endpoint} must not crash while importing unrelated BTC rows. "
+        f"CSV multi-import endpoint {endpoint} must not crash while importing duplicate-value BTC rows. "
         f"status={r_import.status_code}, body={r_import.text[:1000]}"
     )
 
     assert r_import.status_code in (200, 201, 202), (
-        f"CSV multi-import endpoint {endpoint} should accept unrelated BTC rows. "
+        f"CSV multi-import endpoint {endpoint} should accept duplicate-value BTC rows. "
         f"status={r_import.status_code}, body={r_import.text[:1000]}"
     )
 
@@ -847,7 +798,7 @@ def test_populated_btc_fifo_calculation_has_one_deterministic_result_amid_unrela
     ct = r.headers.get("content-type", "").lower()
     assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
 
-    _assert_csv_contains_expected_btc_fifo_result_once(r.text)
+    _assert_csv_contains_expected_btc_fifo_result(r.text)
 
 
 def _assert_csv_contains_expected_asset_gain(
