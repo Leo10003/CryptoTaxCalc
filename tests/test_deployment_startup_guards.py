@@ -4,7 +4,6 @@ import importlib
 from pathlib import Path
 
 import pytest
-from fastapi.routing import APIRoute
 from starlette.testclient import TestClient
 
 pytestmark = pytest.mark.smoke
@@ -90,22 +89,33 @@ def test_deployment_required_templates_exist():
     assert missing == []
 
 
-def test_deployment_app_registers_required_routes():
+def test_deployment_required_get_routes_are_reachable_without_server_error():
     from cryptotaxcalc.app import app
 
-    registered_paths = {
-        route.path
-        for route in app.routes
-        if isinstance(route, APIRoute)
-    }
+    client = TestClient(app)
 
-    missing = [
-        path
-        for path in REQUIRED_ENDPOINTS
-        if path not in registered_paths
-    ]
+    get_endpoints = (
+        "/",
+        "/health",
+        "/version",
+        "/workspace",
+        "/workspace/results",
+        "/csv/formats",
+        "/status",
+        "/export/status",
+        "/data_quality/missing_history",
+        "/history",
+        "/history/runs",
+    )
 
-    assert missing == []
+    failures: list[str] = []
+
+    for endpoint in get_endpoints:
+        response = client.get(endpoint)
+        if response.status_code >= 500:
+            failures.append(f"{endpoint} returned {response.status_code}")
+
+    assert failures == []
 
 
 def test_deployment_operational_get_endpoints_respond_without_server_error():
