@@ -47,8 +47,9 @@ def history_index(
 
     if format.lower() == "html":
         return templates.TemplateResponse(
+            request,
             "history.html",
-            {"request": request, "runs": items},
+            {"runs": items},
         )
     return JSONResponse(items)
 
