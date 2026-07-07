@@ -1652,6 +1652,61 @@
     opacity: 0.82;
   }
 
+    .rs-results-explain {
+        grid-column: 1 / -1;
+        margin-top: 2px;
+        padding: 10px 10px;
+        border-radius: 14px;
+        border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 18%, var(--border));
+        background: color-mix(in srgb, var(--ws-nav-accent) 5%, var(--surface));
+    }
+
+    .rs-results-explain-title {
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: color-mix(in srgb, var(--ws-nav-accent) 68%, var(--text));
+        margin-bottom: 6px;
+    }
+
+    .rs-results-explain-list {
+        display: grid;
+        gap: 6px;
+        margin: 0;
+    }
+
+    .rs-results-explain-row {
+        display: grid;
+        grid-template-columns: 86px 1fr;
+        gap: 8px;
+        align-items: start;
+        font-size: 11px;
+        line-height: 1.35;
+    }
+
+    .rs-results-explain-k {
+        font-weight: 900;
+        color: color-mix(in srgb, var(--text) 76%, var(--muted));
+    }
+
+    .rs-results-explain-v {
+        color: color-mix(in srgb, var(--text) 66%, var(--muted));
+    }
+
+    html[data-theme="light"] .rs-results-explain {
+        background: rgba(255,255,255,0.82);
+        border-color: var(--rs-light-border);
+    }
+
+    html[data-theme="light"] .rs-results-explain-k {
+        color: rgba(15, 23, 42, 0.76);
+    }
+
+    html[data-theme="light"] .rs-results-explain-v {
+        color: rgba(15, 23, 42, 0.62);
+    }
+
   #kEstimatedTaxInline {
     color: var(--text);
     font-weight: 900;
@@ -5412,62 +5467,98 @@
               <div class="rs-card-title">Key metrics</div>
 
               <div class="rs-kpi-scroll">
-                <div class="rs-kpi rs-kpi-grid">
-                  <div class="rs-kpi-section-title">Outcome</div>
+                  <div class="rs-kpi rs-kpi-grid">
+                      <div class="rs-kpi-section-title">Outcome</div>
 
-                  <div class="rs-kpi-row rs-kpi-row-hero">
-                    <span>Taxable gain</span>
-                    <span id="kTaxableGain" class="rs-kpi-val rs-kpi-val-hero">—</span>
+                      <div class="rs-kpi-row rs-kpi-row-hero">
+                          <span>Taxable gain</span>
+                          <span id="kTaxableGain" class="rs-kpi-val rs-kpi-val-hero">—</span>
+                      </div>
+
+                      <div class="rs-kpi-row rs-kpi-row-wide">
+                          <span>Total realised gain</span>
+                          <span id="kTotalGain" class="rs-kpi-val">—</span>
+                      </div>
+
+                      <div class="rs-kpi-section-title">Context</div>
+
+                      <div class="rs-kpi-row"><span>Exempt gain</span><span id="kExemptGain" class="rs-kpi-val">—</span></div>
+                      <div class="rs-kpi-row"><span>Taxable share</span><span id="kTaxableShare" class="rs-kpi-val rs-kpi-val-small">—</span></div>
+
+                      <div class="rs-kpi-span" aria-label="Taxable vs exempt share">
+                          <div id="kStack" class="rs-stack" style="--t:0%; --e:0%;" aria-label="Taxable vs exempt share">
+                              <span class="rs-stack-tax" aria-hidden="true"></span>
+                              <span class="rs-stack-ex" aria-hidden="true"></span>
+                          </div>
+                          <div id="kStackLabels" class="rs-stack-labels">Taxable — • Exempt —</div>
+                      </div>
+
+                      <div id="rsResultsExplain" class="rs-results-explain" aria-label="What these numbers mean">
+                          <div class="rs-results-explain-title">What these numbers mean</div>
+
+                          <div class="rs-results-explain-list">
+                              <div class="rs-results-explain-row">
+                                  <span class="rs-results-explain-k">Proceeds</span>
+                                  <span id="rsExplainProceeds" class="rs-results-explain-v">What you received from taxable disposals.</span>
+                              </div>
+
+                              <div class="rs-results-explain-row">
+                                  <span class="rs-results-explain-k">Cost basis</span>
+                                  <span id="rsExplainCost" class="rs-results-explain-v">What the disposed assets originally cost.</span>
+                              </div>
+
+                              <div class="rs-results-explain-row">
+                                  <span class="rs-results-explain-k">Gain</span>
+                                  <span id="rsExplainGain" class="rs-results-explain-v">Proceeds minus cost basis and applicable fees.</span>
+                              </div>
+
+                              <div class="rs-results-explain-row">
+                                  <span class="rs-results-explain-k">Taxable</span>
+                                  <span id="rsExplainTaxable" class="rs-results-explain-v">The part of the gain still taxable after rules are applied.</span>
+                              </div>
+
+                              <div class="rs-results-explain-row">
+                                  <span class="rs-results-explain-k">Exempt</span>
+                                  <span id="rsExplainExempt" class="rs-results-explain-v">The part excluded by holding-period or jurisdiction rules.</span>
+                              </div>
+
+                              <div class="rs-results-explain-row">
+                                  <span class="rs-results-explain-k">Warnings</span>
+                                  <span id="rsExplainWarnings" class="rs-results-explain-v">Data assumptions to review before filing or exporting.</span>
+                              </div>
+                          </div>
+                      </div>
                   </div>
 
-                  <div class="rs-kpi-row rs-kpi-row-wide">
-                    <span>Total realised gain</span>
-                    <span id="kTotalGain" class="rs-kpi-val">—</span>
+                  <div id="kSanity" class="rs-status-card">
+                      <div class="rs-status-head">
+                          <span id="kStatusDot" class="rs-status-dot" aria-hidden="true"></span>
+                          <span id="kStatusTitle" class="rs-status-title">Data quality</span>
+                          <span id="kStatusBadge" class="rs-status-badge">—</span>
+                      </div>
+                      <div id="kStatusBody" class="rs-status-body">Checking…</div>
+                      <ul id="kStatusList" class="rs-status-list" style="display:none;"></ul>
+                      <button id="kStatusGoInfo" type="button" class="rs-link-mini" style="display:none;">View in Info</button>
+
+                      <div id="rsVerifiedLine" class="rs-verified" aria-label="Verified signals">Verified: —</div>
+
+                      <div id="rsVerifiedChips" class="rs-chips" aria-label="Signals (expanded)" style="display:none;">
+                          <span id="rsChip1" class="rs-chip">Run saved to History</span>
+                          <span id="rsChip2" class="rs-chip">Scope applied to totals</span>
+                          <span id="rsChip3" class="rs-chip">Subset PDF matches scope</span>
+                      </div>
                   </div>
 
-                  <div class="rs-kpi-section-title">Context</div>
-
-                  <div class="rs-kpi-row"><span>Exempt gain</span><span id="kExemptGain" class="rs-kpi-val">—</span></div>
-                  <div class="rs-kpi-row"><span>Taxable share</span><span id="kTaxableShare" class="rs-kpi-val rs-kpi-val-small">—</span></div>
-
-                  <div class="rs-kpi-span" aria-label="Taxable vs exempt share">
-                    <div id="kStack" class="rs-stack" style="--t:0%; --e:0%;" aria-label="Taxable vs exempt share">
-                      <span class="rs-stack-tax" aria-hidden="true"></span>
-                      <span class="rs-stack-ex" aria-hidden="true"></span>
-                    </div>
-                    <div id="kStackLabels" class="rs-stack-labels">Taxable — • Exempt —</div>
+                  <div class="rs-highlights" aria-label="Key takeaways">
+                      <div class="rs-highlights-title">Highlights</div>
+                      <div class="rs-highlights-line">
+                          <span><b>Taxable share:</b> <span id="kSummaryShare">—</span></span>
+                          <span class="rs-highlights-dot">•</span>
+                          <span><b>Primary driver:</b> <span id="kSummaryAsset">—</span></span>
+                          <span class="rs-highlights-dot">•</span>
+                          <span><b>Most impact month (last 12):</b> <span id="kSummaryMonth">—</span></span>
+                      </div>
                   </div>
-                </div>
-
-                <div id="kSanity" class="rs-status-card">
-                  <div class="rs-status-head">
-                    <span id="kStatusDot" class="rs-status-dot" aria-hidden="true"></span>
-                    <span id="kStatusTitle" class="rs-status-title">Data quality</span>
-                    <span id="kStatusBadge" class="rs-status-badge">—</span>
-                  </div>
-                  <div id="kStatusBody" class="rs-status-body">Checking…</div>
-                  <ul id="kStatusList" class="rs-status-list" style="display:none;"></ul>
-                  <button id="kStatusGoInfo" type="button" class="rs-link-mini" style="display:none;">View in Info</button>
-
-                  <div id="rsVerifiedLine" class="rs-verified" aria-label="Verified signals">Verified: —</div>
-
-                  <div id="rsVerifiedChips" class="rs-chips" aria-label="Signals (expanded)" style="display:none;">
-                    <span id="rsChip1" class="rs-chip">Run saved to History</span>
-                    <span id="rsChip2" class="rs-chip">Scope applied to totals</span>
-                    <span id="rsChip3" class="rs-chip">Subset PDF matches scope</span>
-                  </div>
-                </div>
-
-                <div class="rs-highlights" aria-label="Key takeaways">
-                  <div class="rs-highlights-title">Highlights</div>
-                  <div class="rs-highlights-line">
-                    <span><b>Taxable share:</b> <span id="kSummaryShare">—</span></span>
-                    <span class="rs-highlights-dot">•</span>
-                    <span><b>Primary driver:</b> <span id="kSummaryAsset">—</span></span>
-                    <span class="rs-highlights-dot">•</span>
-                    <span><b>Most impact month (last 12):</b> <span id="kSummaryMonth">—</span></span>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -6227,6 +6318,13 @@
 
   const warningsListEl = document.getElementById('rsWarningsList');
   const methodologyListEl = document.getElementById('rsMethodologyList');
+
+  const explainProceedsEl = document.getElementById('rsExplainProceeds');
+  const explainCostEl = document.getElementById('rsExplainCost');
+  const explainGainEl = document.getElementById('rsExplainGain');
+  const explainTaxableEl = document.getElementById('rsExplainTaxable');
+  const explainExemptEl = document.getElementById('rsExplainExempt');
+  const explainWarningsEl = document.getElementById('rsExplainWarnings');
 
   const infoRunConfigCardEl = document.getElementById('rsInfoRunConfigCard');
   const infoMethodologyNoteEl = document.getElementById('rsInfoMethodology');
@@ -9972,6 +10070,53 @@
     updateTaxesReadiness();
   }
 
+  function updateResultsExplanation(totals) {
+    const t = (totals && typeof totals === 'object') ? totals : {};
+    const warnCount = Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0;
+
+    const proceeds = numFrom(t.proceeds_eur ?? t.proceeds ?? NaN);
+    const cost = numFrom(t.cost_eur ?? t.cost_basis_eur ?? t.cost_basis ?? NaN);
+    const gain = numFrom(t.gain_eur ?? t.gain ?? NaN);
+    const taxable = numFrom(t.taxable_gain_eur ?? NaN);
+    const exempt = numFrom(t.exempt_gain_eur ?? NaN);
+
+    if (explainProceedsEl) {
+      explainProceedsEl.textContent = Number.isFinite(proceeds)
+        ? `${fmtEUR(proceeds)} received from taxable disposals in this scope.`
+        : 'What you received from taxable disposals in this scope.';
+    }
+
+    if (explainCostEl) {
+      explainCostEl.textContent = Number.isFinite(cost)
+        ? `${fmtEUR(cost)} matched as FIFO cost basis for disposed assets.`
+        : 'What the disposed assets originally cost, based on FIFO matching.';
+    }
+
+    if (explainGainEl) {
+      explainGainEl.textContent = Number.isFinite(gain)
+        ? `${fmtEUR(gain)} realised gain after matching proceeds to cost basis.`
+        : 'Proceeds minus cost basis and applicable fees.';
+    }
+
+    if (explainTaxableEl) {
+      explainTaxableEl.textContent = Number.isFinite(taxable)
+        ? `${fmtEUR(taxable)} remains taxable after jurisdiction rules are applied.`
+        : 'The part of the gain still taxable after jurisdiction rules are applied.';
+    }
+
+    if (explainExemptEl) {
+      explainExemptEl.textContent = Number.isFinite(exempt)
+        ? `${fmtEUR(exempt)} is treated as exempt in this scope.`
+        : 'The part excluded by holding-period or jurisdiction rules.';
+    }
+
+    if (explainWarningsEl) {
+      explainWarningsEl.textContent = warnCount > 0
+        ? `${warnCount} warning${warnCount === 1 ? '' : 's'} should be reviewed before filing or exporting.`
+        : 'No calculation warnings reported for this scope.';
+    }
+  }
+
   function openTaxInfo(pinned = false) {
     if (!taxInfoPanelEl || !taxInfoBtn) return;
 
@@ -10067,6 +10212,7 @@
         filtersMode = 'live';
 
         const totals = pickTotals(summary);
+        updateResultsExplanation(totals);
 
         const tg = numFrom(totals.gain_eur ?? totals.gain ?? NaN);
         totalGainLive = tg;
@@ -12610,6 +12756,8 @@
         }
 
         const totals = (data.totals || {});
+        updateResultsExplanation(totals);
+
         const totalGain = totals.gain_eur ?? totals.gain ?? null;
         const taxable = totals.taxable_gain_eur ?? null;
         const exempt = totals.exempt_gain_eur ?? null;
