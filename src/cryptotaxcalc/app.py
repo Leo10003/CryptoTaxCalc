@@ -105,8 +105,10 @@ from cryptotaxcalc.logging_setup import (
     get_logger,
     _atomic_write_json,
     _now_iso_z,
-    setup_logging, 
+    setup_logging,
     integrate_uvicorn_logs,
+    log_error_message,
+    log_exception_and_record_latest,
 )
 
 import platform
@@ -2952,8 +2954,24 @@ async def upload_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
     try:
         valid_rows, errors, meta = parse_csv_with_meta(data, filename=filename)
     except CSVFormatError as e:
+        _record_import_validation_error(
+            endpoint="/upload/csv",
+            filename=filename,
+            stage="preview_csv_format",
+            message=f"CSV preview format error: {e}",
+            errors=[str(e)],
+            csv_meta=e.meta or {},
+            byte_len=len(data),
+        )
         raise HTTPException(status_code=400, detail={"message": str(e), "csv_source": e.meta})
     except Exception as e:
+        _record_import_exception(
+            endpoint="/upload/csv",
+            filename=filename,
+            stage="preview_parse",
+            exc=e,
+            byte_len=len(data),
+        )
         raise HTTPException(status_code=500, detail=f"Parser error: {e!s}")
 
     preview = [vr for vr in valid_rows[:5]]
@@ -2975,6 +2993,135 @@ def _csv_source_meta_to_dict(meta: Any) -> Dict[str, Any]:
         "recognized_source_confidence": getattr(meta, "confidence", 0.0),
         "recognized_source_signature": getattr(meta, "signature", None),
     }
+
+
+def _safe_import_log_context(
+    *,
+    endpoint: str,
+    filename: str,
+    stage: str,
+    reset: bool | None = None,
+    errors: list[str] | None = None,
+    csv_meta: dict[str, Any] | None = None,
+    raw_event_id: Any | None = None,
+    blob_path: str | None = None,
+    byte_len: int | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Build a bounded import-debug context.
+
+    Keep enough information to debug bad CSV imports without dumping entire files
+    or large row payloads into logs.
+    """
+    ctx: dict[str, Any] = {
+        "endpoint": endpoint,
+        "filename": filename,
+        "stage": stage,
+    }
+
+    if reset is not None:
+        ctx["reset"] = bool(reset)
+
+    if raw_event_id is not None:
+        ctx["raw_event_id"] = raw_event_id
+
+    if blob_path:
+        ctx["blob_path"] = blob_path
+
+    if byte_len is not None:
+        ctx["byte_len"] = int(byte_len)
+
+    if errors:
+        ctx["error_count"] = len(errors)
+        ctx["errors_sample"] = [str(e) for e in errors[:5]]
+
+    if csv_meta:
+        for key in (
+            "recognized_source_id",
+            "recognized_source_name",
+            "recognized_source_status",
+            "recognized_source_confidence",
+            "recognized_source_signature",
+            "error_summary",
+        ):
+            if key in csv_meta:
+                ctx[key] = csv_meta.get(key)
+
+    if extra:
+        ctx.update(extra)
+
+    return ctx
+
+
+def _record_import_validation_error(
+    *,
+    endpoint: str,
+    filename: str,
+    stage: str,
+    message: str,
+    reset: bool | None = None,
+    errors: list[str] | None = None,
+    csv_meta: dict[str, Any] | None = None,
+    raw_event_id: Any | None = None,
+    blob_path: str | None = None,
+    byte_len: int | None = None,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """
+    Record expected import failures, such as malformed CSV rows or unsupported file type.
+
+    This updates logs/import/latest_error.json and, after the previous logging patch,
+    logs/latest_error_location.* so the root logs folder points to logs/import/.
+    """
+    context = _safe_import_log_context(
+        endpoint=endpoint,
+        filename=filename,
+        stage=stage,
+        reset=reset,
+        errors=errors,
+        csv_meta=csv_meta,
+        raw_event_id=raw_event_id,
+        blob_path=blob_path,
+        byte_len=byte_len,
+        extra=extra,
+    )
+    log_error_message("import", message, context=context)
+
+
+def _record_import_exception(
+    *,
+    endpoint: str,
+    filename: str,
+    stage: str,
+    exc: BaseException,
+    reset: bool | None = None,
+    csv_meta: dict[str, Any] | None = None,
+    raw_event_id: Any | None = None,
+    blob_path: str | None = None,
+    byte_len: int | None = None,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """
+    Record unexpected import exceptions with stacktrace and bounded context.
+    """
+    context = _safe_import_log_context(
+        endpoint=endpoint,
+        filename=filename,
+        stage=stage,
+        reset=reset,
+        csv_meta=csv_meta,
+        raw_event_id=raw_event_id,
+        blob_path=blob_path,
+        byte_len=byte_len,
+        extra=extra,
+    )
+    log_exception_and_record_latest(
+        "import",
+        exc,
+        message=f"Import failure at {stage}: {filename}",
+        context=context,
+    )
 
 
 def _detect_csv_headers_from_sample(sample_bytes: bytes) -> Tuple[List[str], str | None, str | None]:
@@ -3278,12 +3425,27 @@ async def import_multiple(
 
         if not filename.lower().endswith(".csv"):
             preflight_has_errors = True
+            err_msg = "Only .csv files are supported"
+            _record_import_validation_error(
+                endpoint="/import/multiple",
+                filename=filename,
+                stage="preflight_file_type",
+                message=f"Import preflight rejected file type: {filename}",
+                reset=reset,
+                errors=[err_msg],
+                csv_meta={
+                    "recognized_source_id": "unknown",
+                    "recognized_source_name": "Unknown",
+                    "recognized_source_status": "unsupported",
+                    "recognized_source_confidence": 0.0,
+                },
+            )
             preflight_results.append({
                 "filename": filename,
                 "inserted": 0,
                 "skipped_duplicates": 0,
                 "skipped_errors": 1,
-                "errors": ["Only .csv files are supported"],
+                "errors": [err_msg],
                 "recognized_source_id": "unknown",
                 "recognized_source_name": "Unknown",
                 "recognized_source_status": "unsupported",
@@ -3311,6 +3473,15 @@ async def import_multiple(
 
             if parse_errors:
                 preflight_has_errors = True
+                _record_import_validation_error(
+                    endpoint="/import/multiple",
+                    filename=filename,
+                    stage="preflight_parse_errors",
+                    message=f"Import preflight found {len(parse_errors)} CSV validation error(s): {filename}",
+                    reset=reset,
+                    errors=[str(e) for e in parse_errors],
+                    csv_meta=csv_meta or {},
+                )
                 preflight_results.append({
                     "filename": filename,
                     "inserted": 0,
@@ -3347,6 +3518,15 @@ async def import_multiple(
 
         except CSVFormatError as e:
             preflight_has_errors = True
+            _record_import_validation_error(
+                endpoint="/import/multiple",
+                filename=filename,
+                stage="preflight_csv_format",
+                message=f"Import preflight CSV format error: {filename}",
+                reset=reset,
+                errors=[str(e)],
+                csv_meta=e.meta or {},
+            )
             preflight_results.append({
                 "filename": filename,
                 "inserted": 0,
@@ -3358,6 +3538,13 @@ async def import_multiple(
 
         except Exception as e:
             preflight_has_errors = True
+            _record_import_exception(
+                endpoint="/import/multiple",
+                filename=filename,
+                stage="preflight_parse_exception",
+                exc=e,
+                reset=reset,
+            )
             preflight_results.append({
                 "filename": filename,
                 "inserted": 0,
@@ -3399,12 +3586,27 @@ async def import_multiple(
         skipped_errors = 0
 
         if not filename.lower().endswith(".csv"):
+            err_msg = "Only .csv files are supported"
+            _record_import_validation_error(
+                endpoint="/import/multiple",
+                filename=filename,
+                stage="execute_file_type",
+                message=f"Import rejected file type: {filename}",
+                reset=reset,
+                errors=[err_msg],
+                csv_meta={
+                    "recognized_source_id": "unknown",
+                    "recognized_source_name": "Unknown",
+                    "recognized_source_status": "unsupported",
+                    "recognized_source_confidence": 0.0,
+                },
+            )
             results.append({
                 "filename": filename,
                 "inserted": 0,
                 "skipped_duplicates": 0,
                 "skipped_errors": 1,
-                "errors": ["Only .csv files are supported"],
+                "errors": [err_msg],
                 "recognized_source_id": "unknown",
                 "recognized_source_name": "Unknown",
                 "recognized_source_status": "unsupported",
@@ -3423,6 +3625,16 @@ async def import_multiple(
                 max_bytes=MAX_UPLOAD_BYTES,
             )
             if byte_len <= 0:
+                _record_import_validation_error(
+                    endpoint="/import/multiple",
+                    filename=filename,
+                    stage="execute_empty_file",
+                    message=f"Import rejected empty file: {filename}",
+                    reset=reset,
+                    errors=["Empty file"],
+                    blob_path=blob_path,
+                    byte_len=byte_len,
+                )
                 results.append({"filename": filename, "error": "Empty file"})
                 continue
 
@@ -3456,6 +3668,18 @@ async def import_multiple(
             skipped_errors += len(parse_errors)
 
             if parse_errors:
+                _record_import_validation_error(
+                    endpoint="/import/multiple",
+                    filename=filename,
+                    stage="execute_parse_errors",
+                    message=f"Import execution found {len(parse_errors)} CSV validation error(s): {filename}",
+                    reset=reset,
+                    errors=[str(e) for e in parse_errors],
+                    csv_meta=csv_meta or {},
+                    raw_event_id=raw_event_id,
+                    blob_path=blob_path,
+                    byte_len=byte_len,
+                )
                 results.append({
                     "filename": filename,
                     "inserted": 0,
@@ -3480,6 +3704,17 @@ async def import_multiple(
                     file_max_year = y
 
         except CSVFormatError as e:
+            _record_import_validation_error(
+                endpoint="/import/multiple",
+                filename=filename,
+                stage="execute_csv_format",
+                message=f"Import CSV format error: {filename}",
+                reset=reset,
+                errors=[str(e)],
+                csv_meta=e.meta or {},
+                raw_event_id=raw_event_id,
+                blob_path=blob_path,
+            )
             results.append({
                 "filename": filename,
                 "error": str(e),
@@ -3494,6 +3729,16 @@ async def import_multiple(
             meta_dir.mkdir(parents=True, exist_ok=True)
 
             tb = traceback.format_exc()
+
+            _record_import_exception(
+                endpoint="/import/multiple",
+                filename=filename,
+                stage="execute_parse_exception",
+                exc=e,
+                reset=reset,
+                raw_event_id=raw_event_id,
+                blob_path=blob_path,
+            )
 
             preview = b""
             try:
@@ -3512,13 +3757,13 @@ async def import_multiple(
             except Exception:
                 size_hint = 0
 
-            (meta_dir / "import_errors.log").write_text(
-                f"[{_now_iso()}] file={filename} size={size_hint}\n"
-                f"sha256_1kb={preview_digest}\n"
-                f"{tb}\n"
-                f"---\n",
-                encoding="utf-8"
-            )
+            with (meta_dir / "import_errors.log").open("a", encoding="utf-8") as f:
+                f.write(
+                    f"[{_now_iso()}] file={filename} size={size_hint}\n"
+                    f"sha256_1kb={preview_digest}\n"
+                    f"{tb}\n"
+                    f"---\n"
+                )
 
             results.append({"filename": filename, "error": f"Failed to parse CSV: {e}"})
             continue
@@ -3576,8 +3821,23 @@ async def import_multiple(
             try:
                 session.commit()
                 inserted += len(to_insert)
-            except IntegrityError:
+            except IntegrityError as e:
                 session.rollback()
+                _record_import_exception(
+                    endpoint="/import/multiple",
+                    filename=filename,
+                    stage="execute_db_integrity",
+                    exc=e,
+                    reset=reset,
+                    csv_meta=csv_meta or {},
+                    raw_event_id=raw_event_id,
+                    blob_path=blob_path,
+                    byte_len=byte_len,
+                    extra={
+                        "candidate_rows": len(to_insert),
+                        "skipped_duplicates": skipped_duplicates,
+                    },
+                )
                 results.append({
                     "filename": filename,
                     "error": "Database integrity error (possibly duplicate hash).",
