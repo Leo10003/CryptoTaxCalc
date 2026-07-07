@@ -6,6 +6,8 @@ from cryptotaxcalc.rules.base import RunContext
 from cryptotaxcalc.rules.registry import get_rule, split_taxable_exempt_gain
 from cryptotaxcalc.schemas import CalcConfig
 
+pytestmark = pytest.mark.smoke
+
 
 def _ctx(jurisdiction: str, *, tax_year: int, **cfg_overrides) -> RunContext:
     return RunContext(

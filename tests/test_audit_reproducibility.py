@@ -1,6 +1,10 @@
+import pytest
+
 from copy import deepcopy
 
 from cryptotaxcalc.audit_digest import compute_digests
+
+pytestmark = pytest.mark.smoke
 
 
 def _manifest() -> dict:

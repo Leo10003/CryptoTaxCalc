@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -9,6 +11,8 @@ from cryptotaxcalc.fifo_engine import compute_fifo
 from cryptotaxcalc.rules.base import RunContext
 from cryptotaxcalc.rules.registry import get_rule, split_taxable_exempt_gain
 from cryptotaxcalc.schemas import CalcConfig
+
+pytestmark = pytest.mark.smoke
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "golden"

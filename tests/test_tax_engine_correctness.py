@@ -1,8 +1,12 @@
+import pytest
+
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from cryptotaxcalc.fifo_engine import compute_fifo
 from cryptotaxcalc.schemas import Transaction
+
+pytestmark = pytest.mark.smoke
 
 
 def _dt(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> datetime:

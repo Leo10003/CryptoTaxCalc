@@ -1,8 +1,12 @@
+import pytest
+
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from cryptotaxcalc.fifo_engine import compute_fifo
 from cryptotaxcalc.schemas import Transaction
+
+pytestmark = pytest.mark.smoke
 
 
 Q8 = Decimal("0.00000001")
