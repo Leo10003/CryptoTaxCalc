@@ -917,6 +917,29 @@ def test_delete_transactions_by_memo_fragment_rejects_non_uuid_fragment():
         _delete_transactions_by_memo_fragment("smoke-cleanup-delete")
 
 
+def test_delete_transactions_by_memo_fragment_accepts_compact_uuid_fragment():
+    memo_tag = f"smoke-cleanup-compact-{uuid.uuid4().hex}"
+
+    _delete_transactions_by_memo_fragment(memo_tag)
+
+    try:
+        _insert_deterministic_btc_buy_sell_rows(memo_tag)
+
+        assert _count_transactions_by_memo_fragment(memo_tag) == 2
+
+        deleted = _delete_transactions_by_memo_fragment(memo_tag)
+
+        assert deleted == 2, (
+            f"Cleanup helper should accept compact uuid4 hex fragments and delete exactly 2 rows, "
+            f"deleted={deleted}"
+        )
+
+        assert _count_transactions_by_memo_fragment(memo_tag) == 0
+
+    finally:
+        _delete_transactions_by_memo_fragment(memo_tag)
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
@@ -1263,11 +1286,27 @@ def _count_transactions_by_memo_fragment(fragment: str) -> int:
 
 
 def _memo_fragment_contains_uuid(fragment: str) -> bool:
+    text_value = str(fragment or "")
+
+    hyphenated_uuid_pattern = (
+        r"(?<![0-9a-fA-F])"
+        r"[0-9a-fA-F]{8}-"
+        r"[0-9a-fA-F]{4}-"
+        r"[0-9a-fA-F]{4}-"
+        r"[0-9a-fA-F]{4}-"
+        r"[0-9a-fA-F]{12}"
+        r"(?![0-9a-fA-F])"
+    )
+
+    compact_uuid_pattern = (
+        r"(?<![0-9a-fA-F])"
+        r"[0-9a-fA-F]{32}"
+        r"(?![0-9a-fA-F])"
+    )
+
     return bool(
-        re.search(
-            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}",
-            fragment,
-        )
+        re.search(hyphenated_uuid_pattern, text_value)
+        or re.search(compact_uuid_pattern, text_value)
     )
 
 
