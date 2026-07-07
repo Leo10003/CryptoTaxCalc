@@ -5777,6 +5777,148 @@ def test_csv_import_multiple_deduplicates_same_content_with_different_filenames(
     )
 
 
+def test_csv_import_multiple_reset_deduplicates_same_content_with_different_filenames():
+    existing_memo_tag = f"smoke-reset-dupe-content-existing-{uuid.uuid4().hex}"
+    replacement_memo_tag = f"smoke-reset-dupe-content-replacement-{uuid.uuid4().hex}"
+
+    first_filename = "smoke_reset_duplicate_content_first.csv"
+    second_filename = "smoke_reset_duplicate_content_second.csv"
+
+    existing_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,DOGE,1000,EUR,100,EUR,0,SmokeCSV,{existing_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,DOGE,400,EUR,80,EUR,0,SmokeCSV,{existing_memo_tag} sell
+"""
+
+    replacement_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{replacement_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{replacement_memo_tag} sell
+"""
+
+    r1, endpoint = _try_csv_import_multiple_endpoint(
+        existing_csv_text,
+        reset=False,
+        filename="smoke_reset_dupe_content_existing.csv",
+    )
+
+    if r1.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r1.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on setup import. "
+        f"status={r1.status_code}, body={r1.text[:1000]}"
+    )
+
+    assert r1.status_code in (200, 201, 202, 204), (
+        f"CSV multi-import endpoint {endpoint} rejected setup import: "
+        f"{r1.status_code} {r1.text[:1000]}"
+    )
+
+    existing_count_before_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    replacement_count_before_reset = _count_transactions_by_memo_fragment(replacement_memo_tag)
+
+    assert existing_count_before_reset == 2, (
+        f"Setup import should persist exactly 2 existing rows. "
+        f"count={existing_count_before_reset}, response={r1.text[:1000]}"
+    )
+
+    r2, endpoint2 = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=replacement_csv_text,
+        csv_text_2=replacement_csv_text,
+        reset=True,
+        filename_1=first_filename,
+        filename_2=second_filename,
+    )
+    assert endpoint2 == endpoint
+
+    if r2.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint2} requires auth/token in this build")
+
+    assert r2.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint2} must not crash on reset duplicate content batch. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    assert r2.status_code in (200, 201, 202), (
+        f"CSV multi-import endpoint {endpoint2} should accept reset duplicate content batch. "
+        f"status={r2.status_code}, body={r2.text[:1000]}"
+    )
+
+    existing_count_after_reset = _count_transactions_by_memo_fragment(existing_memo_tag)
+    replacement_count_after_reset = _count_transactions_by_memo_fragment(replacement_memo_tag)
+
+    assert existing_count_after_reset == 0, (
+        f"reset=true duplicate content batch should delete existing imported rows. "
+        f"before={existing_count_before_reset}, after={existing_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    assert replacement_count_after_reset - replacement_count_before_reset == 2, (
+        f"reset=true duplicate content batch should persist exactly one copy of 2 replacement rows. "
+        f"before={replacement_count_before_reset}, after={replacement_count_after_reset}, "
+        f"response={r2.text[:1000]}"
+    )
+
+    ct = r2.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint2} should return JSON for reset duplicate content import. "
+        f"content-type={ct}, body={r2.text[:1000]}"
+    )
+
+    data = r2.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint2} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"Reset duplicate content response should include one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == first_filename, (
+        f"First result should preserve first uploaded filename. Response was: {data!r}"
+    )
+
+    assert results[1].get("filename") == second_filename, (
+        f"Second result should preserve second uploaded filename. Response was: {data!r}"
+    )
+
+    first_inserted = results[0].get("inserted")
+    if isinstance(first_inserted, int):
+        assert first_inserted == 2, (
+            f"First reset duplicate-content file should report inserted=2. Response was: {data!r}"
+        )
+
+    second_inserted = results[1].get("inserted")
+    if isinstance(second_inserted, int):
+        assert second_inserted == 0, (
+            f"Second reset duplicate-content file should report inserted=0. Response was: {data!r}"
+        )
+
+    second_skipped_duplicates = results[1].get("skipped_duplicates")
+    if isinstance(second_skipped_duplicates, int):
+        assert second_skipped_duplicates >= 2, (
+            f"Second reset duplicate-content file should report skipped_duplicates>=2. Response was: {data!r}"
+        )
+
+    second_skipped_errors = results[1].get("skipped_errors")
+    if isinstance(second_skipped_errors, int):
+        assert second_skipped_errors == 0, (
+            f"Second reset duplicate-content file should not report skipped_errors. Response was: {data!r}"
+        )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Reset duplicate content response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") == 2022, (
+        f"Reset duplicate content global min_year should reflect replacement rows. Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") == 2024, (
+        f"Reset duplicate content global max_year should reflect replacement rows. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
