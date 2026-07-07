@@ -9237,10 +9237,20 @@
     _exportPendingUrl = url || '';
 
     const d = (detail && detail.detail) ? detail.detail : detail || {};
-    titleEl.textContent = String(d.title || 'Export blocked');
-    reasonEl.textContent = String(d.reason || 'A data-integrity issue prevents safe export.');
-    meaningEl.textContent = String(d.what_this_means || '');
-    subEl.textContent = 'You can fix the data and re-export, or proceed at your own risk.';
+    const isSoftWarning = String(d.severity || '').toLowerCase() === 'warning';
+
+    titleEl.textContent = String(d.title || (isSoftWarning ? 'Review warnings before export' : 'Export blocked'));
+    reasonEl.textContent = String(d.reason || (isSoftWarning
+      ? 'This run has warnings that may affect interpretation.'
+      : 'A data-integrity issue prevents safe export.'
+    ));
+    meaningEl.textContent = String(d.what_this_means || (isSoftWarning
+      ? 'The export can still be generated, but you should review the warnings and confirm the report is suitable before filing or sharing.'
+      : ''
+    ));
+    subEl.textContent = isSoftWarning
+      ? 'Review the warnings first, or confirm that you want to continue.'
+      : 'You can fix the data and re-export, or proceed at your own risk.';
 
     fixList.innerHTML = '';
     const fixes = Array.isArray(d.how_to_fix) ? d.how_to_fix : [];
@@ -9269,9 +9279,10 @@
     };
 
     btnProceed.onclick = () => {
-      const forced = _withForce(_exportPendingUrl);
+      const nextUrl = isSoftWarning ? _exportPendingUrl : _withForce(_exportPendingUrl);
+      _exportSoftWarningPending = false;
       close();
-      _startPdfJobFlow(forced);
+      _startPdfJobFlow(nextUrl);
     };
 
     backdrop.style.display = 'flex';
@@ -9294,6 +9305,17 @@
   async function interceptPdfExportClick(e, url) {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!_exportSoftWarningPending) {
+      const softWarning = buildSoftExportWarningDetail();
+      if (softWarning) {
+        _exportSoftWarningPending = true;
+        showExportBlockerModal(softWarning, url);
+        return;
+      }
+    }
+
+    _exportSoftWarningPending = false;
     _startPdfJobFlow(url);
   }
 
@@ -9315,6 +9337,7 @@
   }
 
   let _pdfWarmRunDbId = '';
+  let _exportSoftWarningPending = false;
 
   function warmupWorkspacePdf() {
     if (!exportPaths || !exportPaths.pdf) return;
@@ -10802,6 +10825,46 @@
     }
 
     return { level: 'warn', badge: 'Diagnostic', hint: 'Review this item before exporting.' };
+  }
+
+  function buildSoftExportWarningDetail() {
+    const warnings = Array.isArray(currentWarnings)
+      ? prioritizeWarnings(currentWarnings.filter(Boolean).map(w => String(w)))
+      : [];
+
+    if (!warnings.length) return null;
+
+    const classified = warnings.map((w) => ({
+      text: w,
+      info: classifyWarning(w),
+    }));
+
+    const hasAction = classified.some((item) => item.info && item.info.level === 'action');
+
+    // Action-level warnings should remain governed by backend export blockers.
+    // This soft pre-export prompt is only for non-blocking warning/info cases.
+    if (hasAction) return null;
+
+    const shown = classified.slice(0, 5).map((item) => {
+      const badge = item.info && item.info.badge ? item.info.badge : 'Warning';
+      const hint = item.info && item.info.hint ? item.info.hint : 'Review before exporting.';
+      return `${badge}: ${item.text} — ${hint}`;
+    });
+
+    if (classified.length > shown.length) {
+      shown.push(`Also ${classified.length - shown.length} more warning${classified.length - shown.length === 1 ? '' : 's'} in Info.`);
+    }
+
+    return {
+      detail: {
+        severity: 'warning',
+        title: 'Review warnings before export',
+        reason: `${classified.length} non-blocking warning${classified.length === 1 ? '' : 's'} found in this run.`,
+        what_this_means: 'The export can be generated, but these warnings may affect how the report should be interpreted.',
+        how_to_fix: shown,
+        technical_details: warnings.join('\n'),
+      },
+    };
   }
 
   function _rsWarnLi(level, msg, hintHtml) {
@@ -12970,7 +13033,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
     <div class="rs-eb-foot">
       <label class="rs-eb-ack">
         <input id="rsEbAck" type="checkbox" />
-        <span>I understand this export may be materially inaccurate due to missing cost basis, and I still want to proceed.</span>
+        <span>I understand the warnings shown above and still want to proceed with this export.</span>
       </label>
 
       <div class="rs-eb-actions">
