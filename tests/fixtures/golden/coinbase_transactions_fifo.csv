@@ -1,0 +1,3 @@
+Timestamp,Transaction Type,Asset,Quantity Transacted,Spot Price Currency,Spot Price at Transaction,Subtotal,Total (inclusive of fees),Fees,Notes
+2025-01-01T00:00:00Z,Buy,ETH,2,USD,2000,4000,4010,10,first lot
+2025-01-05T00:00:00Z,Sell,ETH,1.25,USD,3000,3750,3735,15,partial disposal
