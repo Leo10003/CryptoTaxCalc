@@ -683,6 +683,15 @@ def _assert_csv_contains_expected_btc_fifo_result(csv_text: str) -> None:
     )
 
 
+def test_btc_fifo_csv_assertion_allows_other_btc_rows():
+    csv_text = """timestamp,asset,qty_sold,proceeds_eur,cost_basis_eur,gain_eur,quote_asset,fee_applied_eur
+2024-06-01T12:00:00,BTC,0.00000001,0.01,0.000100,0.009900,EUR,0.01
+2024-06-01T12:00:00,BTC,0.04,600,400,200,EUR,0
+"""
+
+    _assert_csv_contains_expected_btc_fifo_result(csv_text)
+
+
 def _assert_csv_contains_expected_asset_gain(
     csv_text: str,
     asset: str,
