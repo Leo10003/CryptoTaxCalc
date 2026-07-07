@@ -1,8 +1,0 @@
-2026-01-11T20:16:48Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=1 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.
-2026-01-11T21:10:14Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=1 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.
-2026-01-13T20:01:47Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=1 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.
-2026-02-01T07:59:31Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=6 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.
-2026-02-01T08:00:03Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=7 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.
-2026-02-01T08:00:54Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=8 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.
-2026-02-01T08:10:42Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=9 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.
-2026-02-20T20:20:48Z | stage=normalize_to_eur | jurisdiction=HR | tax_year=None | run_id=20 | ValueError: Strict FX: missing USD->EUR rate for 2024-01-01 (lookback 7 days). Import FX rates (HNB/ECB CSV) and re-run.

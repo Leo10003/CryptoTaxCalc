@@ -1,5 +1,0 @@
-{
-  "timestamp": "2025-11-09T22:53:18Z",
-  "fx_batch_id": 1,
-  "event": "get_or_create_current_fx_batch_id"
-}

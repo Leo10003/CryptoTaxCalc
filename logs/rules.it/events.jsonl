@@ -1,5 +1,0 @@
-{"timestamp": "2025-11-22T10:56:12Z", "level": "INFO", "component": "rules.it", "message": "[IT] Gain 164.00 ≤ threshold 51645.69 → exempt.", "logger": "cryptotaxcalc.rules.it"}
-{"timestamp": "2025-11-22T11:02:23Z", "level": "INFO", "component": "rules.it", "message": "[IT] Gain 15000.00 ≤ threshold 51645.69 → exempt.", "logger": "cryptotaxcalc.rules.it"}
-{"timestamp": "2025-11-22T11:49:42Z", "level": "INFO", "component": "rules.it", "message": "[IT] Gain 15000.00 ≤ threshold 51645.69 → exempt.", "logger": "cryptotaxcalc.rules.it"}
-{"timestamp": "2025-11-22T11:50:53Z", "level": "INFO", "component": "rules.it", "message": "[IT] Gain 15000.00 ≤ threshold 51645.69 → exempt.", "logger": "cryptotaxcalc.rules.it"}
-{"timestamp": "2025-11-22T11:51:53Z", "level": "INFO", "component": "rules.it", "message": "[IT] Gain 15000.00 ≤ threshold 51645.69 → exempt.", "logger": "cryptotaxcalc.rules.it"}
