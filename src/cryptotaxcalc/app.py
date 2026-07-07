@@ -6213,20 +6213,55 @@ def export_events_csv_preview_data(
 @app.get("/audit/run/{run_id}")
 def audit_get_run(run_id: int):
     """
-    Return the stored manifest + hashes for a run (and recompute to show parity).
+    Return the stored manifest + hashes for a run and recompute live hashes.
+
+    Also validates stored run_digests.manifest_json when present. This catches
+    tampering where someone edits the stored manifest JSON without updating the
+    stored digest fields.
     """
     from .audit_digest import build_run_manifest, compute_digests
+
     manifest = build_run_manifest(run_id)
     live = compute_digests(manifest)
 
     with engine.begin() as conn:
         row = conn.execute(
-            text("SELECT input_hash, output_hash, manifest_hash, created_at FROM run_digests WHERE run_id = :rid"),
-            dict(rid=int(run_id))
+            text(
+                """
+                SELECT input_hash, output_hash, manifest_hash, manifest_json, created_at
+                FROM run_digests
+                WHERE run_id = :rid
+                """
+            ),
+            dict(rid=int(run_id)),
         ).mappings().first()
-    
-    # Compare ONLY the three hashes (ignore created_at to avoid false negatives)
-    stored = dict(row) if row else None
+
+    stored = None
+    stored_manifest_json_valid = True
+    stored_manifest_json_digests = None
+    stored_manifest_json_error = None
+
+    if row:
+        stored = {
+            "input_hash": row.get("input_hash"),
+            "output_hash": row.get("output_hash"),
+            "manifest_hash": row.get("manifest_hash"),
+            "created_at": row.get("created_at"),
+        }
+
+        manifest_json_raw = row.get("manifest_json")
+        if manifest_json_raw:
+            try:
+                stored_manifest = json.loads(manifest_json_raw)
+                stored_manifest_json_digests = compute_digests(stored_manifest)
+                stored_manifest_json_valid = (
+                    stored_manifest_json_digests.get("input_hash") == stored.get("input_hash")
+                    and stored_manifest_json_digests.get("output_hash") == stored.get("output_hash")
+                    and stored_manifest_json_digests.get("manifest_hash") == stored.get("manifest_hash")
+                )
+            except Exception as exc:
+                stored_manifest_json_valid = False
+                stored_manifest_json_error = str(exc)
 
     match = False
     if stored:
@@ -6234,38 +6269,89 @@ def audit_get_run(run_id: int):
             stored.get("input_hash") == live.get("input_hash")
             and stored.get("output_hash") == live.get("output_hash")
             and stored.get("manifest_hash") == live.get("manifest_hash")
+            and stored_manifest_json_valid
         )
-    
+
     return {
         "run_id": run_id,
         "stored": stored,
         "recomputed": live,
         "matches": match,
-        "manifest": manifest,  # include for transparency (you can omit in prod if large)
+        "stored_manifest_json_valid": stored_manifest_json_valid,
+        "stored_manifest_json_digests": stored_manifest_json_digests,
+        "stored_manifest_json_error": stored_manifest_json_error,
+        "manifest": manifest,
     }
 
 
 @app.get("/audit/verify/{run_id}")
 def audit_verify_run(run_id: int):
     """
-    Recompute digest and compare with stored digests. Returns boolean + details.
+    Recompute digest and compare with stored digests.
+
+    Verification also checks stored run_digests.manifest_json when present so
+    stored audit artifacts cannot be altered without detection.
     """
     from .audit_digest import build_run_manifest, compute_digests
+
     manifest = build_run_manifest(run_id)
     live = compute_digests(manifest)
 
     with engine.begin() as conn:
         row = conn.execute(
-            text("SELECT input_hash, output_hash, manifest_hash FROM run_digests WHERE run_id = :rid"),
-            dict(rid=int(run_id))
-        ).fetchone()
+            text(
+                """
+                SELECT input_hash, output_hash, manifest_hash, manifest_json
+                FROM run_digests
+                WHERE run_id = :rid
+                """
+            ),
+            dict(rid=int(run_id)),
+        ).mappings().first()
 
     if not row:
-        return {"run_id": run_id, "verified": False, "reason": "No stored digest for this run.", "recomputed": live}
+        return {
+            "run_id": run_id,
+            "verified": False,
+            "reason": "No stored digest for this run.",
+            "recomputed": live,
+        }
 
-    stored = {"input_hash": row[0], "output_hash": row[1], "manifest_hash": row[2]}
-    ok = (stored == live)
-    return {"run_id": run_id, "verified": bool(ok), "stored": stored, "recomputed": live}
+    stored = {
+        "input_hash": row.get("input_hash"),
+        "output_hash": row.get("output_hash"),
+        "manifest_hash": row.get("manifest_hash"),
+    }
+
+    stored_manifest_json_valid = True
+    stored_manifest_json_digests = None
+    stored_manifest_json_error = None
+
+    manifest_json_raw = row.get("manifest_json")
+    if manifest_json_raw:
+        try:
+            stored_manifest = json.loads(manifest_json_raw)
+            stored_manifest_json_digests = compute_digests(stored_manifest)
+            stored_manifest_json_valid = (
+                stored_manifest_json_digests.get("input_hash") == stored.get("input_hash")
+                and stored_manifest_json_digests.get("output_hash") == stored.get("output_hash")
+                and stored_manifest_json_digests.get("manifest_hash") == stored.get("manifest_hash")
+            )
+        except Exception as exc:
+            stored_manifest_json_valid = False
+            stored_manifest_json_error = str(exc)
+
+    ok = stored == live and stored_manifest_json_valid
+
+    return {
+        "run_id": run_id,
+        "verified": bool(ok),
+        "stored": stored,
+        "recomputed": live,
+        "stored_manifest_json_valid": stored_manifest_json_valid,
+        "stored_manifest_json_digests": stored_manifest_json_digests,
+        "stored_manifest_json_error": stored_manifest_json_error,
+    }
 
 
 @app.get("/api/v1/runs", tags=["api"])
