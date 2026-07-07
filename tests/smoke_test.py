@@ -5919,6 +5919,74 @@ def test_csv_import_multiple_reset_deduplicates_same_content_with_different_file
     )
 
 
+def test_csv_import_multiple_accepts_small_decimal_amounts():
+    memo_tag = f"smoke-small-decimals-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.00000001,EUR,0.01,BTC,0.00000001,SmokeCSV,{memo_tag} dust buy
+2024-06-01T12:00:00Z,SELL,BTC,0.00000001,EUR,0.02,EUR,0.01,SmokeCSV,{memo_tag} dust sell
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_endpoint(
+        csv_text,
+        reset=False,
+        filename="smoke_small_decimals.csv",
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on small decimal amounts. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    assert r.status_code in (200, 201, 202), (
+        f"CSV multi-import endpoint {endpoint} should accept small decimal amounts. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count - before_count == 2, (
+        f"CSV multi-import endpoint {endpoint} should persist exactly 2 small-decimal rows. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for small decimal import. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    results = data.get("results")
+    assert isinstance(results, list) and results, (
+        f"Small decimal response should include results. Response was: {data!r}"
+    )
+
+    first_result = results[0]
+
+    inserted = first_result.get("inserted")
+    if isinstance(inserted, int):
+        assert inserted == 2, (
+            f"Small decimal import should report inserted=2. Response was: {data!r}"
+        )
+
+    skipped_errors = first_result.get("skipped_errors")
+    if isinstance(skipped_errors, int):
+        assert skipped_errors == 0, (
+            f"Small decimal import should report skipped_errors=0. Response was: {data!r}"
+        )
+
+    assert not _csv_response_reports_errors(data), (
+        f"Small decimal import should not report validation errors. Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
