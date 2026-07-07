@@ -41,6 +41,8 @@ from csv import DictReader
 from io import StringIO, BytesIO
 from sqlalchemy import text, and_, text as _sqltext, select
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, HTMLResponse, PlainTextResponse
+from fastapi.exception_handlers import request_validation_exception_handler as fastapi_request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.templating import Jinja2Templates
 from datetime import datetime as _dt
 from pathlib import Path as FSPath, Path
@@ -689,6 +691,13 @@ from .routes.export_ui import router as export_ui_router
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
+IMPORT_CSV_DEPRECATION_WARNING = '299 - "Deprecated; use /import/multiple"'
+
+
+def _import_csv_warning_headers() -> dict[str, str]:
+    return {"Warning": IMPORT_CSV_DEPRECATION_WARNING}
+
+
 def migrate_fx_rates_schema(engine: Engine) -> None:
     """
     Backward-compatible wrapper.
@@ -1751,6 +1760,42 @@ app = FastAPI(
     lifespan=lifespan,
     description="Backend API for parsing crypto transactions and storing them safely.",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Preserve /import/csv deprecation warning even when FastAPI rejects the request
+    before the route function is entered, for example an empty multipart filename.
+    """
+    if request.url.path.endswith("/import/csv"):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "results": [
+                    {
+                        "filename": "(no-name)",
+                        "inserted": 0,
+                        "skipped_duplicates": 0,
+                        "skipped_errors": 1,
+                        "errors": [
+                            "Invalid CSV upload. Provide a .csv file using the multipart field named 'file'."
+                        ],
+                        "recognized_source_id": "unknown",
+                        "recognized_source_name": "Unknown",
+                        "recognized_source_status": "unsupported",
+                        "recognized_source_confidence": 0.0,
+                    }
+                ],
+                "meta": {
+                    "min_year": None,
+                    "max_year": None,
+                },
+            },
+            headers=_import_csv_warning_headers(),
+        )
+
+    return await fastapi_request_validation_exception_handler(request, exc)
 
 
 templates = Jinja2Templates(directory=str((RESOURCE_ROOT / "templates").resolve()))
@@ -2925,7 +2970,10 @@ async def import_csv(file: UploadFile = File(...)) -> Dict[str, Any]:
     result = await import_multiple([file], reset=False)
 
     # Add a gentle deprecation warning header.
-    return JSONResponse(result, headers={"Warning": '299 - "Deprecated; use /import/multiple"'})
+    return JSONResponse(
+        result,
+        headers=_import_csv_warning_headers(),
+    )
 
 
 @app.post("/data_quality/precheck", response_model=PrecheckResponse)

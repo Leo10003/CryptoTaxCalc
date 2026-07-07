@@ -4768,6 +4768,124 @@ def test_csv_upload_preview_accepts_uppercase_csv_extension_without_persistence(
     )
 
 
+def test_csv_import_wrapper_rejects_empty_filename_with_warning_header():
+    memo_tag = f"smoke-wrapper-empty-filename-{uuid.uuid4().hex}"
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{memo_tag} valid content empty filename
+"""
+
+    before_count = _count_transactions_by_memo_fragment(memo_tag)
+
+    endpoints = [
+        "/import/csv",
+        "/api/import/csv",
+        "/api/v1/import/csv",
+    ]
+
+    selected_response = None
+    selected_endpoint = None
+
+    for endpoint in endpoints:
+        files = {
+            "file": (
+                "",
+                csv_text.encode("utf-8"),
+                "text/csv",
+            )
+        }
+
+        r = client.post(endpoint, files=files)
+
+        if r.status_code not in (404, 405):
+            selected_response = r
+            selected_endpoint = endpoint
+            break
+
+    if selected_response is None:
+        pytest.skip("No CSV import wrapper endpoint is available in this build")
+
+    r = selected_response
+    endpoint = selected_endpoint
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV import endpoint {endpoint} requires auth/token in this build")
+
+    assert endpoint.endswith("/import/csv"), (
+        f"This wrapper empty-filename test should use /import/csv-compatible endpoint, got {endpoint!r}"
+    )
+
+    assert r.status_code < 500, (
+        f"CSV import endpoint {endpoint} must not crash on empty filename. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_count = _count_transactions_by_memo_fragment(memo_tag)
+    assert after_count == before_count, (
+        f"CSV import endpoint {endpoint} must not persist rows from empty filename. "
+        f"before={before_count}, after={after_count}, response={r.text[:1000]}"
+    )
+
+    warning = r.headers.get("warning") or r.headers.get("Warning")
+    assert warning, (
+        f"Deprecated CSV import endpoint {endpoint} should return a Warning header on empty filename. "
+        f"Headers were: {dict(r.headers)!r}"
+    )
+
+    warning_lower = warning.lower()
+
+    assert "deprecated" in warning_lower, (
+        f"Warning header should mention deprecation. Warning was: {warning!r}"
+    )
+
+    assert "import/multiple" in warning_lower, (
+        f"Warning header should tell clients to use /import/multiple. Warning was: {warning!r}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected wrapper empty-filename status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV import endpoint {endpoint} should return JSON for empty-filename feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV import endpoint {endpoint} accepted empty filename without reporting errors. "
+        f"Response was: {data!r}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Wrapper empty-filename response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") is None, (
+        f"Wrapper empty-filename response should not expose global min_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") is None, (
+        f"Wrapper empty-filename response should not expose global max_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    text = json.dumps(data, default=str).lower()
+    assert "filename" in text or "file" in text or ".csv" in text or "csv" in text, (
+        f"CSV import endpoint {endpoint} should explain empty filename rejection. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
