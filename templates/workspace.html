@@ -4856,6 +4856,14 @@
             throw new Error('Upload completed, but the server returned an unexpected response. Please retry.');
           }
 
+          const diagnosticsHtml = renderCsvImportDiagnostics(importResults);
+          if (diagnosticsHtml) {
+            setWizardErrorHtml(diagnosticsHtml);
+            wizardIsRunning = false;
+            updateWizardUI();
+            return;
+          }
+
           const failures = importResults.filter(r => r && r.error);
           if (failures.length) {
             const first = failures[0] || {};
@@ -5106,6 +5114,68 @@
         wizardError.style.display = 'block';
       }
       clearWizardSuccess();
+    }
+
+    function renderCsvImportDiagnostics(importResults) {
+      const results = Array.isArray(importResults) ? importResults : [];
+      const filesWithDiagnostics = results.filter((result) =>
+        result &&
+        Array.isArray(result.error_details) &&
+        result.error_details.length > 0
+      );
+
+      if (!filesWithDiagnostics.length) {
+        return '';
+      }
+
+      const fileCardsHtml = filesWithDiagnostics.map((result) => {
+        const filename = result.filename || 'CSV file';
+        const diagnostics = result.error_details.slice(0, 25);
+        const summary = result.error_summary || {};
+        const totalRows = Number(summary.total_error_rows || diagnostics.length);
+        const shownRows = Number(summary.shown_error_rows || diagnostics.length);
+
+        const rowsHtml = diagnostics.map((item) => {
+          const rowNumber = item && item.row_number !== undefined ? item.row_number : '?';
+          const field = item && item.field ? item.field : 'row';
+          const message = item && item.message ? item.message : 'Invalid row';
+          const rawValue = item ? item.raw_value : null;
+          const hint = item && item.hint
+            ? item.hint
+            : 'Review this row against the CryptoTaxCalc normalized CSV template.';
+
+          const rawValueHtml = rawValue === null || rawValue === undefined || rawValue === ''
+            ? ''
+            : `<div class="small" style="opacity:0.75;">Raw value: <code>${escapeHtml(String(rawValue))}</code></div>`;
+
+          return `
+            <div style="margin-top:8px; padding:8px 10px; border-radius:10px; border:1px solid color-mix(in srgb, var(--border) 80%, transparent); background:color-mix(in srgb, var(--surface) 92%, transparent);">
+              <div style="font-weight:700;">Row ${escapeHtml(String(rowNumber))} · ${escapeHtml(String(field))}</div>
+              <div>${escapeHtml(String(message))}</div>
+              ${rawValueHtml}
+              <div class="small" style="margin-top:4px;"><strong>Hint:</strong> ${escapeHtml(String(hint))}</div>
+            </div>
+          `;
+        }).join('');
+
+        const limitedNotice = totalRows > shownRows
+          ? `<div class="small" style="margin-top:6px; opacity:0.75;">Showing ${shownRows} of ${totalRows} invalid rows.</div>`
+          : '';
+
+        return `
+          <div style="margin-top:10px;">
+            <div style="font-weight:800;">${escapeHtml(String(filename))}</div>
+            ${rowsHtml}
+            ${limitedNotice}
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <strong>CSV rows need attention</strong><br/>
+        Fix the highlighted rows and upload the file again.
+        ${fileCardsHtml}
+      `;
     }
 
     function clearWizardSuccess() {
