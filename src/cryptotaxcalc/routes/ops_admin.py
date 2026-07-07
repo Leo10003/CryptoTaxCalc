@@ -124,7 +124,8 @@ async def import_database(
             detail="Confirmation missing. Add ?confirm=I_UNDERSTAND to proceed (this will overwrite the current DB).",
         )
 
-    os.makedirs("backups", exist_ok=True)
+    backups_dir = PROJECT_ROOT / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
 
     suffix = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     tmp_dir = tempfile.mkdtemp(prefix="restore_")
@@ -150,7 +151,7 @@ async def import_database(
             backup_path = None
         else:
             backup_name = f"data_before_restore_{suffix}.db"
-            backup_path = os.path.join("backups", backup_name)
+            backup_path = str(backups_dir / backup_name)
             shutil.copy2(src_db, backup_path)
 
         try:
