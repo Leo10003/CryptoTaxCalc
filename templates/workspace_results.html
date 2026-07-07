@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
-{% block title %}CryptoTaxCalc — Results{% endblock %}
+{% block title %}CryptoTaxCalc â€” Results{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -15,7 +15,7 @@
     --rs-slice-4: color-mix(in srgb, var(--ws-nav-accent) 42%, var(--surface));
     --rs-slice-5: color-mix(in srgb, var(--ws-nav-accent) 30%, var(--surface));
     --rs-slice-6: color-mix(in srgb, var(--ws-nav-accent) 20%, var(--surface));
-    /* Graphic flags (SVG) — avoids emoji/letter fallback (e.g., “HR”) */
+    /* Graphic flags (SVG) â€” avoids emoji/letter fallback (e.g., â€œHRâ€) */
     --rs-flag-hr: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MCA2MCI+CiAgPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjIwIiBmaWxsPSIjQzgxMDJFIi8+CiAgPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjIwIiB5PSIyMCIgZmlsbD0iI0ZGRkZGRiIvPgogIDxyZWN0IHdpZHRoPSI2MCIgaGVpZ2h0PSIyMCIgeT0iNDAiIGZpbGw9IiMwMTIxNjkiLz4KICA8ZGVmcz4KICAgIDxwYXR0ZXJuIGlkPSJjaGsiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8cmVjdCB3aWR0aD0iMiIgaGVpZ2h0PSIyIiBmaWxsPSIjQzgxMDJFIi8+CiAgICAgIDxyZWN0IHg9IjIiIHk9IjIiIHdpZHRoPSIyIiBoZWlnaHQ9IjIiIGZpbGw9IiNDODEwMkUiLz4KICAgIDwvcGF0dGVybj4KICAgIDxjbGlwUGF0aCBpZD0ic2hpZWxkQ2xpcCI+CiAgICAgIDxwYXRoIGQ9Ik0yMyAxOCBIMzcgVjMyIEMzNyAzNyAzNCA0MCAzMCA0MiBDMjYgNDAgMjMgMzcgMjMgMzIgWiIvPgogICAgPC9jbGlwUGF0aD4KICA8L2RlZnM+CiAgPGc+CiAgICA8cmVjdCB4PSIyMyIgeT0iMTQiIHdpZHRoPSIxNCIgaGVpZ2h0PSIzLjIiIHJ4PSIxLjEiIGZpbGw9IiNENEFGMzciLz4KICAgIDxyZWN0IHg9IjI0IiB5PSIxMSIgd2lkdGg9IjIiIGhlaWdodD0iMy4yIiByeD0iMC42IiBmaWxsPSIjMEI0RUEyIi8+CiAgICA8cmVjdCB4PSIyNyIgeT0iMTEiIHdpZHRoPSIyIiBoZWlnaHQ9IjMuMiIgcng9IjAuNiIgZmlsbD0iI0M4MTAyRSIvPgogICAgPHJlY3QgeD0iMzAiIHk9IjExIiB3aWR0aD0iMiIgaGVpZ2h0PSIzLjIiIHJ4PSIwLjYiIGZpbGw9IiMwQjRFQTIiLz4KICAgIDxyZWN0IHg9IjMzIiB5PSIxMSIgd2lkdGg9IjIiIGhlaWdodD0iMy4yIiByeD0iMC42IiBmaWxsPSIjQzgxMDJFIi8+CiAgICA8cmVjdCB4PSIzNiIgeT0iMTEiIHdpZHRoPSIyIiBoZWlnaHQ9IjMuMiIgcng9IjAuNiIgZmlsbD0iIzBCNEVBMiIvPgogIDwvZz4KICA8ZyBjbGlwLXBhdGg9InVybCgjc2hpZWxkQ2xpcCkiPgogICAgPHJlY3QgeD0iMjMiIHk9IjE4IiB3aWR0aD0iMTQiIGhlaWdodD0iMjQiIGZpbGw9IiNGRkZGRkYiLz4KICAgIDxyZWN0IHg9IjIzIiB5PSIxOCIgd2lkdGg9IjE0IiBoZWlnaHQ9IjI0IiBmaWxsPSJ1cmwoI2NoaykiLz4KICA8L2c+CiAgPHBhdGggZD0iTTIzIDE4IEgzNyBWMzIgQzM3IDM3IDM0IDQwIDMwIDQyIEMyNiA0MCAyMyAzNyAyMyAzMiBaIgogICAgICAgIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzBCMEIwQiIgc3Ryb2tlLXdpZHRoPSIwLjgiLz4KPC9zdmc+");
     --rs-flag-it: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzIDIiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjIiIHg9IjAiIGZpbGw9IiMwMDkyNDYiLz48cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSIyIiB4PSIxIiBmaWxsPSIjRjFGMkYxIi8+PHJlY3Qgd2lkdGg9IjEiIGhlaWdodD0iMiIgeD0iMiIgZmlsbD0iI0NFMkIzNyIvPjwvc3ZnPg==");
   }
@@ -334,7 +334,7 @@
     overflow-y: auto;
     scroll-behavior: smooth;
 
-    /* Phase 1: full-screen snap (removes “free scroll” feel) */
+    /* Phase 1: full-screen snap (removes â€œfree scrollâ€ feel) */
     scroll-snap-type: y proximity;
     overscroll-behavior-y: contain;
 
@@ -343,7 +343,7 @@
     -ms-overflow-style: none;
   }
 
-  /* Premium programmatic scrolling: disable snap during animated jumps to avoid harsh “snap” */
+  /* Premium programmatic scrolling: disable snap during animated jumps to avoid harsh â€œsnapâ€ */
   .rs-scroll.is-programmatic {
     scroll-snap-type: none;
     scroll-behavior: auto;
@@ -722,7 +722,7 @@
   }
 
   .rs-dd-btn::after {
-    content: "▾";
+    content: "â–¾";
     position: absolute;
     right: 10px;
     top: 50%;
@@ -769,7 +769,7 @@
     -ms-overflow-style: none;
   }
 
-  /* Panel origin per dropdown (keeps motion feeling “anchored” to the control) */
+  /* Panel origin per dropdown (keeps motion feeling â€œanchoredâ€ to the control) */
   .rs-filter.rs-dd[data-dd="asset"] .rs-dd-panel,
   .rs-filter.rs-dd[data-dd="year"] .rs-dd-panel {
     transform-origin: top left;
@@ -931,7 +931,7 @@
     transform: translateY(-1px) scale(1.01);
   }
 
-  /* “Change pulse” when a selection is applied */
+  /* â€œChange pulseâ€ when a selection is applied */
   .rs-filter.is-changed,
   .rs-asset-sort.is-changed {
     animation: rs-chip-pulse 0.42s var(--ease) both;
@@ -989,7 +989,7 @@
 
   /* Wrapper caret: only for legacy native selects (NOT for custom dropdowns) */
   .rs-filter:not(.rs-dd)::after {
-    content: "▾";
+    content: "â–¾";
     font-size: 11px;
     color: color-mix(in srgb, var(--text) 60%, var(--muted));
     margin-left: 6px;
@@ -1525,7 +1525,7 @@
     outline: none;
   }
 
-  /* Hide the browser-native clear icon for <input type="search"> (prevents double “x” with our custom clear) */
+  /* Hide the browser-native clear icon for <input type="search"> (prevents double â€œxâ€ with our custom clear) */
   .rs-asset-search::-webkit-search-cancel-button,
   .rs-asset-search::-webkit-search-decoration,
   .rs-asset-search::-webkit-search-results-button,
@@ -1597,7 +1597,7 @@
     margin-top: 6px;
   }
 
-  /* Overview KPI: 2-column “finance tiles” for fast scanning */
+  /* Overview KPI: 2-column â€œfinance tilesâ€ for fast scanning */
   .rs-kpi.rs-kpi-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 10px 14px;
@@ -2015,7 +2015,7 @@
     border-color: var(--rs-light-border);
   }
 
-  /* Overview: Top-3 legend blocks (turn bars into “data”, not decor) */
+  /* Overview: Top-3 legend blocks (turn bars into â€œdataâ€, not decor) */
   .rs-legend {
     margin-top: 8px;
     padding-top: 10px;
@@ -2165,7 +2165,7 @@
     opacity: 0.8;
   }
 
-  /* Month legend: show month key as a small tag so labels don’t truncate to “Latest…” */
+  /* Month legend: show month key as a small tag so labels donâ€™t truncate to â€œLatestâ€¦â€ */
   .rs-month-tag {
     flex: 0 0 auto;
     font-size: 10px;
@@ -2301,7 +2301,7 @@
 
   .rs-tl-hover-line {
     stroke: color-mix(in srgb, var(--ws-nav-accent) 35%, var(--border));
-    stroke-width: 1.25;
+    stroke-width: 1;
     opacity: 0.9;
   }
 
@@ -2313,7 +2313,7 @@
   /* Compare mode visuals: pinned line + hover line + filled band between */
   .rs-tl-pinned-line {
     stroke: color-mix(in srgb, var(--ws-nav-accent) 55%, var(--border));
-    stroke-width: 1.25;
+    stroke-width: 1;
     opacity: 0.75;
     stroke-dasharray: 4 4;
   }
@@ -2508,7 +2508,7 @@
   .rs-tl-path {
     fill: none;
     stroke: color-mix(in srgb, var(--ws-nav-accent) 90%, var(--surface));
-    stroke-width: 3.25;
+    stroke-width: 3;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
@@ -2646,7 +2646,7 @@
     font-weight: 700;
   }
 
-  /* Taxes: “Adjust filters” (reduces navigation friction) */
+  /* Taxes: â€œAdjust filtersâ€ (reduces navigation friction) */
   .rs-scope-row {
     display: flex;
     align-items: center;
@@ -3076,7 +3076,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    overflow: hidden; /* keep the card’s outer radius clean */
+    overflow: hidden; /* keep the cardâ€™s outer radius clean */
   }
 
   #rsInfoRunConfigCard .rs-info-run-scroll {
@@ -3240,7 +3240,7 @@
   }
 
   /* =========================================================
-     TAXES PAGE POLISH (clarity + trust + “problem solved”)
+     TAXES PAGE POLISH (clarity + trust + â€œproblem solvedâ€)
      ========================================================= */
 
   .rs-tax-hero {
@@ -3348,7 +3348,7 @@
     gap: 12px;
   }
 
-  /* Taxes: “Details” micro-toggle */
+  /* Taxes: â€œDetailsâ€ micro-toggle */
   .rs-tax-more {
     border: none;
     background: transparent;
@@ -3468,7 +3468,7 @@
     color: color-mix(in srgb, var(--text) 62%, var(--muted));
   }
 
-  /* Taxes: “None” value styling (Exempt gains) */
+  /* Taxes: â€œNoneâ€ value styling (Exempt gains) */
   .rs-kpi-val.rs-kpi-val-none {
     font-size: 14px;
     font-weight: 900;
@@ -3745,7 +3745,7 @@
     height: 1px;
   }
 
-  /* Keep the control visually stable (does not look like a “wrapped” layout) */
+  /* Keep the control visually stable (does not look like a â€œwrappedâ€ layout) */
   .rs-tax-local-dd .rs-dd-btn-sort {
     width: 240px;
   }
@@ -4074,7 +4074,7 @@
     margin-top: 8px;
   }
 
-  /* Taxes page: keep bar rows compact (prevents stretched, “unprofessional” spacing) */
+  /* Taxes page: keep bar rows compact (prevents stretched, â€œunprofessionalâ€ spacing) */
   #rsTaxes .rs-bars {
     align-content: start;
     grid-auto-rows: max-content;
@@ -4429,7 +4429,7 @@
     justify-content: center;
   }
 
-  /* Let the bars occupy the card’s vertical rhythm (premium balance) */
+  /* Let the bars occupy the cardâ€™s vertical rhythm (premium balance) */
   .rs-card-fill .rs-chart.rs-chart--bars {
     flex: 1 1 auto;
     min-height: 0;
@@ -4441,7 +4441,7 @@
     gap: 12px;
   }
 
-  /* Asset Net view: keep the bar cluster visually centered (few rows shouldn’t feel “stuck”) */
+  /* Asset Net view: keep the bar cluster visually centered (few rows shouldnâ€™t feel â€œstuckâ€) */
   #chartAsset.rs-chart--bars {
     align-items: stretch;
   }
@@ -4774,7 +4774,7 @@
     color: rgba(15, 23, 42, 0.62);
   }
 
-  /* Phase 4: Warnings as severity cards (clarity + “what do I do next?”) */
+  /* Phase 4: Warnings as severity cards (clarity + â€œwhat do I do next?â€) */
   #rsWarningsList.rs-info-list {
     padding-left: 0;
     list-style: none;
@@ -5274,7 +5274,7 @@
   .rs-check path {
     fill: none;
     stroke: color-mix(in srgb, var(--text) 86%, transparent);
-    stroke-width: 2.6;
+    stroke-width: 3;
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-dasharray: 40;
@@ -5303,7 +5303,7 @@
   <aside class="ws-sidebar">
     <div class="ws-sidebar-inner">
       <div class="ws-sidebar-logo">
-        <button id="btnSidebarToggle" class="ws-sidebar-logo-mark" type="button" aria-label="Toggle sidebar">☰</button>
+        <button id="btnSidebarToggle" class="ws-sidebar-logo-mark" type="button" aria-label="Toggle sidebar">â˜°</button>
         <span class="ws-sidebar-logo-text">
           <span class="ws-sidebar-logo-title">CryptoTaxCalc</span>
           <span class="ws-sidebar-logo-sub">Results</span>
@@ -5361,7 +5361,7 @@
           <div class="rs-title-row">
             <div>
               <h1 class="rs-h1">Tax Calculation Workspace</h1>
-              <div class="rs-meta" data-run-meta>Run — • — • Tax year —</div>
+              <div class="rs-meta" data-run-meta>Run â€” â€¢ â€” â€¢ Tax year â€”</div>
             </div>
 
             <div class="rs-title-actions">
@@ -5378,18 +5378,18 @@
                   </button>
                 </div>
 
-                <div id="kIllustrativeTaxHero" class="rs-hero-tax-val">—</div>
+                <div id="kIllustrativeTaxHero" class="rs-hero-tax-val">â€”</div>
 
                 <div id="rsTaxInfoPanel" class="rs-hero-tax-panel" role="dialog" aria-label="Estimated tax details" style="display:none;">
                   <div class="rs-hero-tax-sub">Illustrative estimate for this scope</div>
 
                   <div id="rsTaxGuardrail" class="rs-hero-tax-guardrail" style="display:none;">
-                    Multi-year scope — estimate is illustrative; filter to a single tax year for filing.
+                    Multi-year scope â€” estimate is illustrative; filter to a single tax year for filing.
                   </div>
 
-                  <div id="rsConfidenceLine" class="rs-hero-tax-confidence">Confidence: —</div>
+                  <div id="rsConfidenceLine" class="rs-hero-tax-confidence">Confidence: â€”</div>
 
-                  <div id="rsTaxBasisLine" class="rs-hero-tax-confidence">Based on taxable gain — • Rate —</div>
+                  <div id="rsTaxBasisLine" class="rs-hero-tax-confidence">Based on taxable gain â€” â€¢ Rate â€”</div>
 
                   <button id="rsNextExport" type="button" class="rs-hero-tax-cta">Next: Export report</button>
                 </div>
@@ -5401,12 +5401,12 @@
 
           <!-- Integrity strip (FX + data completeness) -->
           <div id="rsIntegrityMini" class="rs-export-strip rs-export-integrity-strip" aria-label="Run integrity">
-            <span><b>FX safety:</b> <span id="rsFxModeLabel">—</span></span>
-            <span class="rs-export-dot">•</span>
-            <span><b>FX fallback days:</b> <span id="rsFxFallbackDays">—</span></span>
-            <span class="rs-export-dot">•</span>
-            <span><b>Fee completeness:</b> <span id="rsFeeCompleteness">—</span></span>
-            <span class="rs-export-dot">•</span>
+            <span><b>FX safety:</b> <span id="rsFxModeLabel">â€”</span></span>
+            <span class="rs-export-dot">â€¢</span>
+            <span><b>FX fallback days:</b> <span id="rsFxFallbackDays">â€”</span></span>
+            <span class="rs-export-dot">â€¢</span>
+            <span><b>Fee completeness:</b> <span id="rsFeeCompleteness">â€”</span></span>
+            <span class="rs-export-dot">â€¢</span>
             <span><b>Lot method:</b> <span id="rsLotMethodLabel">FIFO</span></span>
             <span class="rs-export-spacer" aria-hidden="true"></span>
             <button id="rsIntegrityDetailsBtn" class="rs-copy-mini" type="button">Details</button>
@@ -5444,12 +5444,12 @@
             </div>
 
             <button id="rsFilterClear" class="rs-filter-clear" type="button" style="display:none;">Clear</button>
-            <span id="rsFilterStatus" class="rs-filter-status" style="display:none;">Applying…</span>
+            <span id="rsFilterStatus" class="rs-filter-status" style="display:none;">Applyingâ€¦</span>
 
             <div class="rs-filters-hint" aria-label="Current scope and impact">
               <div class="rs-filters-hint-text">
-                <span id="rsFiltersHint" class="rs-filters-hint-scope">Scope: All assets • All years</span>
-                <span id="rsScopeMeta" class="rs-filters-hint-meta">Range — • Events —</span>
+                <span id="rsFiltersHint" class="rs-filters-hint-scope">Scope: All assets â€¢ All years</span>
+                <span id="rsScopeMeta" class="rs-filters-hint-meta">Range â€” â€¢ Events â€”</span>
               </div>
               <div class="rs-filters-hint-row">
                 <button id="rsResetToRunYear" class="rs-filter-reset rs-filter-reset-ico" type="button" style="display:none;" aria-label="Reset filters to run defaults" title="Reset filters (All assets + run year)">
@@ -5472,25 +5472,25 @@
 
                       <div class="rs-kpi-row rs-kpi-row-hero">
                           <span>Taxable gain</span>
-                          <span id="kTaxableGain" class="rs-kpi-val rs-kpi-val-hero">—</span>
+                          <span id="kTaxableGain" class="rs-kpi-val rs-kpi-val-hero">â€”</span>
                       </div>
 
                       <div class="rs-kpi-row rs-kpi-row-wide">
                           <span>Total realised gain</span>
-                          <span id="kTotalGain" class="rs-kpi-val">—</span>
+                          <span id="kTotalGain" class="rs-kpi-val">â€”</span>
                       </div>
 
                       <div class="rs-kpi-section-title">Context</div>
 
-                      <div class="rs-kpi-row"><span>Exempt gain</span><span id="kExemptGain" class="rs-kpi-val">—</span></div>
-                      <div class="rs-kpi-row"><span>Taxable share</span><span id="kTaxableShare" class="rs-kpi-val rs-kpi-val-small">—</span></div>
+                      <div class="rs-kpi-row"><span>Exempt gain</span><span id="kExemptGain" class="rs-kpi-val">â€”</span></div>
+                      <div class="rs-kpi-row"><span>Taxable share</span><span id="kTaxableShare" class="rs-kpi-val rs-kpi-val-small">â€”</span></div>
 
                       <div class="rs-kpi-span" aria-label="Taxable vs exempt share">
                           <div id="kStack" class="rs-stack" style="--t:0%; --e:0%;" aria-label="Taxable vs exempt share">
                               <span class="rs-stack-tax" aria-hidden="true"></span>
                               <span class="rs-stack-ex" aria-hidden="true"></span>
                           </div>
-                          <div id="kStackLabels" class="rs-stack-labels">Taxable — • Exempt —</div>
+                          <div id="kStackLabels" class="rs-stack-labels">Taxable â€” â€¢ Exempt â€”</div>
                       </div>
 
                       <div id="rsResultsExplain" class="rs-results-explain" aria-label="What these numbers mean">
@@ -5534,13 +5534,13 @@
                       <div class="rs-status-head">
                           <span id="kStatusDot" class="rs-status-dot" aria-hidden="true"></span>
                           <span id="kStatusTitle" class="rs-status-title">Data quality</span>
-                          <span id="kStatusBadge" class="rs-status-badge">—</span>
+                          <span id="kStatusBadge" class="rs-status-badge">â€”</span>
                       </div>
-                      <div id="kStatusBody" class="rs-status-body">Checking…</div>
+                      <div id="kStatusBody" class="rs-status-body">Checkingâ€¦</div>
                       <ul id="kStatusList" class="rs-status-list" style="display:none;"></ul>
                       <button id="kStatusGoInfo" type="button" class="rs-link-mini" style="display:none;">View in Info</button>
 
-                      <div id="rsVerifiedLine" class="rs-verified" aria-label="Verified signals">Verified: —</div>
+                      <div id="rsVerifiedLine" class="rs-verified" aria-label="Verified signals">Verified: â€”</div>
 
                       <div id="rsVerifiedChips" class="rs-chips" aria-label="Signals (expanded)" style="display:none;">
                           <span id="rsChip1" class="rs-chip">Run saved to History</span>
@@ -5552,11 +5552,11 @@
                   <div class="rs-highlights" aria-label="Key takeaways">
                       <div class="rs-highlights-title">Highlights</div>
                       <div class="rs-highlights-line">
-                          <span><b>Taxable share:</b> <span id="kSummaryShare">—</span></span>
-                          <span class="rs-highlights-dot">•</span>
-                          <span><b>Primary driver:</b> <span id="kSummaryAsset">—</span></span>
-                          <span class="rs-highlights-dot">•</span>
-                          <span><b>Most impact month (last 12):</b> <span id="kSummaryMonth">—</span></span>
+                          <span><b>Taxable share:</b> <span id="kSummaryShare">â€”</span></span>
+                          <span class="rs-highlights-dot">â€¢</span>
+                          <span><b>Primary driver:</b> <span id="kSummaryAsset">â€”</span></span>
+                          <span class="rs-highlights-dot">â€¢</span>
+                          <span><b>Most impact month (last 12):</b> <span id="kSummaryMonth">â€”</span></span>
                       </div>
                   </div>
               </div>
@@ -5577,22 +5577,22 @@
               <div class="rs-card-h">
                 <div class="rs-card-h-main">
                   <div id="chartAsset" class="rs-chart rs-chart--donut" aria-label="Asset contribution"></div>
-                  <div id="rsAssetNote" class="rs-chart-note">Donut: Top 5 + Other • List: all assets</div>
+                  <div id="rsAssetNote" class="rs-chart-note">Donut: Top 5 + Other â€¢ List: all assets</div>
                 </div>
 
                 <div class="rs-card-h-side">
                   <div class="rs-asset-tools" aria-label="Asset list controls">
                     <div class="rs-asset-search-wrap">
-                      <input id="rsAssetSearch" class="rs-asset-search" type="search" placeholder="Search…" autocomplete="off" aria-label="Search assets">
+                      <input id="rsAssetSearch" class="rs-asset-search" type="search" placeholder="Searchâ€¦" autocomplete="off" aria-label="Search assets">
                       <button id="rsAssetSearchClear" class="rs-asset-search-clear" type="button" aria-label="Clear search">
-                        <span aria-hidden="true">×</span>
+                        <span aria-hidden="true">Ã—</span>
                       </button>
                     </div>
                     <div class="rs-asset-sort-wrap rs-dd" data-dd="assetSort">
                       <select id="rsAssetSort" class="rs-asset-sort" aria-label="Sort assets" tabindex="-1" aria-hidden="true">
                         <option value="abs_desc">Magnitude</option>
                         <option value="net_desc">Net</option>
-                        <option value="az">A→Z</option>
+                        <option value="az">Aâ†’Z</option>
                       </select>
 
                       <button id="rsDdAssetSortBtn" type="button" class="rs-dd-btn rs-dd-btn-sort" aria-haspopup="listbox" aria-expanded="false">
@@ -5604,7 +5604,7 @@
                     </div>
                   </div>
 
-                  <div id="rsAssetListMeta" class="rs-asset-meta">Showing —</div>
+                  <div id="rsAssetListMeta" class="rs-asset-meta">Showing â€”</div>
 
                   <div id="legendAsset" class="rs-legend rs-legend--side" aria-label="All assets list"></div>
                 </div>
@@ -5630,7 +5630,7 @@
 
                 <div class="rs-card-h-side">
                   <div id="legendMonth" class="rs-legend rs-legend--side rs-legend--month" aria-label="Month legend"></div>
-                  <div id="rsMonthMicro" class="rs-month-micro" aria-label="Month micro stats">—</div>
+                  <div id="rsMonthMicro" class="rs-month-micro" aria-label="Month micro stats">â€”</div>
                 </div>
               </div>
             </div>
@@ -5643,9 +5643,9 @@
         <div class="rs-inner">
           <div>
             <h2 class="rs-h2">Taxes</h2>
-            <div class="rs-meta" data-run-meta>Run — • — • Tax year —</div>
+            <div class="rs-meta" data-run-meta>Run â€” â€¢ â€” â€¢ Tax year â€”</div>
             <div class="rs-scope rs-scope-row">
-              <span>Scope: <span id="rsScopeTaxes">All assets • All years</span></span>
+              <span>Scope: <span id="rsScopeTaxes">All assets â€¢ All years</span></span>
               <button id="rsTaxesAdjustFilters" type="button" class="rs-scope-adjust">Adjust filters</button>
             </div>
           </div>
@@ -5660,14 +5660,14 @@
               <div class="rs-tax-summary-scroll">
                 <div class="rs-tax-hero" aria-label="Estimated tax (illustrative)">
                   <div class="rs-tax-hero-k">Estimated tax</div>
-                  <div id="tEstimatedTax" class="rs-tax-hero-v">—</div>
+                  <div id="tEstimatedTax" class="rs-tax-hero-v">â€”</div>
 
                   <div class="rs-tax-hero-meta">
-                    <span>Effective rate <b id="tTaxRateEffective">—</b></span>
-                    <span class="rs-highlights-dot" aria-hidden="true">•</span>
-                    <span>Taxable base <b id="tTaxableBase">—</b></span>
-                    <span class="rs-highlights-dot" aria-hidden="true">•</span>
-                    <span id="rsTaxesTotalsMode" class="rs-tax-mode-pill" aria-label="Totals mode">—</span>
+                    <span>Effective rate <b id="tTaxRateEffective">â€”</b></span>
+                    <span class="rs-highlights-dot" aria-hidden="true">â€¢</span>
+                    <span>Taxable base <b id="tTaxableBase">â€”</b></span>
+                    <span class="rs-highlights-dot" aria-hidden="true">â€¢</span>
+                    <span id="rsTaxesTotalsMode" class="rs-tax-mode-pill" aria-label="Totals mode">â€”</span>
                   </div>
 
                   <div class="rs-tax-hero-hint">
@@ -5677,7 +5677,7 @@
 
                   <div id="rsTaxesHeroMorePanel" class="rs-tax-more-panel" style="display:none;">
                     <div class="rs-tax-more-line">
-                      Local add-on is jurisdiction- and year-specific. Croatia: prirez (local surtax) applies for tax years ≤ 2023; from 2024 prirez is abolished. Italy: local add-on is not applied in this model. Outputs are informational and not tax advice.
+                      Local add-on is jurisdiction- and year-specific. Croatia: prirez (local surtax) applies for tax years â‰¤ 2023; from 2024 prirez is abolished. Italy: local add-on is not applied in this model. Outputs are informational and not tax advice.
                     </div>
                     <div class="rs-tax-more-sep" aria-hidden="true"></div>
                     <div class="rs-tax-more-line">
@@ -5686,11 +5686,11 @@
                   </div>
 
                   <div id="rsTaxesGuardrail" class="rs-tax-guardrail" style="display:none;">
-                    Multi-year scope — estimate is illustrative; filter to a single tax year for filing.
+                    Multi-year scope â€” estimate is illustrative; filter to a single tax year for filing.
                   </div>
 
                   <div class="rs-tax-eq-row">
-                    <div id="rsTaxesFormula" class="rs-tax-hero-eq">Tax = —</div>
+                    <div id="rsTaxesFormula" class="rs-tax-hero-eq">Tax = â€”</div>
                     <button id="rsTaxesCopyEq" type="button" class="rs-tax-eq-copy" aria-label="Copy tax estimate summary">
                       <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                         <rect x="9" y="9" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"></rect>
@@ -5701,22 +5701,22 @@
                 </div>
 
                 <div class="rs-kpi">
-                  <div class="rs-kpi-row"><span>Taxable gain</span><span id="tTaxable" class="rs-kpi-val">—</span></div>
+                  <div class="rs-kpi-row"><span>Taxable gain</span><span id="tTaxable" class="rs-kpi-val">â€”</span></div>
 
                   <div id="rsTaxesExemptRow" class="rs-kpi-row">
                     <span id="rsTaxesExemptLabel">Exempt gain</span>
-                    <span id="tExempt" class="rs-kpi-val">—</span>
+                    <span id="tExempt" class="rs-kpi-val">â€”</span>
                   </div>
 
-                  <div class="rs-kpi-row"><span>Total gain</span><span id="tTotal" class="rs-kpi-val">—</span></div>
-                  <div class="rs-kpi-row"><span>Taxable share</span><span id="tTaxableShare" class="rs-kpi-val rs-kpi-val-small">—</span></div>
+                  <div class="rs-kpi-row"><span>Total gain</span><span id="tTotal" class="rs-kpi-val">â€”</span></div>
+                  <div class="rs-kpi-row"><span>Taxable share</span><span id="tTaxableShare" class="rs-kpi-val rs-kpi-val-small">â€”</span></div>
                 </div>
 
                 <div class="rs-tax-rate-card" aria-label="Tax rate details">
                   <div class="rs-tax-rate-head">
                     <div class="rs-tax-rate-title">Tax rate</div>
                     <div class="rs-tax-rate-head-right">
-                      <span id="rsTaxJurisChip" class="rs-tax-juris-chip" aria-label="Jurisdiction">—</span>
+                      <span id="rsTaxJurisChip" class="rs-tax-juris-chip" aria-label="Jurisdiction">â€”</span>
                       <span class="rs-tax-soon" aria-label="Local add-on (manual)">Local add-on (manual)</span>
                     </div>
                   </div>
@@ -5724,17 +5724,17 @@
                   <div class="rs-tax-rate-grid">
                     <div class="rs-tax-rate-row">
                       <span>National (jurisdiction)</span>
-                      <span id="tTaxRateNational" class="rs-tax-rate-val">—</span>
+                      <span id="tTaxRateNational" class="rs-tax-rate-val">â€”</span>
                     </div>
 
                     <div class="rs-tax-rate-row">
                       <span>Region/City add-on</span>
-                      <span id="tTaxRateLocalVal" class="rs-tax-rate-val">—</span>
+                      <span id="tTaxRateLocalVal" class="rs-tax-rate-val">â€”</span>
                     </div>
 
                     <div class="rs-tax-rate-row">
                       <span>Effective total</span>
-                      <span id="tTaxRateTotal" class="rs-tax-rate-val">—</span>
+                      <span id="tTaxRateTotal" class="rs-tax-rate-val">â€”</span>
                     </div>
 
                     <div class="rs-tax-rate-row rs-tax-rate-row-muted rs-tax-rate-row-local">
@@ -5742,12 +5742,12 @@
 
                       <div class="rs-tax-local-dd rs-dd" data-dd="taxLocal">
                         <select id="rsTaxLocalArea" class="rs-tax-local-select" tabindex="-1" aria-hidden="true">
-                          <option value="">— Not set</option>
+                          <option value="">â€” Not set</option>
                         </select>
 
                         <button id="rsDdTaxLocalBtn" type="button" class="rs-dd-btn rs-dd-btn-sort" aria-haspopup="listbox" aria-expanded="false">
                           <span class="rs-dd-sort-k">Region</span>
-                          <span id="rsDdTaxLocalVal" class="rs-dd-sort-v">—</span>
+                          <span id="rsDdTaxLocalVal" class="rs-dd-sort-v">â€”</span>
                         </button>
 
                         <div id="rsDdTaxLocalPanel" class="rs-dd-panel rs-dd-panel-right" role="listbox" aria-label="Region/City options"></div>
@@ -5772,7 +5772,7 @@
                   </div>
 
                   <div id="rsTaxAuditPanel" class="rs-tax-audit-panel" style="display:none;">
-                    <div id="rsTaxRateProvenance" class="rs-tax-provenance">—</div>
+                    <div id="rsTaxRateProvenance" class="rs-tax-provenance">â€”</div>
                     <div id="rsTaxAuditChips" class="rs-tax-audit" aria-label="Audit snapshot"></div>
                   </div>
                 </div>
@@ -5780,7 +5780,7 @@
 
               <div class="rs-tax-summary-footer">
                 <div id="rsTaxesReadiness" class="rs-tax-readiness" aria-live="polite">
-                  <span id="rsTaxesReadinessText">Ready to export: —</span>
+                  <span id="rsTaxesReadinessText">Ready to export: â€”</span>
                   <button id="rsTaxesReadinessGoInfo" type="button" class="rs-tax-readiness-link" style="display:none;">Review in Info</button>
                 </div>
 
@@ -5799,7 +5799,7 @@
                 <div class="rs-tax-block">
                   <div class="rs-tax-block-h">
                     <div class="rs-tax-block-title">Tax base</div>
-                    <div id="tTaxBaseMeta" class="rs-tax-block-meta">—</div>
+                    <div id="tTaxBaseMeta" class="rs-tax-block-meta">â€”</div>
                   </div>
 
                   <div class="rs-tax-base-share" aria-label="Taxable vs exempt share">
@@ -5807,18 +5807,18 @@
                       <span class="rs-stack-tax" aria-hidden="true"></span>
                       <span class="rs-stack-ex" aria-hidden="true"></span>
                     </div>
-                    <div id="tBaseStackLabels" class="rs-stack-labels">Taxable — • Exempt —</div>
+                    <div id="tBaseStackLabels" class="rs-stack-labels">Taxable â€” â€¢ Exempt â€”</div>
                   </div>
 
                   <div class="rs-tax-base-rows" aria-label="Tax base amounts">
                     <button id="rsTaxBaseTaxableBtn" type="button" class="rs-tax-base-row">
                       <span class="rs-tax-base-k">Taxable</span>
-                      <span id="rsTaxBaseTaxableAmt" class="rs-tax-base-v">—</span>
+                      <span id="rsTaxBaseTaxableAmt" class="rs-tax-base-v">â€”</span>
                     </button>
 
                     <button id="rsTaxBaseExemptBtn" type="button" class="rs-tax-base-row">
                       <span class="rs-tax-base-k">Exempt</span>
-                      <span id="rsTaxBaseExemptAmt" class="rs-tax-base-v">—</span>
+                      <span id="rsTaxBaseExemptAmt" class="rs-tax-base-v">â€”</span>
                     </button>
                   </div>
                 </div>
@@ -5835,15 +5835,15 @@
                   <div id="rsTaxDrivers" class="rs-tax-drivers" aria-label="Drivers">
                     <div class="rs-tax-driver">
                       <div class="rs-tax-driver-k">Top gain</div>
-                      <div id="tDriverTopGain" class="rs-tax-driver-v">—</div>
+                      <div id="tDriverTopGain" class="rs-tax-driver-v">â€”</div>
                     </div>
                     <div class="rs-tax-driver">
                       <div class="rs-tax-driver-k">Top loss</div>
-                      <div id="tDriverTopLoss" class="rs-tax-driver-v">—</div>
+                      <div id="tDriverTopLoss" class="rs-tax-driver-v">â€”</div>
                     </div>
                     <div class="rs-tax-driver">
                       <div class="rs-tax-driver-k">Net total</div>
-                      <div id="tDriverNetTotal" class="rs-tax-driver-v">—</div>
+                      <div id="tDriverNetTotal" class="rs-tax-driver-v">â€”</div>
                     </div>
                   </div>
 
@@ -5860,20 +5860,20 @@
         <div class="rs-inner">
           <div>
             <h2 class="rs-h2">Realised events</h2>
-            <div class="rs-meta" data-run-meta>Run — • — • Tax year —</div>
-            <div class="rs-scope">Scope: <span id="rsScopeEvents">All assets • All years</span></div>
+            <div class="rs-meta" data-run-meta>Run â€” â€¢ â€” â€¢ Tax year â€”</div>
+            <div class="rs-scope">Scope: <span id="rsScopeEvents">All assets â€¢ All years</span></div>
           </div>
 
           <div class="rs-card" style="flex:1; display:flex; flex-direction:column; min-height:0;">
             <div class="rs-card-title">Events review</div>
-            <div class="rs-card-sub">Showing all loaded matching realised events for this scope (search and quick filters apply). If your run is large, use “Load more” to fetch the full run before auditing totals.</div>
+            <div class="rs-card-sub">Showing all loaded matching realised events for this scope (search and quick filters apply). If your run is large, use â€œLoad moreâ€ to fetch the full run before auditing totals.</div>
             <div class="rs-events-tools">
               <div class="rs-events-left">
                 <div class="rs-events-controls">
                   <div class="rs-events-search-wrap">
-                    <input id="rsEventsSearch" class="rs-events-search" type="search" placeholder="Search events…" autocomplete="off" aria-label="Search events">
+                    <input id="rsEventsSearch" class="rs-events-search" type="search" placeholder="Search eventsâ€¦" autocomplete="off" aria-label="Search events">
                     <button id="rsEventsSearchClear" class="rs-events-search-clear" type="button" aria-label="Clear search">
-                      <span aria-hidden="true">×</span>
+                      <span aria-hidden="true">Ã—</span>
                     </button>
                   </div>
 
@@ -5885,7 +5885,7 @@
                 </div>
 
                 <div class="rs-events-summary-row">
-                   <div id="rsEventsSummary" class="rs-events-summary">Events: —</div>
+                   <div id="rsEventsSummary" class="rs-events-summary">Events: â€”</div>
                   <button id="rsEventsIssuesToggle" type="button" class="rs-events-issues-btn" style="display:none;" aria-pressed="false">
                     Show issues
                   </button>
@@ -5894,19 +5894,19 @@
                 <div id="rsEventsMetrics" class="rs-events-metrics" aria-label="Matching totals">
                   <div class="rs-events-metric">
                     <div class="rs-events-metric-k">Matched</div>
-                    <div id="rsEventsMetricCount" class="rs-events-metric-v">—</div>
+                    <div id="rsEventsMetricCount" class="rs-events-metric-v">â€”</div>
                   </div>
                   <div class="rs-events-metric">
                     <div class="rs-events-metric-k">Proceeds</div>
-                    <div id="rsEventsMetricProceeds" class="rs-events-metric-v">—</div>
+                    <div id="rsEventsMetricProceeds" class="rs-events-metric-v">â€”</div>
                   </div>
                   <div class="rs-events-metric">
                     <div class="rs-events-metric-k">Cost</div>
-                    <div id="rsEventsMetricCost" class="rs-events-metric-v">—</div>
+                    <div id="rsEventsMetricCost" class="rs-events-metric-v">â€”</div>
                   </div>
                   <div class="rs-events-metric">
                     <div class="rs-events-metric-k">Net gain</div>
-                    <div id="rsEventsMetricGain" class="rs-events-metric-v">—</div>
+                    <div id="rsEventsMetricGain" class="rs-events-metric-v">â€”</div>
                   </div>
                 </div>
               </div>
@@ -5914,7 +5914,7 @@
               <div class="rs-events-actions">
                 <button id="rsEventsUndoAsset" type="button" class="btn btn-outline rs-btn-compact" style="display:none;">Back to Taxes</button>
 
-                <span id="rsEventsLoadState" class="rs-events-load-state" style="display:none;">Loaded —</span>
+                <span id="rsEventsLoadState" class="rs-events-load-state" style="display:none;">Loaded â€”</span>
                 <button id="rsEventsLoadMore" type="button" class="btn btn-outline rs-btn-compact" style="display:none;">Load more</button>
                 <button id="rsEventsLoadAll" type="button" class="btn btn-outline rs-btn-compact" style="display:none;">Load all</button>
 
@@ -5935,7 +5935,7 @@
                   </tr>
                 </thead>
                 <tbody id="eventsTbody">
-                  <tr><td colspan="6" style="color: var(--muted);">Loading…</td></tr>
+                  <tr><td colspan="6" style="color: var(--muted);">Loadingâ€¦</td></tr>
                 </tbody>
               </table>
             </div>
@@ -5948,29 +5948,29 @@
         <div class="rs-inner">
           <div>
             <h2 class="rs-h2">Export</h2>
-            <div class="rs-meta" data-run-meta>Run — • — • Tax year —</div>
-            <div class="rs-meta">Exports are generated from this run. Scope: <span id="rsExportsScopeText">All assets • Tax year —</span>.</div>
+            <div class="rs-meta" data-run-meta>Run â€” â€¢ â€” â€¢ Tax year â€”</div>
+            <div class="rs-meta">Exports are generated from this run. Scope: <span id="rsExportsScopeText">All assets â€¢ Tax year â€”</span>.</div>
 
             <div class="rs-export-strip" aria-label="Export context">
-              <span id="rsExportRunStamp">Generated from —</span>
-              <span class="rs-export-dot">•</span>
+              <span id="rsExportRunStamp">Generated from â€”</span>
+              <span class="rs-export-dot">â€¢</span>
               <span class="rs-export-spacer" aria-hidden="true"></span>
               <button id="rsCopyResultsLink" type="button" class="rs-copy-mini">Copy results link</button>
             </div>
 
             <div class="rs-export-strip rs-export-integrity-strip" aria-label="Integrity and scope">
-              <span><b>Scope locked:</b> <span id="rsIntegrityScope">—</span></span>
-              <span class="rs-export-dot">•</span>
-              <span><b>Hash:</b> <span id="rsIntegrityHash" class="rs-kv-mono">—</span></span>
-              <span class="rs-export-dot">•</span>
-              <span><b>Inputs:</b> <span id="rsIntegrityInputs">—</span></span>
-              <span class="rs-export-dot">•</span>
-              <span><b>FX:</b> <span id="rsIntegrityFx">—</span></span>
-              <span class="rs-export-dot">•</span>
-              <span><b>Warnings:</b> <span id="rsIntegrityWarnings">—</span></span>
-              <span class="rs-export-dot">•</span>
-              <span><b>Fees:</b> <span id="rsIntegrityFees">—</span></span>
-              <span class="rs-export-dot">•</span>
+              <span><b>Scope locked:</b> <span id="rsIntegrityScope">â€”</span></span>
+              <span class="rs-export-dot">â€¢</span>
+              <span><b>Hash:</b> <span id="rsIntegrityHash" class="rs-kv-mono">â€”</span></span>
+              <span class="rs-export-dot">â€¢</span>
+              <span><b>Inputs:</b> <span id="rsIntegrityInputs">â€”</span></span>
+              <span class="rs-export-dot">â€¢</span>
+              <span><b>FX:</b> <span id="rsIntegrityFx">â€”</span></span>
+              <span class="rs-export-dot">â€¢</span>
+              <span><b>Warnings:</b> <span id="rsIntegrityWarnings">â€”</span></span>
+              <span class="rs-export-dot">â€¢</span>
+              <span><b>Fees:</b> <span id="rsIntegrityFees">â€”</span></span>
+              <span class="rs-export-dot">â€¢</span>
               <span><b>Rate:</b> <span id="rsIntegrityRateMode">National only</span></span>
               <span class="rs-export-spacer" aria-hidden="true"></span>
               <button id="rsExportsGoOverview" type="button" class="rs-copy-mini">Change scope</button>
@@ -6036,7 +6036,7 @@
         <div class="rs-inner">
           <div style="text-align:center;">
             <h2 class="rs-h2">Info</h2>
-            <div class="rs-meta" data-run-meta>Run — • — • Tax year —</div>
+            <div class="rs-meta" data-run-meta>Run â€” â€¢ â€” â€¢ Tax year â€”</div>
             <div class="rs-meta">Exports use current filters</div>
           </div>
 
@@ -6051,9 +6051,9 @@
                 <div class="rs-status-head">
                   <span class="rs-status-dot" aria-hidden="true"></span>
                   <span class="rs-status-title">Jurisdiction readiness</span>
-                  <span id="rsJurisReadyBadge" class="rs-status-badge">—</span>
+                  <span id="rsJurisReadyBadge" class="rs-status-badge">â€”</span>
                 </div>
-                <div id="rsJurisReadyBody" class="rs-status-body">—</div>
+                <div id="rsJurisReadyBody" class="rs-status-body">â€”</div>
               </div>
               <ul id="rsCountryNotesList" class="rs-info-list" aria-label="Country notes"></ul>
             </div>
@@ -6064,17 +6064,17 @@
 
               <div class="rs-info-run-scroll" aria-label="Run configuration details">
                 <div class="rs-kv" aria-label="Run configuration">
-                  <div class="rs-kv-row"><div class="rs-kv-k">Run</div><div id="rsKvRun" class="rs-kv-v">—</div></div>
-                  <div class="rs-kv-row"><div class="rs-kv-k">Created</div><div id="rsKvCreated" class="rs-kv-v">—</div></div>
-                  <div class="rs-kv-row"><div class="rs-kv-k">Rule</div><div id="rsKvRule" class="rs-kv-v">—</div></div>
+                  <div class="rs-kv-row"><div class="rs-kv-k">Run</div><div id="rsKvRun" class="rs-kv-v">â€”</div></div>
+                  <div class="rs-kv-row"><div class="rs-kv-k">Created</div><div id="rsKvCreated" class="rs-kv-v">â€”</div></div>
+                  <div class="rs-kv-row"><div class="rs-kv-k">Rule</div><div id="rsKvRule" class="rs-kv-v">â€”</div></div>
                   <div class="rs-kv-row"><div class="rs-kv-k">Method</div><div id="rsKvMethod" class="rs-kv-v">FIFO</div></div>
-                  <div class="rs-kv-row"><div class="rs-kv-k">FX batch</div><div id="rsKvFx" class="rs-kv-v">—</div></div>
-                  <div class="rs-kv-row"><div class="rs-kv-k">Events</div><div id="rsKvEvents" class="rs-kv-v">—</div></div>
+                  <div class="rs-kv-row"><div class="rs-kv-k">FX batch</div><div id="rsKvFx" class="rs-kv-v">â€”</div></div>
+                  <div class="rs-kv-row"><div class="rs-kv-k">Events</div><div id="rsKvEvents" class="rs-kv-v">â€”</div></div>
 
                   <div class="rs-kv-row">
                     <div class="rs-kv-k">Output hash</div>
                     <div class="rs-kv-v rs-kv-mono">
-                      <span id="rsKvHash">—</span>
+                      <span id="rsKvHash">â€”</span>
                       <button id="rsCopyHash" type="button" class="rs-copy-mini">Copy</button>
                     </div>
                   </div>
@@ -6093,13 +6093,13 @@
 
                 <div id="rsInfoPerformance" class="rs-mini-note" style="display:none; margin-top: 12px;">
                   <b>Performance breakdown</b>
-                  <div id="rsPerfTotal" class="rs-perf-total">Total: —</div>
-                  <div id="rsPerfList" class="rs-perf-list">—</div>
+                  <div id="rsPerfTotal" class="rs-perf-total">Total: â€”</div>
+                  <div id="rsPerfList" class="rs-perf-list">â€”</div>
                 </div>
 
                 <div id="rsInfoMethodology" class="rs-mini-note" style="margin-top: 12px;">
                   <b>Methodology checklist</b>
-                  <div id="rsMethodologyList" class="rs-methodology" aria-label="Methodology checklist">—</div>
+                  <div id="rsMethodologyList" class="rs-methodology" aria-label="Methodology checklist">â€”</div>
                 </div>
 
                 <div id="rsInfoWarnings" class="rs-mini-note" style="margin-top: 12px;">
@@ -6163,8 +6163,8 @@
     <div class="rs-scope-toast-head">
       <span class="rs-scope-toast-dot" aria-hidden="true"></span>
       <div class="rs-scope-toast-text">
-        <div id="rsScopeToastTitle" class="rs-scope-toast-title">Updating scope…</div>
-        <div id="rsScopeToastBody" class="rs-scope-toast-body">—</div>
+        <div id="rsScopeToastTitle" class="rs-scope-toast-title">Updating scopeâ€¦</div>
+        <div id="rsScopeToastBody" class="rs-scope-toast-body">â€”</div>
       </div>
     </div>
   </div>
@@ -6332,8 +6332,8 @@
 
   let currentWarnings = [];
   let currentManifest = null;
-  let currentJuris = '—';
-  let currentTaxYear = '—';
+  let currentJuris = 'â€”';
+  let currentTaxYear = 'â€”';
 
   // NEW: jurisdiction readiness from /jurisdiction/status
   let currentJurisReadiness = '';
@@ -6369,7 +6369,7 @@
     const raw = String(taxLocalCustomRatePct || '').trim().replace(',', '.');
     const n = Number(raw);
     if (!Number.isFinite(n)) return NaN;
-    // Guardrail: prevent nonsense inputs; keeps users safe from accidental “150” meaning 150%
+    // Guardrail: prevent nonsense inputs; keeps users safe from accidental â€œ150â€ meaning 150%
     if (n < 0 || n > 30) return NaN;
     return n / 100;
   }
@@ -6406,7 +6406,7 @@
     // Backend computes the actual local_rate/effective_rate.
     if (j === 'HR') {
       return [
-        { value: '',        label: '— Not set',                rate: 0.00 },
+        { value: '',        label: 'â€” Not set',                rate: 0.00 },
         { value: 'ZAGREB',  label: 'Zagreb (prirez 18%)',      rate: 0.00 },
         { value: 'SPLIT',   label: 'Split (prirez 15%)',       rate: 0.00 },
         { value: 'RIJEKA',  label: 'Rijeka (prirez 13%)',      rate: 0.00 },
@@ -6416,12 +6416,12 @@
 
     if (j === 'IT') {
       return [
-        { value: '', label: '— Not applicable (Italy uses national substitute tax)', rate: 0.00 },
+        { value: '', label: 'â€” Not applicable (Italy uses national substitute tax)', rate: 0.00 },
       ];
     }
 
     return [
-      { value: '', label: '— Not set', rate: 0.00 },
+      { value: '', label: 'â€” Not set', rate: 0.00 },
     ];
   }
 
@@ -6482,18 +6482,18 @@
       const isCustom = String(taxLocalArea || '').trim().toUpperCase() === 'CUSTOM';
       const customR = isCustom ? parseTaxLocalCustomRate() : NaN;
 
-      let txt = '—';
+      let txt = 'â€”';
       let placeholder = false;
 
       if (!hasLocal) {
-        txt = '—';
+        txt = 'â€”';
         placeholder = false;
       } else if (isCustom) {
         if (Number.isFinite(customR)) {
           txt = fmtPct(customR);
           placeholder = false;
         } else {
-          txt = '— (enter %)';
+          txt = 'â€” (enter %)';
           placeholder = true;
         }
       } else {
@@ -6501,7 +6501,7 @@
           txt = fmtPct(locCalc);
           placeholder = false;
         } else {
-          txt = '— (placeholder)';
+          txt = 'â€” (placeholder)';
           placeholder = true;
         }
       }
@@ -6521,17 +6521,17 @@
       if (Number.isFinite(lastTaxableGain) && lastTaxableGain <= 0) {
         taxBasisLineEl.textContent = 'No tax due for non-positive taxable gain';
       } else {
-        const baseTxt = Number.isFinite(base) ? fmtEUR(base) : '—';
-        const rateTxt = Number.isFinite(eff) ? fmtPct(eff) : '—';
-        taxBasisLineEl.textContent = `Based on taxable gain ${baseTxt} • Rate ${rateTxt}`;
+        const baseTxt = Number.isFinite(base) ? fmtEUR(base) : 'â€”';
+        const rateTxt = Number.isFinite(eff) ? fmtPct(eff) : 'â€”';
+        taxBasisLineEl.textContent = `Based on taxable gain ${baseTxt} â€¢ Rate ${rateTxt}`;
       }
     }
 
     if (taxesFormulaEl) {
-      const baseTxt = Number.isFinite(base) ? fmtEUR(base) : '—';
-      const rateTxt = Number.isFinite(eff) ? fmtPct(eff) : '—';
-      const taxTxt = Number.isFinite(tax) ? fmtEUR(tax) : '—';
-      taxesFormulaEl.textContent = `Tax = ${baseTxt} × ${rateTxt} = ${taxTxt}`;
+      const baseTxt = Number.isFinite(base) ? fmtEUR(base) : 'â€”';
+      const rateTxt = Number.isFinite(eff) ? fmtPct(eff) : 'â€”';
+      const taxTxt = Number.isFinite(tax) ? fmtEUR(tax) : 'â€”';
+      taxesFormulaEl.textContent = `Tax = ${baseTxt} Ã— ${rateTxt} = ${taxTxt}`;
     }
 
     animCtx.enabled = prevEnabled;
@@ -6751,21 +6751,21 @@
 
   function fmtEURAnimFast(x) {
     const n = Number(x);
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return 'â€”';
     const abs = Math.abs(n);
     const formatted = eurFmtAnim.format(abs);
-    return n < 0 ? `−${formatted}` : formatted;
+    return n < 0 ? `âˆ’${formatted}` : formatted;
   }
 
   function fmtPctAnimFast(ratio) {
     const n = Number(ratio);
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return 'â€”';
     return pctFmtAnim.format(n);
   }
 
   function fmtIntAnimFast(n) {
     const v = Number(n);
-    if (!Number.isFinite(v)) return '—';
+    if (!Number.isFinite(v)) return 'â€”';
     return intFmtAnim.format(Math.round(v));
   }
 
@@ -6833,7 +6833,7 @@
     if (!selectEl || !btnEl) return;
 
     const opt = selectEl.options[selectEl.selectedIndex];
-    const txt = opt ? String(opt.textContent || opt.value || '—') : '—';
+    const txt = opt ? String(opt.textContent || opt.value || 'â€”') : 'â€”';
 
     // If a dedicated value span exists, update it; otherwise fallback to button text.
     const valId = (btnEl === ddAssetBtn) ? 'rsDdAssetVal'
@@ -6865,7 +6865,7 @@
 
     panelEl.innerHTML = opts.map((o) => {
       const v = String(o.value || '');
-      const t = String(o.textContent || o.value || '—');
+      const t = String(o.textContent || o.value || 'â€”');
       const sel = (v === current);
       return `
         <button type="button"
@@ -6874,7 +6874,7 @@
                 aria-selected="${sel ? 'true' : 'false'}"
                 data-value="${escapeHtml(v)}">
           <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(t)}</span>
-          ${sel ? '<span class="rs-dd-check">✓</span>' : ''}
+          ${sel ? '<span class="rs-dd-check">âœ“</span>' : ''}
         </button>
       `;
     }).join('');
@@ -7015,7 +7015,7 @@
 
     const target = Number(to);
     if (!Number.isFinite(target)) {
-      el.textContent = '—';
+      el.textContent = 'â€”';
       delete el.dataset.animNum;
       return;
     }
@@ -7163,10 +7163,10 @@
 
   let currentRunDbId = null;
   let currentRunRef = '';
-  let currentRunJuris = '—';
-  let currentRunTaxYear = '—';
-  let currentRunRuleVersion = '—';
-  let currentRunFxSource = '—';
+  let currentRunJuris = 'â€”';
+  let currentRunTaxYear = 'â€”';
+  let currentRunRuleVersion = 'â€”';
+  let currentRunFxSource = 'â€”';
   let currentRunFeeValuation = null;
   let filterMetaLoaded = false;
 
@@ -7336,7 +7336,7 @@
     const dir = dy > 0 ? 1 : -1;
 
     // Trackpads should feel native and fluid; let the browser scroll normally.
-    // Mouse wheels remain “section step” for predictable progress.
+    // Mouse wheels remain â€œsection stepâ€ for predictable progress.
     const isTrackpad = (e.deltaMode === 0 && Math.abs(dy) < 35);
     if (isTrackpad) {
       wheelAccum = 0;
@@ -7421,13 +7421,13 @@
     if (btnPrev) {
       btnPrev.style.opacity = hasPrev ? '1' : '0';
       btnPrev.style.pointerEvents = hasPrev ? 'auto' : 'none';
-      btnPrev.textContent = hasPrev ? `↑ ${sections[activeIdx - 1].name}` : '';
+      btnPrev.textContent = hasPrev ? `â†‘ ${sections[activeIdx - 1].name}` : '';
     }
 
     if (btnNext) {
       btnNext.style.opacity = hasNext ? '1' : '0';
       btnNext.style.pointerEvents = hasNext ? 'auto' : 'none';
-      btnNext.textContent = hasNext ? `${sections[activeIdx + 1].name} ↓` : '';
+      btnNext.textContent = hasNext ? `${sections[activeIdx + 1].name} â†“` : '';
     }
   }
 
@@ -7519,7 +7519,7 @@
       if (before) {
         // Toggle off the currently-selected asset, keep year intact, and return to Taxes.
         applyAssetFilter(before, { toggle: true, scrollToId: 'rsTaxes' });
-        showToast(`Cleared ${before} filter • Back to Taxes`);
+        showToast(`Cleared ${before} filter â€¢ Back to Taxes`);
         return;
       }
 
@@ -7572,7 +7572,7 @@
       const el = document.getElementById('rsOverview');
       scrollToEl(el);
 
-      // Focus the first filter control once the scroll completes (premium “guided control” feel)
+      // Focus the first filter control once the scroll completes (premium â€œguided controlâ€ feel)
       const delay = prefersReducedMotion ? 60 : 760;
       window.setTimeout(() => {
         if (ddAssetBtn) ddAssetBtn.focus();
@@ -7596,18 +7596,18 @@
 
   if (taxesCopyEqBtn) {
     taxesCopyEqBtn.addEventListener('click', () => {
-      const juris = String(currentRunJuris || currentJuris || '').toUpperCase() || '—';
+      const juris = String(currentRunJuris || currentJuris || '').toUpperCase() || 'â€”';
       const scope = filtersLabel();
 
-      const baseTxt = tTaxableBaseEl ? String(tTaxableBaseEl.textContent || '—') : '—';
-      const effTxt = tTaxRateEffectiveEl ? String(tTaxRateEffectiveEl.textContent || '—') : '—';
-      const taxTxt = tEstimatedTaxEl ? String(tEstimatedTaxEl.textContent || '—') : '—';
+      const baseTxt = tTaxableBaseEl ? String(tTaxableBaseEl.textContent || 'â€”') : 'â€”';
+      const effTxt = tTaxRateEffectiveEl ? String(tTaxRateEffectiveEl.textContent || 'â€”') : 'â€”';
+      const taxTxt = tEstimatedTaxEl ? String(tEstimatedTaxEl.textContent || 'â€”') : 'â€”';
 
-      const rv = String(currentRunRuleVersion || (currentManifest && currentManifest.rule_version) || '—').trim();
+      const rv = String(currentRunRuleVersion || (currentManifest && currentManifest.rule_version) || 'â€”').trim();
       const localTxt = localAddonSummary(juris).text;
 
       const text =
-        `CryptoTaxCalc — Tax estimate\n` +
+        `CryptoTaxCalc â€” Tax estimate\n` +
         `Jurisdiction: ${juris}\n` +
         `Scope: ${scope}\n` +
         `Taxable base: ${baseTxt}\n` +
@@ -7875,7 +7875,7 @@
         : 'Net realised gain/loss by asset (positive and negative).';
     }
 
-    // Note text is set by renderAssetSection() so it can stay honest about “Top 5 + Other” and “Top 12” rules.
+    // Note text is set by renderAssetSection() so it can stay honest about â€œTop 5 + Otherâ€ and â€œTop 12â€ rules.
     if (legendAssetEl) legendAssetEl.style.display = '';
     updateSegIndicator(assetModeMagBtn ? assetModeMagBtn.closest('.rs-seg') : null);
   }
@@ -7923,8 +7923,8 @@
 
       if (assetNoteEl) {
         assetNoteEl.textContent = (String(assetListSearch || '').trim())
-          ? 'Bars: Top 12 (matching) • List: all assets'
-          : 'Bars: Top 12 by |net| • List: all assets';
+          ? 'Bars: Top 12 (matching) â€¢ List: all assets'
+          : 'Bars: Top 12 by |net| â€¢ List: all assets';
       }
 
       chartAssetEl.innerHTML = '<div id="chartAssetBars" class="rs-bars"></div>';
@@ -7973,7 +7973,7 @@
         assetBarsFlipPending = false;
       }
 
-      // Always refresh list (search + sort + “Showing …”)
+      // Always refresh list (search + sort + â€œShowing â€¦â€)
       renderAssetLegend(legendAssetEl, src);
 
       if (prevLegendPos && legendAssetEl) {
@@ -7998,7 +7998,7 @@
     chartAssetEl.setAttribute('aria-label', 'Asset contribution donut');
 
     if (assetNoteEl) {
-      assetNoteEl.textContent = 'Donut: Top 5 + Other • List: all assets';
+      assetNoteEl.textContent = 'Donut: Top 5 + Other â€¢ List: all assets';
     }
 
     renderAssetDonut(chartAssetEl, src);
@@ -8018,7 +8018,7 @@
     assetMode = mode;
     persistAssetMode();
 
-    // micro “press” animation on the active toggle
+    // micro â€œpressâ€ animation on the active toggle
     pulseSeg(mode === 'net' ? assetModeNetBtn : assetModeMagBtn);
 
     renderAssetSection(lastAssetRowsForChart);
@@ -8072,7 +8072,7 @@
     if (!chartMonthEl) return;
 
     const monthlyAll = src
-      .map(r => ({ label: String(r.label || '—'), value: Number(r.value) || 0 }))
+      .map(r => ({ label: String(r.label || 'â€”'), value: Number(r.value) || 0 }))
       .sort((a,b) => a.label.localeCompare(b.label));
 
     const windowMonthly = monthlyAll.slice(-12);
@@ -8111,8 +8111,8 @@
       const negN = windowMonthly.filter(p => p.value < 0).length;
       const zeroN = Math.max(0, windowMonthly.length - posN - negN);
 
-      let micro = `Last 12: ${posN} gain • ${negN} loss`;
-      if (zeroN) micro += ` • ${zeroN} flat`;
+      let micro = `Last 12: ${posN} gain â€¢ ${negN} loss`;
+      if (zeroN) micro += ` â€¢ ${zeroN} flat`;
 
       monthMicroEl.innerHTML = micro;
     }
@@ -8197,7 +8197,7 @@
       const cumuWindow = cumuAll.slice(-12);
       renderTimeline(chartMonthEl, cumuWindow);
 
-      const total = cumuAll.length ? cumuAll[cumuAll.length - 1] : { label: '—', value: 0 };
+      const total = cumuAll.length ? cumuAll[cumuAll.length - 1] : { label: 'â€”', value: 0 };
       const yearScoped = /^\d{4}$/.test(String(activeFilters.year || '').trim());
       const totalLabel = yearScoped ? 'YTD total' : 'Total to date';
 
@@ -8209,8 +8209,8 @@
 
         const totalIsNeg = Number(total.value) < 0;
         const totalHtml = `<span>Total: <span class="${totalIsNeg ? 'is-neg' : ''}">${fmtEUR(total.value)}</span></span>`;
-        let micro = `${totalHtml} • Last 12: ${posN} gain • ${negN} loss`;
-        if (zeroN) micro += ` • ${zeroN} flat`;
+        let micro = `${totalHtml} â€¢ Last 12: ${posN} gain â€¢ ${negN} loss`;
+        if (zeroN) micro += ` â€¢ ${zeroN} flat`;
 
         monthMicroEl.innerHTML = micro;
       }
@@ -8280,7 +8280,7 @@
   function filtersLabel() {
     const a = activeFilters.asset ? activeFilters.asset : 'All assets';
     const y = activeFilters.year ? activeFilters.year : 'All years';
-    return `${a} • ${y}`;
+    return `${a} â€¢ ${y}`;
   }
 
   function currentFiltersKey() {
@@ -8312,7 +8312,7 @@
 
     if (state === 'loading') {
       scopeToastEl.classList.add('is-loading');
-      if (scopeToastTitleEl) scopeToastTitleEl.textContent = 'Updating scope…';
+      if (scopeToastTitleEl) scopeToastTitleEl.textContent = 'Updating scopeâ€¦';
       if (scopeToastBodyEl) scopeToastBodyEl.textContent = `Applying: ${label}`;
     } else {
       const isPreview = (filtersMode === 'preview');
@@ -8321,8 +8321,8 @@
       if (scopeToastTitleEl) scopeToastTitleEl.textContent = isPreview ? 'Scope updated (preview)' : 'Scope updated';
 
       const modeText = isPreview ? 'Preview totals' : 'Live totals';
-      let body = `${label} • ${modeText}`;
-      if (warnCount) body += ` • ${warnCount} warning${warnCount === 1 ? '' : 's'}`;
+      let body = `${label} â€¢ ${modeText}`;
+      if (warnCount) body += ` â€¢ ${warnCount} warning${warnCount === 1 ? '' : 's'}`;
       if (scopeToastBodyEl) scopeToastBodyEl.textContent = body;
 
       scopeToastTimer = window.setTimeout(() => {
@@ -8372,7 +8372,7 @@
 
     if (integrityHashEl) {
       const full = (currentManifest && currentManifest.outputs_hash) ? String(currentManifest.outputs_hash) : '';
-      integrityHashEl.textContent = full ? shortHash(full) : '—';
+      integrityHashEl.textContent = full ? shortHash(full) : 'â€”';
     }
 
     if (integrityInputsEl) {
@@ -8380,7 +8380,7 @@
         ? Number(currentManifest.inputs_snapshot_count)
         : NaN;
 
-      integrityInputsEl.textContent = Number.isFinite(n) ? `${n} captured` : '—';
+      integrityInputsEl.textContent = Number.isFinite(n) ? `${n} captured` : 'â€”';
     }
 
     if (integrityFxEl) {
@@ -8408,7 +8408,7 @@
     if (integrityFeesEl) {
       const fv = (currentRunFeeValuation && typeof currentRunFeeValuation === 'object') ? currentRunFeeValuation : null;
 
-      let label = '—';
+      let label = 'â€”';
       if (fv) {
         const strict = !!fv.strict_fee_valuation;
         const detected = !!fv.third_asset_fee_detected;
@@ -8506,7 +8506,7 @@
 
     const items = [
       { k: 'Lot method',   v: 'FIFO',                               s: 'ok' },
-      { k: 'Rule version', v: rv || '—',                            s: rv ? 'ok' : 'info' },
+      { k: 'Rule version', v: rv || 'â€”',                            s: rv ? 'ok' : 'info' },
       { k: 'Totals mode',  v: totalsMode,                           s: (filtersMode === 'live') ? 'ok' : (filtersMode === 'preview') ? 'warn' : 'info' },
       {
         k: 'Fee handling',
@@ -8530,7 +8530,7 @@
     if (!taxRateProvenanceEl) return;
 
     const j = String(currentRunJuris || currentJuris || '').toUpperCase();
-    const rv = String(currentRunRuleVersion || (currentManifest && currentManifest.rule_version) || '—').trim();
+    const rv = String(currentRunRuleVersion || (currentManifest && currentManifest.rule_version) || 'â€”').trim();
 
     const yRaw = String(activeFilters.year || currentRunTaxYear || '').trim();
     const y = Number.parseInt(yRaw, 10);
@@ -8543,34 +8543,34 @@
 
     const nat = Number.isFinite(lastNationalRate) ? lastNationalRate : natFallback;
 
-    const natTxt = Number.isFinite(nat) ? fmtPct(nat) : '—';
-    const ruleTxt = (rv && rv !== '—') ? `rule ${rv}` : 'rule —';
+    const natTxt = Number.isFinite(nat) ? fmtPct(nat) : 'â€”';
+    const ruleTxt = (rv && rv !== 'â€”') ? `rule ${rv}` : 'rule â€”';
 
     const localMeta = localAddonSummary(j);
-    taxRateProvenanceEl.textContent = `National rate ${natTxt} (${ruleTxt}) • Local add-on ${localMeta.text}`;
+    taxRateProvenanceEl.textContent = `National rate ${natTxt} (${ruleTxt}) â€¢ Local add-on ${localMeta.text}`;
   }
 
   function renderTaxAuditChips() {
     if (!taxAuditChipsEl) return;
 
-    const rv = String(currentRunRuleVersion || (currentManifest && currentManifest.rule_version) || '—').trim();
-    const fx = String(currentRunFxSource || '—').trim();
+    const rv = String(currentRunRuleVersion || (currentManifest && currentManifest.rule_version) || 'â€”').trim();
+    const fx = String(currentRunFxSource || 'â€”').trim();
 
     const j = String(currentRunJuris || currentJuris || '').toUpperCase();
     const localMeta = localAddonSummary(j);
 
     taxAuditChipsEl.innerHTML =
-      `<span class="rs-tax-chip">Rule ${escapeHtml(rv || '—')}</span>` +
-      `<span class="rs-tax-chip">FX ${escapeHtml(fx || '—')}</span>` +
+      `<span class="rs-tax-chip">Rule ${escapeHtml(rv || 'â€”')}</span>` +
+      `<span class="rs-tax-chip">FX ${escapeHtml(fx || 'â€”')}</span>` +
       `<span class="rs-tax-chip">Local ${escapeHtml(localMeta.text)}</span>` +
-      `<span class="rs-tax-chip">Rounding €0.01</span>`;
+      `<span class="rs-tax-chip">Rounding â‚¬0.01</span>`;
   }
 
   function updateFiltersUI() {
     const label = filtersLabel();
     const suffix =
       (filtersMode === 'preview') ? ' (preview)' :
-      (filtersMode === 'loading') ? ' (updating…)'
+      (filtersMode === 'loading') ? ' (updatingâ€¦)'
       : '';
 
     const range = scopeMetaEl ? String(scopeMetaEl.dataset.range || '').trim() : '';
@@ -8580,7 +8580,7 @@
 
     if (scopeMetaEl) {
       if (range && evs) {
-        scopeMetaEl.textContent = `${evs} events • ${range}`;
+        scopeMetaEl.textContent = `${evs} events â€¢ ${range}`;
         scopeMetaEl.style.display = '';
       } else {
         scopeMetaEl.textContent = '';
@@ -8604,7 +8604,7 @@
       const show = !!a;
 
       eventsUndoAssetBtn.style.display = show ? '' : 'none';
-      eventsUndoAssetBtn.textContent = show ? `Back to Taxes • Clear ${a}` : 'Back to Taxes';
+      eventsUndoAssetBtn.textContent = show ? `Back to Taxes â€¢ Clear ${a}` : 'Back to Taxes';
       eventsUndoAssetBtn.setAttribute(
         'aria-label',
         show ? `Clear asset filter ${a} and return to Taxes` : 'Back to Taxes'
@@ -8709,7 +8709,7 @@
       if (token !== _eventsWorkToken) return;
 
       // PERF: Don't do heavy events loading/filtering/rendering unless Events section is visible.
-      // This prevents “background” main-thread work from stuttering the whole page.
+      // This prevents â€œbackgroundâ€ main-thread work from stuttering the whole page.
       if (!force && !eventsPanelVisible) {
         eventsRenderArmed = true;
         return;
@@ -8794,7 +8794,7 @@
 
     // Remove spaces (including NBSP) + currency symbols
     s = s.replace(/\s|\u00A0/g, '');
-    s = s.replace(/[€$£]/g, '');
+    s = s.replace(/[â‚¬$Â£]/g, '');
 
     // Keep digits, minus, comma, dot
     s = s.replace(/[^0-9.,-]/g, '');
@@ -8948,13 +8948,13 @@
 
       // Make it look intentional immediately (avoid blank tab)
       try {
-        w.document.title = 'Generating PDF…';
+        w.document.title = 'Generating PDFâ€¦';
         w.document.body.style.margin = '0';
         w.document.body.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
         w.document.body.innerHTML = `
           <div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;">
             <div style="max-width:520px;width:100%;border:1px solid rgba(0,0,0,.12);border-radius:14px;padding:18px;">
-              <div style="font-weight:800;font-size:16px;">Generating PDF…</div>
+              <div style="font-weight:800;font-size:16px;">Generating PDFâ€¦</div>
               <div style="margin-top:6px;opacity:.75;font-size:13px;line-height:1.35;">
                 Please keep this tab open. The PDF will appear automatically when ready.
               </div>
@@ -8992,7 +8992,7 @@
 
     // Null-safe: never throw; fall back to toast if modal elements are missing.
     if (!b || !close || !cancel || !openBtn || !iconEl || !msgEl || !metaEl || !cdWrap || !barFill) {
-      showToast('Generating PDF…');
+      showToast('Generating PDFâ€¦');
       return {
         hide: () => {},
         isCancelled: () => false,
@@ -9024,7 +9024,7 @@
     };
 
     // Reset UI state each time modal opens
-    msgEl.textContent = 'Generating PDF…';
+    msgEl.textContent = 'Generating PDFâ€¦';
     metaEl.textContent = 'Please keep this window open.';
     openBtn.style.display = 'none';
     openBtn.onclick = null;
@@ -9069,7 +9069,7 @@
         iconEl.classList.add('is-ready');
 
         msgEl.textContent = 'PDF is ready';
-        metaEl.textContent = 'Opening automatically…';
+        metaEl.textContent = 'Opening automaticallyâ€¦';
 
         // Show bar and animate fill to 100% over 1.6s
         cdWrap.style.display = '';
@@ -9099,7 +9099,7 @@
             }
 
             // Popup blocked: show Open PDF button and keep modal open
-            metaEl.textContent = 'Popup was blocked. Click “Open PDF”.';
+            metaEl.textContent = 'Popup was blocked. Click â€œOpen PDFâ€.';
             cdWrap.style.display = 'none';
 
             openBtn.style.display = '';
@@ -9179,7 +9179,7 @@
       const jobId = String(j.job_id || '');
       if (!jobId) {
         modal.hide();
-        showToast('Export failed — invalid job response');
+        showToast('Export failed â€” invalid job response');
         return;
       }
 
@@ -9194,7 +9194,7 @@
           const st = String(pj.status || '');
           const msg = String(pj.message || '');
 
-          modal.setMsg(msg || (st === 'ready' ? 'Ready' : 'Generating PDF…'));
+          modal.setMsg(msg || (st === 'ready' ? 'Ready' : 'Generating PDFâ€¦'));
 
           if (st === 'ready' && pj.pdf_url) {
             openWhenReady(pj.pdf_url);
@@ -9216,7 +9216,7 @@
       setTimeout(poll, 180);
     } catch (_) {
       modal.hide();
-      showToast('Export failed — network error');
+      showToast('Export failed â€” network error');
     }
   }
 
@@ -9347,7 +9347,7 @@
   }
 
   function refreshFilterOptionsFromEvents() {
-    // If we have full run metadata, do NOT overwrite options based on partial pages (feels like a “trap”).
+    // If we have full run metadata, do NOT overwrite options based on partial pages (feels like a â€œtrapâ€).
     if (filterMetaLoaded) return;
 
     if (eventsAssetSet.size) populateAssetOptions(Array.from(eventsAssetSet));
@@ -9517,7 +9517,7 @@
     renderEventsPreview();
 
     if (pages >= HARD_PAGE_CAP && eventsHasMore) {
-      showToast(`Loaded ${eventsOffset.toLocaleString()} events (safety cap) • refine filters or export for full set`);
+      showToast(`Loaded ${eventsOffset.toLocaleString()} events (safety cap) â€¢ refine filters or export for full set`);
     }
   }
 
@@ -9793,14 +9793,14 @@
     }
 
     if (eventsSummaryEl) {
-      const suffixSearch = q ? ` • Search: ${String(eventsSearch).trim()}` : '';
-      const suffixMode = wantGains ? ' • Gains only' : wantLosses ? ' • Losses only' : '';
+      const suffixSearch = q ? ` â€¢ Search: ${String(eventsSearch).trim()}` : '';
+      const suffixMode = wantGains ? ' â€¢ Gains only' : wantLosses ? ' â€¢ Losses only' : '';
       const suffixIssues = issuesAll
-        ? (eventsIssuesOnly ? ` • Issues only (${issuesAll})` : ` • Issues: ${issuesAll}`)
+        ? (eventsIssuesOnly ? ` â€¢ Issues only (${issuesAll})` : ` â€¢ Issues: ${issuesAll}`)
         : '';
 
       const partial = eventsHasMore || (eventsTotalKnown != null && Number.isFinite(eventsTotalKnown) && eventsCache.length < eventsTotalKnown);
-      const suffixPartial = partial ? ' • Partial dataset (load more for full totals)' : '';
+      const suffixPartial = partial ? ' â€¢ Partial dataset (load more for full totals)' : '';
 
       eventsSummaryEl.textContent = viewRows.length
         ? `Showing ${viewRows.length} events${suffixSearch}${suffixMode}${suffixIssues}${suffixPartial}`
@@ -9930,7 +9930,7 @@
   function setTotalsUnknown() {
     if (taxesTotalsModeEl) {
       taxesTotalsModeEl.classList.remove('is-live', 'is-preview', 'is-loading');
-      taxesTotalsModeEl.textContent = '—';
+      taxesTotalsModeEl.textContent = 'â€”';
     }
     const ids = [
       'kTotalGain','kTaxableGain','kExemptGain',
@@ -9943,15 +9943,15 @@
     ];
     ids.forEach((id) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = '—';
+      if (el) el.textContent = 'â€”';
     });
 
-    if (kTaxableShareEl) kTaxableShareEl.textContent = '—';
-    if (tTaxableShareEl) tTaxableShareEl.textContent = '—';
+    if (kTaxableShareEl) kTaxableShareEl.textContent = 'â€”';
+    if (tTaxableShareEl) tTaxableShareEl.textContent = 'â€”';
 
-    if (taxBaseTaxableAmtEl) taxBaseTaxableAmtEl.textContent = '—';
+    if (taxBaseTaxableAmtEl) taxBaseTaxableAmtEl.textContent = 'â€”';
     if (taxBaseExemptAmtEl) {
-      taxBaseExemptAmtEl.textContent = '—';
+      taxBaseExemptAmtEl.textContent = 'â€”';
       taxBaseExemptAmtEl.classList.remove('is-none');
       delete taxBaseExemptAmtEl.dataset.animNum;
     }
@@ -9962,11 +9962,11 @@
       tBaseStackEl.style.setProperty('--t', '0%');
       tBaseStackEl.style.setProperty('--e', '0%');
     }
-    if (tBaseStackLabelsEl) tBaseStackLabelsEl.textContent = 'Taxable — • Exempt —';
+    if (tBaseStackLabelsEl) tBaseStackLabelsEl.textContent = 'Taxable â€” â€¢ Exempt â€”';
 
-    if (driverTopGainEl) driverTopGainEl.textContent = '—';
-    if (driverTopLossEl) driverTopLossEl.textContent = '—';
-    if (driverNetTotalEl) driverNetTotalEl.textContent = '—';
+    if (driverTopGainEl) driverTopGainEl.textContent = 'â€”';
+    if (driverTopLossEl) driverTopLossEl.textContent = 'â€”';
+    if (driverNetTotalEl) driverNetTotalEl.textContent = 'â€”';
 
     if (driverTopLossEl) driverTopLossEl.classList.remove('is-neg');
     if (driverNetTotalEl) driverNetTotalEl.classList.remove('is-neg');
@@ -9999,7 +9999,7 @@
       maxD = eventsScopeMaxD;
     }
 
-    const range = (minD && maxD) ? `${minD} — ${maxD}` : '—';
+    const range = (minD && maxD) ? `${minD} â€” ${maxD}` : 'â€”';
 
     const total = (eventsTotalKnown != null && Number.isFinite(eventsTotalKnown))
       ? eventsTotalKnown
@@ -10007,7 +10007,7 @@
 
     scopeMetaEl.dataset.range = range;
     scopeMetaEl.dataset.events = String(total);
-    scopeMetaEl.textContent = `${total} events • ${range}`;
+    scopeMetaEl.textContent = `${total} events â€¢ ${range}`;
   }
 
   function updateVerifiedSignals() {
@@ -10028,14 +10028,14 @@
     if (verifiedChipsEl) verifiedChipsEl.style.display = showChips ? '' : 'none';
 
     // Default: calm, compact OK line.
-    let line = 'Verified: Saved • Scope-applied • Subset export matches';
+    let line = 'Verified: Saved â€¢ Scope-applied â€¢ Subset export matches';
 
     if (isLoading) {
-      line = 'Updating… applying scope changes';
+      line = 'Updatingâ€¦ applying scope changes';
     } else if (warnCount > 0) {
-      line = `Attention: ${warnCount} warning${warnCount === 1 ? '' : 's'} • Review in Info before export`;
+      line = `Attention: ${warnCount} warning${warnCount === 1 ? '' : 's'} â€¢ Review in Info before export`;
     } else if (isPreview) {
-      line = 'Preview: totals not recalculated • Charts from cached events';
+      line = 'Preview: totals not recalculated â€¢ Charts from cached events';
     }
 
     verifiedLineEl.textContent = line;
@@ -10065,7 +10065,7 @@
       'Updating';
 
     const w = warnCount === 1 ? '1 warning' : `${warnCount} warnings`;
-    confidenceLineEl.textContent = `Confidence: ${dq} • ${totals} • ${w}`;
+    confidenceLineEl.textContent = `Confidence: ${dq} â€¢ ${totals} â€¢ ${w}`;
     updateVerifiedSignals();
     updateTaxesReadiness();
   }
@@ -10222,7 +10222,7 @@
         const denom = (Number.isFinite(tx) ? tx : 0) + (Number.isFinite(ex) ? ex : 0);
         const taxableRatio = denom > 0 ? ((Number.isFinite(tx) ? tx : 0) / denom) : NaN;
 
-        // Illustrative tax (not advice): aligns with PDF “illustrative” block rates
+        // Illustrative tax (not advice): aligns with PDF â€œillustrativeâ€ block rates
         const j = String(currentRunJuris || currentJuris || '').toUpperCase();
         const natRate = numFrom(totals.national_rate ?? NaN);
         const locRate = numFrom(totals.local_rate ?? NaN);
@@ -10263,9 +10263,9 @@
           if (Number.isFinite(tx) && tx <= 0) {
             taxBasisLineEl.textContent = 'No tax due for non-positive taxable gain';
           } else {
-            const baseTxt = Number.isFinite(baseForTax) ? fmtEUR(baseForTax) : '—';
-            const rateTxt = Number.isFinite(effRate) ? fmtPct(effRate) : '—';
-            taxBasisLineEl.textContent = `Based on taxable gain ${baseTxt} • Rate ${rateTxt}`;
+            const baseTxt = Number.isFinite(baseForTax) ? fmtEUR(baseForTax) : 'â€”';
+            const rateTxt = Number.isFinite(effRate) ? fmtPct(effRate) : 'â€”';
+            taxBasisLineEl.textContent = `Based on taxable gain ${baseTxt} â€¢ Rate ${rateTxt}`;
           }
         }
 
@@ -10276,7 +10276,7 @@
         }
         if (kDonutPctEl) {
           const pct = Number.isFinite(taxableRatio) ? Math.round(taxableRatio * 100) : null;
-          kDonutPctEl.textContent = (pct === null) ? '—' : `${pct}%`;
+          kDonutPctEl.textContent = (pct === null) ? 'â€”' : `${pct}%`;
         }
         if (kSummaryShareEl) kSummaryShareEl.textContent = fmtPct(taxableRatio);
 
@@ -10293,8 +10293,8 @@
           const pct = Number.isFinite(taxableRatio) ? Math.round(taxableRatio * 100) : null;
           const epct = (pct === null) ? null : (100 - pct);
           kStackLabelsEl.textContent = (pct === null)
-            ? 'Taxable — • Exempt —'
-            : `Taxable ${pct}% • Exempt ${epct}%`;
+            ? 'Taxable â€” â€¢ Exempt â€”'
+            : `Taxable ${pct}% â€¢ Exempt ${epct}%`;
         }
 
         setAnimatedNumber(kTaxableShareEl, taxableRatio, fmtPctAnimFast);
@@ -10304,8 +10304,8 @@
           const pct = Number.isFinite(taxableRatio) ? Math.round(taxableRatio * 100) : null;
           const epct = (pct == null) ? null : (100 - pct);
           tTaxBaseMetaEl.textContent = (pct == null)
-            ? 'Taxable — • Exempt —'
-            : `Taxable ${pct}% • Exempt ${epct}%`;
+            ? 'Taxable â€” â€¢ Exempt â€”'
+            : `Taxable ${pct}% â€¢ Exempt ${epct}%`;
         }
 
         if (tBaseStackEl) {
@@ -10320,8 +10320,8 @@
           const pct = Number.isFinite(taxableRatio) ? Math.round(taxableRatio * 100) : null;
           const epct = (pct === null) ? null : (100 - pct);
           tBaseStackLabelsEl.textContent = (pct === null)
-            ? 'Taxable — • Exempt —'
-            : `Taxable ${pct}% • Exempt ${epct}%`;
+            ? 'Taxable â€” â€¢ Exempt â€”'
+            : `Taxable ${pct}% â€¢ Exempt ${epct}%`;
         }
 
         const kTotalGain = document.getElementById('kTotalGain');
@@ -10450,18 +10450,18 @@
         ? shownMonthRows.reduce((best, r) => !best || Math.abs(r.value) > Math.abs(best.value) ? r : best, null)
         : null;
 
-      const shareText = (kTaxableShareEl && kTaxableShareEl.textContent) ? kTaxableShareEl.textContent : '—';
+      const shareText = (kTaxableShareEl && kTaxableShareEl.textContent) ? kTaxableShareEl.textContent : 'â€”';
 
       // Asset legend: magnitude share (color-mapped) + net value
       const assetLegendSource = assetRowsLive.length ? assetAllLive : assetRowsLocal;
       renderAssetSection(assetLegendSource);
 
       if (kSummaryAssetEl) {
-        kSummaryAssetEl.textContent = topAsset ? `${topAsset.label} (${fmtEUR(topAsset.value)})` : '—';
+        kSummaryAssetEl.textContent = topAsset ? `${topAsset.label} (${fmtEUR(topAsset.value)})` : 'â€”';
       }
 
       if (kSummaryMonthEl) {
-        kSummaryMonthEl.textContent = topMonth ? `${topMonth.label} (${fmtEUR(topMonth.value)})` : '—';
+        kSummaryMonthEl.textContent = topMonth ? `${topMonth.label} (${fmtEUR(topMonth.value)})` : 'â€”';
       }
 
       if (insightKpiEl) {
@@ -10609,14 +10609,14 @@
 
   function shortHash(h) {
     const s = String(h || '').trim();
-    if (!s) return '—';
+    if (!s) return 'â€”';
     if (s.length <= 18) return s;
-    return s.slice(0, 10) + '…' + s.slice(-6);
+    return s.slice(0, 10) + 'â€¦' + s.slice(-6);
   }
 
   function fmtMs(ms) {
     const n = Number(ms);
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return 'â€”';
     if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 2)}s`;
     return `${Math.round(n)}ms`;
   }
@@ -10651,7 +10651,7 @@
       .filter(x => Number.isFinite(x.ms));
 
     if (!rows.length) {
-      perfListEl.textContent = '—';
+      perfListEl.textContent = 'â€”';
       return;
     }
 
@@ -10951,7 +10951,7 @@
       items.push(
         _rsWarnLi(
           'info',
-          '✅ Ready to export',
+          'âœ… Ready to export',
           'No blocking issues detected. Diagnostics are available below (optional).'
         )
       );
@@ -10981,7 +10981,7 @@
     if (items.length === 0) {
       warningsListEl.innerHTML = _rsWarnLi(
         'info',
-        '✅ No issues detected',
+        'âœ… No issues detected',
         'No blocking issues were detected. Diagnostics (if any) are available above.'
       );
       return;
@@ -11026,7 +11026,7 @@
       currentJurisReadinessMsg = '';
 
       jurisReadyCardEl.classList.remove('is-ok', 'is-warn');
-      jurisReadyBadgeEl.textContent = '—';
+      jurisReadyBadgeEl.textContent = 'â€”';
       jurisReadyBodyEl.textContent = 'Jurisdiction code is not available for this run.';
 
       updateTaxesReadiness();
@@ -11037,7 +11037,7 @@
     jurisReadyCardEl.classList.remove('is-ok', 'is-warn');
     jurisReadyCardEl.classList.add('is-warn');
     jurisReadyBadgeEl.textContent = 'Loading';
-    jurisReadyBodyEl.textContent = 'Checking jurisdiction readiness…';
+    jurisReadyBodyEl.textContent = 'Checking jurisdiction readinessâ€¦';
 
     try {
       const r = await fetch(`/jurisdiction/status?jurisdiction=${encodeURIComponent(j)}`, { credentials: 'same-origin' });
@@ -11045,7 +11045,7 @@
 
       const data = await r.json();
       const readiness = String((data && data.readiness) || '').toUpperCase();
-      const msg = (data && data.message) ? String(data.message) : '—';
+      const msg = (data && data.message) ? String(data.message) : 'â€”';
       currentJurisReadiness = readiness;
       currentJurisReadinessMsg = msg;
 
@@ -11071,7 +11071,7 @@
 
       jurisReadyCardEl.classList.remove('is-ok');
       jurisReadyCardEl.classList.add('is-warn');
-      jurisReadyBadgeEl.textContent = '—';
+      jurisReadyBadgeEl.textContent = 'â€”';
       jurisReadyBodyEl.textContent = 'Readiness check unavailable. Exports include disclosures.';
 
       updateTaxesReadiness();
@@ -11091,9 +11091,9 @@
     }
 
     if (countryNotesLeadEl) {
-      countryNotesLeadEl.textContent = 'Loading country notes…';
+      countryNotesLeadEl.textContent = 'Loading country notesâ€¦';
     }
-    countryNotesListEl.innerHTML = '<li style="opacity:0.85;">Loading…</li>';
+    countryNotesListEl.innerHTML = '<li style="opacity:0.85;">Loadingâ€¦</li>';
 
     try {
       const r = await fetch(`/country_notes?jurisdiction=${encodeURIComponent(j)}`, { credentials: 'same-origin' });
@@ -11135,16 +11135,16 @@
     if (!currentManifest) return;
 
     const m = currentManifest || {};
-    const created = m.created_at || '—';
-    const rule = m.rule_version || '—';
+    const created = m.created_at || 'â€”';
+    const rule = m.rule_version || 'â€”';
     const lot = m.lot_method || 'FIFO';
-    const fx = (m.fx_set_id != null) ? String(m.fx_set_id) : '—';
-    const items = (m.items_count != null) ? String(m.items_count) : '—';
+    const fx = (m.fx_set_id != null) ? String(m.fx_set_id) : 'â€”';
+    const items = (m.items_count != null) ? String(m.items_count) : 'â€”';
 
     const fullHash = m.outputs_hash || '';
     const displayHash = shortHash(fullHash);
 
-    if (kvRunEl) kvRunEl.textContent = `#${String(runId)} (db ${m.id != null ? m.id : '—'})`;
+    if (kvRunEl) kvRunEl.textContent = `#${String(runId)} (db ${m.id != null ? m.id : 'â€”'})`;
     if (kvCreatedEl) kvCreatedEl.textContent = String(created);
     if (kvRuleEl) kvRuleEl.textContent = String(rule);
     if (kvMethodEl) kvMethodEl.textContent = String(lot);
@@ -11154,8 +11154,8 @@
 
     // Export strip can show created time once we have it
     if (exportRunStampEl) {
-      exportRunStampEl.textContent = created && created !== '—'
-        ? `Run #${String(runId)} • ${created}`
+      exportRunStampEl.textContent = created && created !== 'â€”'
+        ? `Run #${String(runId)} â€¢ ${created}`
         : `Run #${String(runId)}`;
     }
     updateExportsIntegrity();
@@ -11185,7 +11185,7 @@
 
   function fmtEUR(x) {
     const n = Number(x);
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return 'â€”';
 
     const abs = Math.abs(n);
     const formatted = new Intl.NumberFormat(undefined, {
@@ -11194,12 +11194,12 @@
       maximumFractionDigits: 2
     }).format(abs);
 
-    return n < 0 ? `−${formatted}` : formatted;
+    return n < 0 ? `âˆ’${formatted}` : formatted;
   }
 
   function fmtPct(ratio) {
     const n = Number(ratio);
-    if (!Number.isFinite(n)) return '—';
+    if (!Number.isFinite(n)) return 'â€”';
     return new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }).format(n);
   }
 
@@ -11215,7 +11215,7 @@
       kSanityEl.classList.add('is-ok');
 
       if (kStatusBadgeEl) kStatusBadgeEl.textContent = 'OK';
-      if (kStatusBodyEl) kStatusBodyEl.textContent = 'Data quality is OK — no issues detected.';
+      if (kStatusBodyEl) kStatusBodyEl.textContent = 'Data quality is OK â€” no issues detected.';
 
       if (kStatusListEl) {
         kStatusListEl.style.display = 'none';
@@ -11238,7 +11238,7 @@
     kSanityEl.classList.add('is-warn');
 
     if (kStatusBadgeEl) kStatusBadgeEl.textContent = `WARN ${list.length}`;
-    if (kStatusBodyEl) kStatusBodyEl.textContent = 'Warnings found — review before exporting.';
+    if (kStatusBodyEl) kStatusBodyEl.textContent = 'Warnings found â€” review before exporting.';
 
     if (kStatusListEl) {
       kStatusListEl.style.display = '';
@@ -11273,7 +11273,7 @@
     });
 
     if (taxJurisChipEl) {
-      taxJurisChipEl.textContent = k || '—';
+      taxJurisChipEl.textContent = k || 'â€”';
       taxJurisChipEl.setAttribute('data-juris', k);
     }
 
@@ -11293,21 +11293,21 @@
       const v = Number(r && r.value != null ? r.value : NaN);
       if (!Number.isFinite(v)) return;
 
-      if (v > 0 && (!topGain || v > topGain.value)) topGain = { label: String(r.label || '—'), value: v };
-      if (v < 0 && (!topLoss || v < topLoss.value)) topLoss = { label: String(r.label || '—'), value: v };
+      if (v > 0 && (!topGain || v > topGain.value)) topGain = { label: String(r.label || 'â€”'), value: v };
+      if (v < 0 && (!topLoss || v < topLoss.value)) topLoss = { label: String(r.label || 'â€”'), value: v };
     });
 
     if (driverTopGainEl) {
-      driverTopGainEl.textContent = topGain ? `${topGain.label} • ${fmtEUR(topGain.value)}` : 'No gains';
+      driverTopGainEl.textContent = topGain ? `${topGain.label} â€¢ ${fmtEUR(topGain.value)}` : 'No gains';
     }
 
     if (driverTopLossEl) {
-      driverTopLossEl.textContent = topLoss ? `${topLoss.label} • ${fmtEUR(topLoss.value)}` : 'No losses';
+      driverTopLossEl.textContent = topLoss ? `${topLoss.label} â€¢ ${fmtEUR(topLoss.value)}` : 'No losses';
       driverTopLossEl.classList.toggle('is-neg', !!topLoss);
     }
 
     if (driverNetTotalEl) {
-      driverNetTotalEl.textContent = Number.isFinite(netTotal) ? fmtEUR(netTotal) : '—';
+      driverNetTotalEl.textContent = Number.isFinite(netTotal) ? fmtEUR(netTotal) : 'â€”';
       driverNetTotalEl.classList.toggle('is-neg', Number.isFinite(netTotal) && netTotal < 0);
     }
 
@@ -11378,39 +11378,39 @@
 
     if (isLoading) {
       taxesReadinessEl.classList.add('is-loading');
-      textEl.textContent = 'Updating… preparing export-ready totals';
+      textEl.textContent = 'Updatingâ€¦ preparing export-ready totals';
       return;
     }
 
     if (jurisReady === 'MISSING') {
       taxesReadinessEl.classList.add('is-warn');
-      textEl.textContent = 'Jurisdiction not registered • exports are not filing-ready in this build';
+      textEl.textContent = 'Jurisdiction not registered â€¢ exports are not filing-ready in this build';
       if (taxesReadinessGoInfoBtn) taxesReadinessGoInfoBtn.style.display = '';
       return;
     }
 
     if (warnCount > 0) {
       taxesReadinessEl.classList.add('is-warn');
-      textEl.textContent = `Warnings detected • ${warnCount} warning${warnCount === 1 ? '' : 's'}`;
+      textEl.textContent = `Warnings detected â€¢ ${warnCount} warning${warnCount === 1 ? '' : 's'}`;
       if (taxesReadinessGoInfoBtn) taxesReadinessGoInfoBtn.style.display = '';
       return;
     }
 
     if (isPreview) {
       taxesReadinessEl.classList.add('is-preview');
-      textEl.textContent = 'Preview mode • Run full calculation for filing-ready totals';
+      textEl.textContent = 'Preview mode â€¢ Run full calculation for filing-ready totals';
       return;
     }
 
     if (jurisReady === 'BASELINE') {
       taxesReadinessEl.classList.add('is-preview');
-      textEl.textContent = 'Baseline jurisdiction • technical summary only (review in Info)';
+      textEl.textContent = 'Baseline jurisdiction â€¢ technical summary only (review in Info)';
       if (taxesReadinessGoInfoBtn) taxesReadinessGoInfoBtn.style.display = '';
       return;
     }
 
     taxesReadinessEl.classList.add('is-ok');
-    textEl.textContent = 'Ready to export: OK • 0 warnings';
+    textEl.textContent = 'Ready to export: OK â€¢ 0 warnings';
   }
 
   function updateTaxesModePill() {
@@ -11445,7 +11445,7 @@
     const sumPos = rows.reduce((a, x) => a + Math.max(0, Number(x.value) || 0), 0);
 
     el.innerHTML = rows.map(r => {
-      const label = String(r && r.label != null ? r.label : '—');
+      const label = String(r && r.label != null ? r.label : 'â€”');
       const v = Number(r.value) || 0;
       const isNeg = v < 0;
       const w = Math.round((Math.abs(v) / max) * 100);
@@ -11513,11 +11513,11 @@
         <div class="rs-bar-row"
              data-asset="${escapeHtml(String(r.label || '').toUpperCase())}"
              data-tipkind="asset"
-             data-label="${escapeHtml(String(r.label || '—'))}"
+             data-label="${escapeHtml(String(r.label || 'â€”'))}"
              data-val="${String(v)}"
              data-abs="${String(Math.abs(v))}"
              data-share="${String(((Math.abs(v) / sumAbs) * 100).toFixed(1))}">
-          <div>${escapeHtml(String(r.label || '—'))}</div>
+          <div>${escapeHtml(String(r.label || 'â€”'))}</div>
           <div class="rs-bar-track is-diverging">
             <span class="rs-bar-zero" aria-hidden="true"></span>
             <div class="rs-bar-fill rs-bar-fill-diverge ${isNeg ? 'is-neg' : 'is-pos'}" style="--w:${animCtx.enabled ? 0 : w}%;" data-w="${w}"></div>
@@ -11548,7 +11548,7 @@
 
     const otherAbs = tail.reduce((acc, r) => acc + Math.abs(Number(r.value)||0), 0);
     const out = head.map(r => ({
-      label: String(r.label || '—'),
+      label: String(r.label || 'â€”'),
       value: Number(r.value) || 0,
       abs: Math.abs(Number(r.value) || 0)
     }));
@@ -11582,8 +11582,8 @@
 
       const colorVar = `var(--rs-slice-${Math.min(6, i + 1)})`;
       const title = (s.label === 'Other')
-        ? `${s.label} • magnitude ${fmtEUR(s.abs)}`
-        : `${s.label} • net ${fmtEUR(s.value)} • magnitude ${fmtEUR(s.abs)}`;
+        ? `${s.label} â€¢ magnitude ${fmtEUR(s.abs)}`
+        : `${s.label} â€¢ net ${fmtEUR(s.value)} â€¢ magnitude ${fmtEUR(s.abs)}`;
 
       const targetOff = -offset;
       const startOff = targetOff - C;
@@ -11616,13 +11616,13 @@
       <svg viewBox="0 0 120 120" role="img" aria-label="Asset donut chart">
         <circle class="rs-donut-bg" cx="${cx}" cy="${cy}" r="${r}" />
         ${circles}
-        <text class="rs-donut-center-asset" x="${cx}" y="${cy-2}" text-anchor="middle">${escapeHtml(String(top?.label || '—'))}</text>
+        <text class="rs-donut-center-asset" x="${cx}" y="${cy-2}" text-anchor="middle">${escapeHtml(String(top?.label || 'â€”'))}</text>
         <text class="rs-donut-center-pct" x="${cx}" y="${cy+14}" text-anchor="middle">${topPct}%</text>
       </svg>
     `;
 
     // Default center state (restored on hover leave)
-    el.dataset.donutDefaultAsset = String(top?.label || '—');
+    el.dataset.donutDefaultAsset = String(top?.label || 'â€”');
     el.dataset.donutDefaultPct = String(topPct || 0);
 
     if (animCtx.enabled) {
@@ -11647,7 +11647,7 @@
     const rows = Array.isArray(allRows) ? allRows.slice() : [];
     rows.sort((a,b) => Math.abs(Number(b.value) || 0) - Math.abs(Number(a.value) || 0));
 
-    // Stable color mapping: top 6 by magnitude keep their slice colors even when list is sorted A→Z / Net.
+    // Stable color mapping: top 6 by magnitude keep their slice colors even when list is sorted Aâ†’Z / Net.
     const colorByLabel = new Map();
     rows.slice(0, 6).forEach((r, idx) => {
       const key = String(r && r.label ? r.label : '').toUpperCase();
@@ -11657,7 +11657,7 @@
     const totalAbs = rows.reduce((acc, r) => acc + Math.abs(Number(r.value) || 0), 0);
 
     if (!totalAbs) {
-      el.innerHTML = '<div style="color: var(--muted); font-size:11px;">—</div>';
+      el.innerHTML = '<div style="color: var(--muted); font-size:11px;">â€”</div>';
       return;
     }
 
@@ -11666,14 +11666,14 @@
     if (assetListMetaEl) {
       const q = String(assetListSearch || '').trim();
       assetListMetaEl.textContent = q
-        ? `Showing ${filtered.length} of ${rows.length} • Filter: ${q}`
+        ? `Showing ${filtered.length} of ${rows.length} â€¢ Filter: ${q}`
         : `Showing ${filtered.length} assets`;
     }
 
     const token = ++_assetLegendRenderToken;
 
-    // Fast initial paint to avoid “blank” feeling
-    el.innerHTML = '<div style="color: var(--muted); font-size:11px;">Rendering…</div>';
+    // Fast initial paint to avoid â€œblankâ€ feeling
+    el.innerHTML = '<div style="color: var(--muted); font-size:11px;">Renderingâ€¦</div>';
 
     const CHUNK = 60;
     let idx = 0;
@@ -11707,7 +11707,7 @@
           row.innerHTML = `
             <div class="rs-asset-legend-left">
               <span style="width:10px; height:10px; border-radius:999px; background:${colorVar}; box-shadow:0 0 0 3px color-mix(in srgb, ${colorVar} 18%, transparent); flex-shrink:0;"></span>
-              <b class="rs-asset-legend-name">${escapeHtml(String(r.label || '—'))}</b>
+              <b class="rs-asset-legend-name">${escapeHtml(String(r.label || 'â€”'))}</b>
               <span class="rs-asset-legend-pct">${pct.toFixed(0)}%</span>
             </div>
             <div class="rs-legend-val ${isNeg ? 'is-neg' : ''}">${fmtEUR(net)}</div>
@@ -11830,8 +11830,8 @@
     const label = (k === 'OTHER') ? 'Other' : k;
 
     const p = String(pct != null ? pct : '').trim();
-    tAsset.textContent = label || '—';
-    tPct.textContent = p ? `${p}%` : '—';
+    tAsset.textContent = label || 'â€”';
+    tPct.textContent = p ? `${p}%` : 'â€”';
   }
 
   function restoreDonutCenter(chartEl) {
@@ -11894,7 +11894,7 @@
         s.classList.toggle('is-dim', !match);
       });
     } else {
-      // Don’t dim donut if the asset isn’t in Top 5
+      // Donâ€™t dim donut if the asset isnâ€™t in Top 5
       slices.forEach((s) => {
         s.classList.remove('is-highlight');
         s.classList.remove('is-dim');
@@ -11963,7 +11963,7 @@
 
       const label = (asset === 'OTHER') ? 'Other' : asset;
 
-      if (kEl) kEl.textContent = label || '—';
+      if (kEl) kEl.textContent = label || 'â€”';
 
       if (vEl) {
         vEl.textContent = `Net ${fmtEUR(net)}`;
@@ -12044,7 +12044,7 @@
 
       e.preventDefault();
       applyAssetFilter(asset, { scrollToId: 'rsEvents' });
-      showToast(`Filtered to ${normAssetKey(asset)} • Jumped to Events`);
+      showToast(`Filtered to ${normAssetKey(asset)} â€¢ Jumped to Events`);
     });
   }
 
@@ -12065,8 +12065,8 @@
       applyAssetFilter(key, { scrollToId: 'rsEvents' });
 
       const after = normAssetKey(activeFilters.asset);
-      if (after) showToast(`Filtered to ${after} • Jumped to Events`);
-      else if (before) showToast('Asset filter cleared • Jumped to Events');
+      if (after) showToast(`Filtered to ${after} â€¢ Jumped to Events`);
+      else if (before) showToast('Asset filter cleared â€¢ Jumped to Events');
       else showToast('Jumped to Events');
     });
   }
@@ -12113,7 +12113,7 @@
     const pEl = tip.querySelector('.rs-bar-tip-p');
     const hEl = tip.querySelector('.rs-bar-tip-h');
 
-    if (kEl) kEl.textContent = label || '—';
+    if (kEl) kEl.textContent = label || 'â€”';
 
     if (vEl) {
       const isNeg = Number.isFinite(v) && v < 0;
@@ -12186,21 +12186,21 @@
     if (taxBaseTaxableBtn) {
       taxBaseTaxableBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        goInfoAndFlash(target, 'Taxable basis • See Methodology in Info');
+        goInfoAndFlash(target, 'Taxable basis â€¢ See Methodology in Info');
       });
     }
 
     if (taxBaseExemptBtn) {
       taxBaseExemptBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        goInfoAndFlash(target, 'Exempt basis • See Methodology in Info');
+        goInfoAndFlash(target, 'Exempt basis â€¢ See Methodology in Info');
       });
     }
 
     if (tBaseStackEl) {
       tBaseStackEl.addEventListener('click', (e) => {
         e.preventDefault();
-        goInfoAndFlash(target, 'Tax base • See Methodology in Info');
+        goInfoAndFlash(target, 'Tax base â€¢ See Methodology in Info');
       });
     }
   }
@@ -12251,7 +12251,7 @@
     if (!el) return;
 
     const ptsAll = (Array.isArray(rows) ? rows : [])
-      .map(r => ({ label: String(r.label || '—'), value: Number(r.value) || 0 }))
+      .map(r => ({ label: String(r.label || 'â€”'), value: Number(r.value) || 0 }))
       .sort((a,b) => a.label.localeCompare(b.label));
 
     // The caller is already passing a 12-point window, but keep it safe.
@@ -12554,7 +12554,7 @@
         hoverDot.classList.toggle('is-neg', neg);
       }
 
-      if (tipK) tipK.textContent = String(pts[i].label || '—');
+      if (tipK) tipK.textContent = String(pts[i].label || 'â€”');
       if (tipV) {
         tipV.textContent = fmtEUR(pts[i].value);
         tipV.classList.toggle('is-neg', neg);
@@ -12575,7 +12575,7 @@
           tipP.textContent = `Pinned ${pinnedLabel}: ${fmtEUR(pinnedVal)}`;
         }
 
-        // Only show Δ when comparing to a different point
+        // Only show Î” when comparing to a different point
         if (i === pIdx) {
           if (tipD) {
             tipD.style.display = 'none';
@@ -12589,7 +12589,7 @@
 
           let pctTxt = '';
           if (Math.abs(pinnedVal) < 1e-12) {
-            pctTxt = ' (Δ% —)';
+            pctTxt = ' (Î”% â€”)';
           } else {
             const pct = (delta / Math.abs(pinnedVal)) * 100;
             const pctSigned = `${delta >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
@@ -12598,7 +12598,7 @@
 
           if (tipD) {
             tipD.style.display = '';
-            tipD.textContent = `Δ ${deltaTxt}${pctTxt}`;
+            tipD.textContent = `Î” ${deltaTxt}${pctTxt}`;
             tipD.classList.toggle('is-neg', delta < 0);
             tipD.classList.toggle('is-pos', delta > 0);
           }
@@ -12697,17 +12697,17 @@
     }
 
     // 1) Load tax metadata
-    let juris = '—';
-    let taxYear = '—';
-    let ruleVersion = '—';
-    let fxSource = '—';
+    let juris = 'â€”';
+    let taxYear = 'â€”';
+    let ruleVersion = 'â€”';
+    let fxSource = 'â€”';
 
     try {
       const r = await fetch(`/api/v1/runs/${encodeURIComponent(runId)}/tax`);
       if (r.ok) {
         const data = await r.json();
-        juris = data.jurisdiction || '—';
-        taxYear = data.tax_year != null ? String(data.tax_year) : '—';
+        juris = data.jurisdiction || 'â€”';
+        taxYear = data.tax_year != null ? String(data.tax_year) : 'â€”';
 
         currentRunRef = String(runId);
         currentJuris = juris;
@@ -12720,7 +12720,7 @@
         renderJurisdictionStatus(juris);
 
         if (exportsScopeTextEl) {
-          exportsScopeTextEl.textContent = `All assets • Tax year ${taxYear}`;
+          exportsScopeTextEl.textContent = `All assets â€¢ Tax year ${taxYear}`;
         }
 
         if (exportRunStampEl) {
@@ -12730,7 +12730,7 @@
         const warnings = Array.isArray(data.warnings) ? data.warnings : [];
         setDataQualityStatus(warnings);
 
-        ruleVersion = String(data.rule_version || data.ruleVersion || '—');
+        ruleVersion = String(data.rule_version || data.ruleVersion || 'â€”');
         currentRunRuleVersion = ruleVersion;
 
         if (data.fx_context) {
@@ -12741,12 +12741,12 @@
           );
         }
 
-        if (!fxSource || fxSource === '—') {
+        if (!fxSource || fxSource === 'â€”') {
           fxSource = (juris === 'IT') ? 'ECB' : 'HNB';
         }
         currentRunFxSource = fxSource;
 
-        /* Default filter year to the run’s tax year (wizard-selected) */
+        /* Default filter year to the runâ€™s tax year (wizard-selected) */
         if (/^\d{4}$/.test(taxYear)) {
           if (!activeFilters.year) {
             activeFilters.year = taxYear;
@@ -12823,7 +12823,7 @@
       }
     } catch (_) {}
 
-    setRunMeta(`Run #${runId} • ${juris} • ${taxYear} • Rule ${ruleVersion} • FIFO • FX ${fxSource}`);
+    setRunMeta(`Run #${runId} â€¢ ${juris} â€¢ ${taxYear} â€¢ Rule ${ruleVersion} â€¢ FIFO â€¢ FX ${fxSource}`);
     setRunMetaFlag(juris);
     populateTaxLocalAreas(juris);
     updateTaxRateProvenance();
@@ -12852,7 +12852,7 @@
 
     const list = Array.isArray(rows) ? rows.slice(0, 3) : [];
     if (!list.length) {
-      el.innerHTML = '<div style="color: var(--muted); font-size:11px;">—</div>';
+      el.innerHTML = '<div style="color: var(--muted); font-size:11px;">â€”</div>';
       return;
     }
 
@@ -12866,7 +12866,7 @@
       return `
         <div class="rs-legend-row"${attr}>
           <div class="rs-month-label">
-            <b>${escapeHtml(String(r.label || '—'))}</b>
+            <b>${escapeHtml(String(r.label || 'â€”'))}</b>
             ${(r && r.tag) ? `<span class="rs-month-tag">${escapeHtml(String(r.tag))}</span>` : ''}
           </div>
           <div class="rs-legend-val ${isNeg ? 'is-neg' : ''}">${fmtEUR(v)}</div>
@@ -12922,7 +12922,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
     </div>
 
     <div class="wo-modal-body">
-      <div id="wo-loading">Loading wallet transfers…</div>
+      <div id="wo-loading">Loading wallet transfersâ€¦</div>
       <table id="wo-table" style="display:none; width:100%;">
         <thead>
           <tr>
@@ -12946,16 +12946,16 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
         <div id="rsEbTitle" class="rs-eb-title">Export blocked</div>
         <div id="rsEbSubtitle" class="rs-eb-sub"></div>
       </div>
-      <button id="rsEbClose" class="rs-eb-close" type="button" aria-label="Close">✕</button>
+      <button id="rsEbClose" class="rs-eb-close" type="button" aria-label="Close">âœ•</button>
     </div>
 
     <div class="rs-eb-body">
       <div class="rs-eb-card">
         <div class="rs-eb-kv">
           <div class="rs-eb-k">Reason</div>
-          <div id="rsEbReason" class="rs-eb-v">—</div>
+          <div id="rsEbReason" class="rs-eb-v">â€”</div>
           <div class="rs-eb-k">What this means</div>
-          <div id="rsEbMeaning" class="rs-eb-v">—</div>
+          <div id="rsEbMeaning" class="rs-eb-v">â€”</div>
         </div>
 
         <ul id="rsEbFixList" class="rs-eb-list"></ul>
@@ -12984,10 +12984,10 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
   <div class="rs-eb-modal">
     <div class="rs-eb-head">
       <div>
-        <div id="rsPdfGenTitle" class="rs-eb-title">Generating PDF…</div>
+        <div id="rsPdfGenTitle" class="rs-eb-title">Generating PDFâ€¦</div>
         <div id="rsPdfGenSubtitle" class="rs-eb-sub">Large runs can take a few seconds.</div>
       </div>
-      <button id="rsPdfGenClose" class="rs-eb-close" type="button" aria-label="Close">✕</button>
+      <button id="rsPdfGenClose" class="rs-eb-close" type="button" aria-label="Close">âœ•</button>
     </div>
 
     <div class="rs-eb-body">
@@ -13000,7 +13000,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
             </svg>
           </div>
           <div>
-            <div id="rsPdfGenMsg" style="font-size:12px; color:var(--text); font-weight:700;">Starting…</div>
+            <div id="rsPdfGenMsg" style="font-size:12px; color:var(--text); font-weight:700;">Startingâ€¦</div>
             <div id="rsPdfGenMeta" style="margin-top:4px; font-size:12px; color:var(--muted);">
               Please keep this window open.
             </div>
@@ -13008,7 +13008,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
               <div style="height:8px; border-radius:999px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden;">
                 <div id="rsPdfGenBarFill" style="height:100%; width:0%; border-radius:999px; background: color-mix(in srgb, var(--text) 70%, transparent); transition: width 80ms linear;"></div>
               </div>
-              <div style="margin-top:6px; font-size:12px; color:var(--muted);">Opening automatically…</div>
+              <div style="margin-top:6px; font-size:12px; color:var(--muted);">Opening automaticallyâ€¦</div>
             </div>
           </div>
         </div>
@@ -13027,3 +13027,4 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
   </div>
 </div>
 {% endblock %}
+
