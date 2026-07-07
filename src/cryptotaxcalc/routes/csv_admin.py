@@ -48,9 +48,9 @@ def admin_csv_unsupported_ui(
     token = ""
 
     return templates.TemplateResponse(
+        request,
         "admin_csv_unsupported.html",
         {
-            "request": request,
             "items": items,
             "limit": int(limit),
             "token": token,

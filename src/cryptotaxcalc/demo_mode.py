@@ -314,4 +314,4 @@ def demo_country_notes(jurisdiction: str = Query("HR", pattern="^[A-Za-z]{2}$"))
 
 @router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 def demo_dashboard(request: Request):
-    return templates.TemplateResponse("demo_dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "demo_dashboard.html")
