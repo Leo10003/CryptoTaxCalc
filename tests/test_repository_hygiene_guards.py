@@ -162,6 +162,13 @@ def test_git_status_has_no_deleted_runtime_artifacts_waiting_to_be_committed():
 
         path = line[3:].replace("\\", "/") if len(line) > 3 else line
 
+        status_code = raw_line[:2]
+
+        # Staged deletions are allowed here because this is exactly how we remove
+        # previously tracked runtime artifacts from the repository.
+        if status_code == "D ":
+            continue
+
         if path.startswith(FORBIDDEN_TRACKED_PATH_PREFIXES):
             offenders.append(raw_line)
         elif path.lower().endswith(FORBIDDEN_TRACKED_SUFFIXES):
