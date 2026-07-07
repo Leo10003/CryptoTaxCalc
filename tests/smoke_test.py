@@ -696,109 +696,123 @@ def test_populated_btc_fifo_calculation_tolerates_unrelated_btc_rows():
     unrelated_memo_tag = f"smoke-unrelated-btc-{uuid.uuid4().hex}"
     deterministic_memo_tag = f"smoke-deterministic-with-noise-{uuid.uuid4().hex}"
 
-    unrelated_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+    _delete_transactions_by_memo_fragment(unrelated_memo_tag)
+    _delete_transactions_by_memo_fragment(deterministic_memo_tag)
+
+    try:
+        unrelated_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2022-01-01T12:00:00Z,BUY,BTC,0.00000001,EUR,0.01,BTC,0.00000001,SmokeCSV,{unrelated_memo_tag} dust buy
 2024-06-01T12:00:00Z,SELL,BTC,0.00000001,EUR,0.02,EUR,0.01,SmokeCSV,{unrelated_memo_tag} dust sell
 """
 
-    before_unrelated_count = _count_transactions_by_memo_fragment(unrelated_memo_tag)
+        before_unrelated_count = _count_transactions_by_memo_fragment(unrelated_memo_tag)
 
-    r_import, endpoint = _try_csv_import_multiple_endpoint(
-        unrelated_csv_text,
-        reset=False,
-        filename="smoke_unrelated_btc_noise.csv",
-    )
+        r_import, endpoint = _try_csv_import_multiple_endpoint(
+            unrelated_csv_text,
+            reset=False,
+            filename="smoke_unrelated_btc_noise.csv",
+        )
 
-    if r_import.status_code in (401, 403):
-        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+        if r_import.status_code in (401, 403):
+            pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
 
-    assert r_import.status_code < 500, (
-        f"CSV multi-import endpoint {endpoint} must not crash while importing unrelated BTC rows. "
-        f"status={r_import.status_code}, body={r_import.text[:1000]}"
-    )
+        assert r_import.status_code < 500, (
+            f"CSV multi-import endpoint {endpoint} must not crash while importing unrelated BTC rows. "
+            f"status={r_import.status_code}, body={r_import.text[:1000]}"
+        )
 
-    assert r_import.status_code in (200, 201, 202), (
-        f"CSV multi-import endpoint {endpoint} should accept unrelated BTC rows. "
-        f"status={r_import.status_code}, body={r_import.text[:1000]}"
-    )
+        assert r_import.status_code in (200, 201, 202), (
+            f"CSV multi-import endpoint {endpoint} should accept unrelated BTC rows. "
+            f"status={r_import.status_code}, body={r_import.text[:1000]}"
+        )
 
-    after_unrelated_count = _count_transactions_by_memo_fragment(unrelated_memo_tag)
-    assert after_unrelated_count - before_unrelated_count == 2, (
-        f"Setup import should persist exactly 2 unrelated BTC rows. "
-        f"before={before_unrelated_count}, after={after_unrelated_count}, "
-        f"response={r_import.text[:1000]}"
-    )
+        after_unrelated_count = _count_transactions_by_memo_fragment(unrelated_memo_tag)
+        assert after_unrelated_count - before_unrelated_count == 2, (
+            f"Setup import should persist exactly 2 unrelated BTC rows. "
+            f"before={before_unrelated_count}, after={after_unrelated_count}, "
+            f"response={r_import.text[:1000]}"
+        )
 
-    _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag)
+        _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag)
 
-    run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
+        run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
 
-    assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
-    assert run_id > 0, "run_id should be a positive integer"
+        assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
+        assert run_id > 0, "run_id should be a positive integer"
 
-    r = client.get(f"/history/run/{run_id}/events.csv")
-    if r.status_code in (404, 405, 422):
-        pytest.skip("events.csv endpoint not available")
+        r = client.get(f"/history/run/{run_id}/events.csv")
+        if r.status_code in (404, 405, 422):
+            pytest.skip("events.csv endpoint not available")
 
-    assert r.status_code == 200, f"events.csv failed for populated run: {r.text}"
+        assert r.status_code == 200, f"events.csv failed for populated run: {r.text}"
 
-    ct = r.headers.get("content-type", "").lower()
-    assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
+        ct = r.headers.get("content-type", "").lower()
+        assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
 
-    lines = r.text.splitlines()
-    assert len(lines) >= 3, (
-        "A populated BUY -> SELL smoke calculation with unrelated BTC rows should produce "
-        "a CSV header plus multiple realized event rows"
-    )
+        lines = r.text.splitlines()
+        assert len(lines) >= 3, (
+            "A populated BUY -> SELL smoke calculation with unrelated BTC rows should produce "
+            "a CSV header plus multiple realized event rows"
+        )
 
-    _assert_csv_contains_expected_btc_fifo_result(r.text)
+        _assert_csv_contains_expected_btc_fifo_result(r.text)
+    finally:
+        _delete_transactions_by_memo_fragment(unrelated_memo_tag)
+        _delete_transactions_by_memo_fragment(deterministic_memo_tag)
 
 
 def test_populated_btc_fifo_calculation_finds_expected_result_amid_duplicate_value_noise():
     unrelated_memo_tag = f"smoke-duplicate-value-noise-{uuid.uuid4().hex}"
     deterministic_memo_tag = f"smoke-duplicate-value-deterministic-{uuid.uuid4().hex}"
 
-    unrelated_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+    _delete_transactions_by_memo_fragment(unrelated_memo_tag)
+    _delete_transactions_by_memo_fragment(deterministic_memo_tag)
+
+    try:
+        unrelated_csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
 2022-01-01T12:00:00Z,BUY,BTC,0.04,EUR,400,EUR,0,SmokeCSV,{unrelated_memo_tag} same value buy
 2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{unrelated_memo_tag} same value sell
 """
 
-    r_import, endpoint = _try_csv_import_multiple_endpoint(
-        unrelated_csv_text,
-        reset=False,
-        filename="smoke_duplicate_value_unrelated_btc.csv",
-    )
+        r_import, endpoint = _try_csv_import_multiple_endpoint(
+            unrelated_csv_text,
+            reset=False,
+            filename="smoke_duplicate_value_unrelated_btc.csv",
+        )
 
-    if r_import.status_code in (401, 403):
-        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+        if r_import.status_code in (401, 403):
+            pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
 
-    assert r_import.status_code < 500, (
-        f"CSV multi-import endpoint {endpoint} must not crash while importing duplicate-value BTC rows. "
-        f"status={r_import.status_code}, body={r_import.text[:1000]}"
-    )
+        assert r_import.status_code < 500, (
+            f"CSV multi-import endpoint {endpoint} must not crash while importing duplicate-value BTC rows. "
+            f"status={r_import.status_code}, body={r_import.text[:1000]}"
+        )
 
-    assert r_import.status_code in (200, 201, 202), (
-        f"CSV multi-import endpoint {endpoint} should accept duplicate-value BTC rows. "
-        f"status={r_import.status_code}, body={r_import.text[:1000]}"
-    )
+        assert r_import.status_code in (200, 201, 202), (
+            f"CSV multi-import endpoint {endpoint} should accept duplicate-value BTC rows. "
+            f"status={r_import.status_code}, body={r_import.text[:1000]}"
+        )
 
-    _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag)
+        _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag)
 
-    run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
+        run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
 
-    assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
-    assert run_id > 0, "run_id should be a positive integer"
+        assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
+        assert run_id > 0, "run_id should be a positive integer"
 
-    r = client.get(f"/history/run/{run_id}/events.csv")
-    if r.status_code in (404, 405, 422):
-        pytest.skip("events.csv endpoint not available")
+        r = client.get(f"/history/run/{run_id}/events.csv")
+        if r.status_code in (404, 405, 422):
+            pytest.skip("events.csv endpoint not available")
 
-    assert r.status_code == 200, f"events.csv failed for populated run: {r.text}"
+        assert r.status_code == 200, f"events.csv failed for populated run: {r.text}"
 
-    ct = r.headers.get("content-type", "").lower()
-    assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
+        ct = r.headers.get("content-type", "").lower()
+        assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
 
-    _assert_csv_contains_expected_btc_fifo_result(r.text)
+        _assert_csv_contains_expected_btc_fifo_result(r.text)
+    finally:
+        _delete_transactions_by_memo_fragment(unrelated_memo_tag)
+        _delete_transactions_by_memo_fragment(deterministic_memo_tag)
 
 
 def test_delete_transactions_by_memo_fragment_only_removes_matching_smoke_rows():
@@ -7608,34 +7622,39 @@ def test_csv_upload_or_import_rejects_rows_with_missing_columns_cleanly():
 
 def test_populated_buy_sell_calculation_matches_expected_fifo_gain():
     memo_tag = f"smoke-deterministic-{uuid.uuid4().hex}"
-    _insert_deterministic_btc_buy_sell_rows(memo_tag)
+    _delete_transactions_by_memo_fragment(memo_tag)
 
-    run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
+    try:
+        _insert_deterministic_btc_buy_sell_rows(memo_tag)
 
-    assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
-    assert run_id > 0, "run_id should be a positive integer"
+        run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
 
-    r = client.get(f"/history/run/{run_id}/events.csv")
-    if r.status_code in (404, 405, 422):
-        pytest.skip("events.csv endpoint not available")
+        assert isinstance(payload, dict), "/calculate/v2 must return a JSON object"
+        assert run_id > 0, "run_id should be a positive integer"
 
-    assert r.status_code == 200, f"events.csv failed for populated run: {r.text}"
+        r = client.get(f"/history/run/{run_id}/events.csv")
+        if r.status_code in (404, 405, 422):
+            pytest.skip("events.csv endpoint not available")
 
-    ct = r.headers.get("content-type", "").lower()
-    assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
+        assert r.status_code == 200, f"events.csv failed for populated run: {r.text}"
 
-    lines = r.text.splitlines()
-    assert len(lines) >= 2, (
-        "A populated BUY -> SELL smoke calculation should produce "
-        "a CSV header plus at least one realized event row"
-    )
+        ct = r.headers.get("content-type", "").lower()
+        assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
 
-    header = lines[0].lower()
-    assert "timestamp" in header
-    assert "asset" in header
-    assert "gain" in header or "gain_eur" in header
+        lines = r.text.splitlines()
+        assert len(lines) >= 2, (
+            "A populated BUY -> SELL smoke calculation should produce "
+            "a CSV header plus at least one realized event row"
+        )
 
-    _assert_csv_contains_expected_btc_fifo_result(r.text)
+        header = lines[0].lower()
+        assert "timestamp" in header
+        assert "asset" in header
+        assert "gain" in header or "gain_eur" in header
+
+        _assert_csv_contains_expected_btc_fifo_result(r.text)
+    finally:
+        _delete_transactions_by_memo_fragment(memo_tag)
 
 def test_multilot_fifo_calculation_matches_expected_gain():
     asset = f"SMKEDGE{uuid.uuid4().hex[:8].upper()}"
