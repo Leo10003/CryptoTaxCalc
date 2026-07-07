@@ -430,7 +430,7 @@ def _call_calculate_v2_and_get_payload(
     return run_id, data
 
 
-def _insert_deterministic_btc_buy_sell_rows(memo_tag: str) -> None:
+def _insert_deterministic_btc_buy_sell_rows(memo_tag: str, asset: str = "BTC") -> None:
     """
     Insert a tiny deterministic BUY -> SELL dataset for populated smoke tests.
 
@@ -452,7 +452,7 @@ def _insert_deterministic_btc_buy_sell_rows(memo_tag: str) -> None:
         buy = Transaction(
             timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
             type=TxType.BUY,
-            base_asset="BTC",
+            base_asset=asset,
             base_amount=Decimal("0.10"),
             quote_asset="EUR",
             quote_amount=Decimal("1000"),
@@ -464,7 +464,7 @@ def _insert_deterministic_btc_buy_sell_rows(memo_tag: str) -> None:
         sell = Transaction(
             timestamp=datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
             type=TxType.SELL,
-            base_asset="BTC",
+            base_asset=asset,
             base_amount=Decimal("0.04"),
             quote_asset="EUR",
             quote_amount=Decimal("600"),
@@ -695,6 +695,7 @@ def test_btc_fifo_csv_assertion_allows_other_btc_rows():
 def test_populated_btc_fifo_calculation_tolerates_unrelated_btc_rows():
     unrelated_memo_tag = f"smoke-unrelated-btc-{uuid.uuid4().hex}"
     deterministic_memo_tag = f"smoke-deterministic-with-noise-{uuid.uuid4().hex}"
+    deterministic_asset = f"SMKDET{uuid.uuid4().hex[:10]}".upper()
 
     _delete_transactions_by_memo_fragment(unrelated_memo_tag)
     _delete_transactions_by_memo_fragment(deterministic_memo_tag)
@@ -733,7 +734,7 @@ def test_populated_btc_fifo_calculation_tolerates_unrelated_btc_rows():
             f"response={r_import.text[:1000]}"
         )
 
-        _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag)
+        _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag, asset=deterministic_asset)
 
         run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
 
@@ -755,7 +756,13 @@ def test_populated_btc_fifo_calculation_tolerates_unrelated_btc_rows():
             "a CSV header plus multiple realized event rows"
         )
 
-        _assert_csv_contains_expected_btc_fifo_result(r.text)
+        _assert_csv_contains_expected_asset_gain(
+            r.text,
+            deterministic_asset,
+            expected_gain=Decimal("200"),
+            expected_proceeds=Decimal("600"),
+            expected_cost=Decimal("400"),
+        )
     finally:
         _delete_transactions_by_memo_fragment(unrelated_memo_tag)
         _delete_transactions_by_memo_fragment(deterministic_memo_tag)
@@ -764,6 +771,7 @@ def test_populated_btc_fifo_calculation_tolerates_unrelated_btc_rows():
 def test_populated_btc_fifo_calculation_finds_expected_result_amid_duplicate_value_noise():
     unrelated_memo_tag = f"smoke-duplicate-value-noise-{uuid.uuid4().hex}"
     deterministic_memo_tag = f"smoke-duplicate-value-deterministic-{uuid.uuid4().hex}"
+    deterministic_asset = f"SMKDUP{uuid.uuid4().hex[:10]}".upper()
 
     _delete_transactions_by_memo_fragment(unrelated_memo_tag)
     _delete_transactions_by_memo_fragment(deterministic_memo_tag)
@@ -793,7 +801,7 @@ def test_populated_btc_fifo_calculation_finds_expected_result_amid_duplicate_val
             f"status={r_import.status_code}, body={r_import.text[:1000]}"
         )
 
-        _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag)
+        _insert_deterministic_btc_buy_sell_rows(deterministic_memo_tag, asset=deterministic_asset)
 
         run_id, payload = _call_calculate_v2_and_get_payload(jurisdiction="HR", load_demo=False)
 
@@ -809,7 +817,13 @@ def test_populated_btc_fifo_calculation_finds_expected_result_amid_duplicate_val
         ct = r.headers.get("content-type", "").lower()
         assert "text/csv" in ct or "application/csv" in ct, f"Unexpected content type: {ct}"
 
-        _assert_csv_contains_expected_btc_fifo_result(r.text)
+        _assert_csv_contains_expected_asset_gain(
+            r.text,
+            deterministic_asset,
+            expected_gain=Decimal("200"),
+            expected_proceeds=Decimal("600"),
+            expected_cost=Decimal("400"),
+        )
     finally:
         _delete_transactions_by_memo_fragment(unrelated_memo_tag)
         _delete_transactions_by_memo_fragment(deterministic_memo_tag)
