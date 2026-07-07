@@ -5290,6 +5290,127 @@ def test_csv_import_multiple_missing_files_field_returns_clean_validation_error(
     )
 
 
+def test_csv_import_multiple_rejects_mixed_valid_and_empty_filename_batch_atomically():
+    csv_memo_tag = f"smoke-mixed-empty-valid-{uuid.uuid4().hex}"
+    empty_memo_tag = f"smoke-mixed-empty-bad-{uuid.uuid4().hex}"
+
+    csv_filename = "smoke_mixed_empty_valid.csv"
+    empty_filename = ""
+
+    csv_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2022-01-01T12:00:00Z,BUY,BTC,0.10,EUR,1000,EUR,0,SmokeCSV,{csv_memo_tag} buy
+2024-06-01T12:00:00Z,SELL,BTC,0.04,EUR,600,EUR,0,SmokeCSV,{csv_memo_tag} sell
+"""
+
+    empty_filename_text = f"""timestamp,type,base_asset,base_amount,quote_asset,quote_amount,fee_asset,fee_amount,exchange,memo
+2023-01-01T12:00:00Z,BUY,ETH,1.00,EUR,2000,EUR,0,SmokeCSV,{empty_memo_tag} valid content empty filename
+"""
+
+    before_csv_count = _count_transactions_by_memo_fragment(csv_memo_tag)
+    before_empty_count = _count_transactions_by_memo_fragment(empty_memo_tag)
+
+    r, endpoint = _try_csv_import_multiple_two_files_endpoint(
+        csv_text_1=csv_text,
+        csv_text_2=empty_filename_text,
+        reset=False,
+        filename_1=csv_filename,
+        filename_2=empty_filename,
+    )
+
+    if r.status_code in (401, 403):
+        pytest.skip(f"CSV multi-import endpoint {endpoint} requires auth/token in this build")
+
+    assert r.status_code < 500, (
+        f"CSV multi-import endpoint {endpoint} must not crash on mixed valid/empty-filename batch. "
+        f"status={r.status_code}, body={r.text[:1000]}"
+    )
+
+    after_csv_count = _count_transactions_by_memo_fragment(csv_memo_tag)
+    after_empty_count = _count_transactions_by_memo_fragment(empty_memo_tag)
+
+    assert after_csv_count == before_csv_count, (
+        f"Mixed valid/empty-filename batch should not persist rows from the valid CSV file. "
+        f"before={before_csv_count}, after={after_csv_count}, response={r.text[:1000]}"
+    )
+
+    assert after_empty_count == before_empty_count, (
+        f"Mixed valid/empty-filename batch should not persist rows from the empty-filename file. "
+        f"before={before_empty_count}, after={after_empty_count}, response={r.text[:1000]}"
+    )
+
+    assert r.status_code in (400, 409, 415, 422, 200, 201, 202), (
+        f"Unexpected mixed valid/empty-filename batch status from {endpoint}: "
+        f"{r.status_code} {r.text[:1000]}"
+    )
+
+    if r.status_code in (400, 409, 415, 422):
+        return
+
+    ct = r.headers.get("content-type", "").lower()
+    assert "application/json" in ct, (
+        f"CSV multi-import endpoint {endpoint} should return JSON for mixed valid/empty-filename feedback. "
+        f"content-type={ct}, body={r.text[:1000]}"
+    )
+
+    data = r.json()
+    assert isinstance(data, dict), f"CSV multi-import endpoint {endpoint} should return a JSON object"
+
+    assert _csv_response_reports_errors(data), (
+        f"CSV multi-import endpoint {endpoint} accepted mixed valid/empty-filename batch without errors. "
+        f"Response was: {data!r}"
+    )
+
+    results = data.get("results")
+    assert isinstance(results, list) and len(results) >= 2, (
+        f"Mixed valid/empty-filename batch should return one result per uploaded file. "
+        f"Response was: {data!r}"
+    )
+
+    assert results[0].get("filename") == csv_filename, (
+        f"First result should correspond to first uploaded CSV file. "
+        f"Expected {csv_filename!r}, got {results[0].get('filename')!r}. "
+        f"Response was: {data!r}"
+    )
+
+    second_filename = results[1].get("filename")
+    assert second_filename in ("", "(no-name)", None), (
+        f"Second result should correspond to second uploaded empty filename. "
+        f"Expected empty/(no-name), got {second_filename!r}. Response was: {data!r}"
+    )
+
+    first_inserted = results[0].get("inserted")
+    if isinstance(first_inserted, int):
+        assert first_inserted == 0, (
+            f"Preflight failure should report inserted=0 for valid CSV file in mixed empty-filename batch. "
+            f"Response was: {data!r}"
+        )
+
+    assert _csv_response_reports_errors({"results": [results[1]]}), (
+        f"Empty-filename file result should report validation errors. Response was: {data!r}"
+    )
+
+    text = json.dumps(results[1], default=str).lower()
+    assert "filename" in text or "file" in text or ".csv" in text or "csv" in text, (
+        f"Empty-filename file result should explain file/CSV validation failure. "
+        f"Response was: {data!r}"
+    )
+
+    meta = data.get("meta")
+    assert isinstance(meta, dict), (
+        f"Mixed valid/empty-filename response should include meta. Response was: {data!r}"
+    )
+
+    assert meta.get("min_year") is None, (
+        f"Mixed valid/empty-filename rejected response should not expose global min_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+    assert meta.get("max_year") is None, (
+        f"Mixed valid/empty-filename rejected response should not expose global max_year as imported. "
+        f"Response was: {data!r}"
+    )
+
+
 def test_csv_upload_preview_rejects_empty_filename_without_persistence():
     memo_tag = f"smoke-preview-empty-filename-{uuid.uuid4().hex}"
 
