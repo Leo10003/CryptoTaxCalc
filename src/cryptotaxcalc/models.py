@@ -135,6 +135,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
     
     __table_args__ = (
+        UniqueConstraint("hash", name="uq_transactions_hash"),
         Index("ix_transactions_asset_ts", "base_asset", "timestamp"),
         Index("ix_transactions_type_ts", "type", "timestamp"),
     )
@@ -158,7 +159,7 @@ class Transaction(Base):
     memo: Mapped[str | None] = mapped_column(Text)
     fair_value: Mapped[Decimal | None] = mapped_column(SqliteDecimal)
 
-    raw_event_id: Mapped[int | None] = mapped_column(Integer)
+    raw_event_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("raw_events.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 Index("idx_transactions_ts", Transaction.timestamp)
@@ -217,8 +218,8 @@ class RealizedEvent(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    tx_id: Mapped[int | None] = mapped_column(Integer)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("calc_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    tx_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("transactions.id", ondelete="SET NULL"))
     timestamp: Mapped[str] = mapped_column(String(32), index=True)
     asset: Mapped[str] = mapped_column(String(32), nullable=False)
 
@@ -250,7 +251,7 @@ class RunDigest(Base):
     __tablename__ = "run_digests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True, unique=True)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("calc_runs.id", ondelete="CASCADE"), nullable=False, index=True, unique=True)
     input_hash: Mapped[str | None] = mapped_column(String(64))
     output_hash: Mapped[str | None] = mapped_column(String(64))
     manifest_hash: Mapped[str | None] = mapped_column(String(64))
@@ -293,7 +294,7 @@ class WalletOutOverride(Base):
     __tablename__ = "wallet_out_overrides"
 
     id = Column(Integer, primary_key=True)
-    transaction_id = Column(Integer, nullable=False, index=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
     # 'transfer' (default) or 'taxable'
     classification = Column(String(16), nullable=False, default="transfer")

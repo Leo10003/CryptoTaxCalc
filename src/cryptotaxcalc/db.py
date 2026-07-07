@@ -9,7 +9,7 @@ from datetime import datetime, date
 from contextlib import contextmanager
 from typing import Dict, Set, Iterator, Generator
 
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import create_engine, text, inspect, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
 
@@ -56,6 +56,13 @@ engine = create_engine(
     connect_args={"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {},
     pool_pre_ping=True,
 )
+
+
+@event.listens_for(engine, "connect")
+def _sqlite_on_connect(dbapi_connection, connection_record):  # pragma: no cover - exercised through DB behavior
+    if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+        _set_sqlite_pragmas(dbapi_connection)
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
