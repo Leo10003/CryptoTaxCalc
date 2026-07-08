@@ -2304,6 +2304,57 @@ def export_status(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/support/report-issue/download/{filename}", tags=["support"])
+def download_issue_report_bundle(
+    filename: str,
+    request: Request,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+    x_token: str | None = Header(default=None, alias="X-Token"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    token: str | None = Query(default=None, description="Deprecated: use X-Admin-Token header"),
+):
+    """
+    Download a generated issue report bundle.
+
+    Security:
+    - bundle/admin auth required
+    - only issue_report_*.zip filenames are accepted
+    - path traversal is blocked by resolving under support_bundles/
+    """
+    require_bundle_admin(
+        request=request,
+        x_admin_token=x_admin_token,
+        x_token=x_token,
+        authorization=authorization,
+        token=token,
+    )
+
+    safe_name = FSPath(filename).name
+
+    if safe_name != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    if not safe_name.startswith("issue_report_") or not safe_name.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Invalid issue report filename")
+
+    support_dir = (PROJECT_ROOT / "support_bundles").resolve()
+    bundle_path = (support_dir / safe_name).resolve()
+
+    try:
+        bundle_path.relative_to(support_dir)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid issue report path")
+
+    if not bundle_path.exists() or not bundle_path.is_file():
+        raise HTTPException(status_code=404, detail="Issue report not found")
+
+    return FileResponse(
+        str(bundle_path),
+        media_type="application/zip",
+        filename=safe_name,
+    )
+
+
 @app.post("/support/report-issue", response_model=IssueReportResponse, tags=["support"])
 def create_issue_report_bundle(
     req: IssueReportRequest,

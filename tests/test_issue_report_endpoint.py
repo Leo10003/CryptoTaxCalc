@@ -80,3 +80,63 @@ def test_issue_report_endpoint_creates_bundle_when_authorized(tmp_path, monkeypa
     assert "issue_report.json" in names
     assert "logs/calc/runs/77/trace.json" in names
     assert "_meta/bundle_manifest.json" in names
+
+def test_issue_report_download_endpoint_returns_zip(tmp_path, monkeypatch):
+    def allow_bundle_admin(**kwargs):
+        return None
+
+    monkeypatch.setattr(app_module, "require_bundle_admin", allow_bundle_admin)
+
+    support_dir = tmp_path / "project" / "support_bundles"
+    support_dir.mkdir(parents=True)
+
+    bundle_path = support_dir / "issue_report_test.zip"
+    with zipfile.ZipFile(bundle_path, "w") as zf:
+        zf.writestr("issue_report.json", "{}")
+
+    monkeypatch.setattr(app_module, "PROJECT_ROOT", tmp_path / "project")
+
+    client = TestClient(app)
+
+    response = client.get(
+        "/support/report-issue/download/issue_report_test.zip",
+        headers={"X-Admin-Token": "test-token"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/zip")
+    assert response.content.startswith(b"PK")
+
+
+def test_issue_report_download_rejects_path_traversal(tmp_path, monkeypatch):
+    def allow_bundle_admin(**kwargs):
+        return None
+
+    monkeypatch.setattr(app_module, "require_bundle_admin", allow_bundle_admin)
+    monkeypatch.setattr(app_module, "PROJECT_ROOT", tmp_path / "project")
+
+    client = TestClient(app)
+
+    response = client.get(
+        "/support/report-issue/download/..%2Fsecret.zip",
+        headers={"X-Admin-Token": "test-token"},
+    )
+
+    assert response.status_code in {400, 404}
+
+
+def test_issue_report_download_rejects_non_issue_report_zip(tmp_path, monkeypatch):
+    def allow_bundle_admin(**kwargs):
+        return None
+
+    monkeypatch.setattr(app_module, "require_bundle_admin", allow_bundle_admin)
+    monkeypatch.setattr(app_module, "PROJECT_ROOT", tmp_path / "project")
+
+    client = TestClient(app)
+
+    response = client.get(
+        "/support/report-issue/download/support_bundle_test.zip",
+        headers={"X-Admin-Token": "test-token"},
+    )
+
+    assert response.status_code == 400
