@@ -1700,6 +1700,22 @@ class ExportBundleRequest(BaseModel):
     include_git_meta: bool = True
 
 
+class IssueReportRequest(BaseModel):
+    user_message: str = Field(default="", max_length=20_000)
+    contact: str = Field(default="", max_length=500)
+    app_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class IssueReportResponse(BaseModel):
+    ok: bool
+    filename: str
+    path: str
+    size_bytes: int
+    raw_data_included: bool = False
+    database_included: bool = False
+    message: str
+
+
 _SQLITE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
 
 def _find_sqlite_files(root: FSPath) -> list[FSPath]:
@@ -2286,6 +2302,64 @@ def export_status(db: Session = Depends(get_db)):
         ],
         "blockers": blockers[:3],  # limit for UI clarity
     }
+
+
+@app.post("/support/report-issue", response_model=IssueReportResponse, tags=["support"])
+def create_issue_report_bundle(
+    req: IssueReportRequest,
+    request: Request,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+    x_token: str | None = Header(default=None, alias="X-Token"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    token: str | None = Query(default=None, description="Deprecated: use X-Admin-Token header"),
+):
+    """
+    Create a privacy-conscious issue report bundle for support/debugging.
+
+    Default behavior deliberately includes diagnostics only:
+    - latest error pointers
+    - workspace error logs
+    - calculation traces
+    - unsupported CSV signatures
+
+    It does not include raw imported CSVs, database snapshots, .env, .venv,
+    build artifacts, or full source code.
+    """
+    require_bundle_admin(
+        request=request,
+        x_admin_token=x_admin_token,
+        x_token=x_token,
+        authorization=authorization,
+        token=token,
+    )
+
+    try:
+        from cryptotaxcalc.exporter import build_issue_report_bundle
+
+        bundle_path = build_issue_report_bundle(
+            user_message=req.user_message,
+            contact=req.contact,
+            app_context=req.app_context,
+        )
+
+        return IssueReportResponse(
+            ok=True,
+            filename=bundle_path.name,
+            path=str(bundle_path.resolve()),
+            size_bytes=bundle_path.stat().st_size if bundle_path.exists() else 0,
+            raw_data_included=False,
+            database_included=False,
+            message=(
+                "Issue report bundle created. Send this zip to support/developer. "
+                "It contains diagnostics only by default."
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger = get_logger("support")
+        logger.exception("Failed to create issue report bundle: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to create issue report bundle: {e}")
 
 
 @app.get("/data_quality/missing_history", summary="Detect assets with missing acquisition history")
