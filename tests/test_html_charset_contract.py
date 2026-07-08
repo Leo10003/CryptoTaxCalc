@@ -49,8 +49,11 @@ def test_workspace_results_template_has_no_common_mojibake_sequences():
         "\u008f",
         "\u008d",
         "�",      # replacement character
+        "”¦",
     ]
 
     found = [s for s in forbidden if s in html]
 
     assert not found, f"{template_path} contains mojibake sequences: {found}"
+    assert "Generating PDF" in html
+    assert "Generating PDF”¦" not in html

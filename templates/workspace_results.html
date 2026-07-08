@@ -2166,7 +2166,7 @@
     opacity: 0.8;
   }
 
-  /* Month legend: show month key as a small tag so labels don’t truncate to “Latest”¦” */
+  /* Month legend: show month key as a small tag so labels don’t truncate to “Latest”...” */
   .rs-month-tag {
     flex: 0 0 auto;
     font-size: 10px;
@@ -5523,7 +5523,7 @@
             </div>
 
             <button id="rsFilterClear" class="rs-filter-clear" type="button" style="display:none;">Clear</button>
-            <span id="rsFilterStatus" class="rs-filter-status" style="display:none;">Applying”¦</span>
+            <span id="rsFilterStatus" class="rs-filter-status" style="display:none;">Applying”...</span>
 
             <div class="rs-filters-hint" aria-label="Current scope and impact">
               <div class="rs-filters-hint-text">
@@ -5615,7 +5615,7 @@
                           <span id="kStatusTitle" class="rs-status-title">Data quality</span>
                           <span id="kStatusBadge" class="rs-status-badge">—</span>
                       </div>
-                      <div id="kStatusBody" class="rs-status-body">Checking”¦</div>
+                      <div id="kStatusBody" class="rs-status-body">Checking”...</div>
                       <ul id="kStatusList" class="rs-status-list" style="display:none;"></ul>
                       <button id="kStatusGoInfo" type="button" class="rs-link-mini" style="display:none;">View in Info</button>
 
@@ -5662,7 +5662,7 @@
                 <div class="rs-card-h-side">
                   <div class="rs-asset-tools" aria-label="Asset list controls">
                     <div class="rs-asset-search-wrap">
-                      <input id="rsAssetSearch" class="rs-asset-search" type="search" placeholder="Search”¦" autocomplete="off" aria-label="Search assets">
+                      <input id="rsAssetSearch" class="rs-asset-search" type="search" placeholder="Search”..." autocomplete="off" aria-label="Search assets">
                       <button id="rsAssetSearchClear" class="rs-asset-search-clear" type="button" aria-label="Clear search">
                         <span aria-hidden="true">Ã—</span>
                       </button>
@@ -5950,7 +5950,7 @@
               <div class="rs-events-left">
                 <div class="rs-events-controls">
                   <div class="rs-events-search-wrap">
-                    <input id="rsEventsSearch" class="rs-events-search" type="search" placeholder="Search events”¦" autocomplete="off" aria-label="Search events">
+                    <input id="rsEventsSearch" class="rs-events-search" type="search" placeholder="Search events”..." autocomplete="off" aria-label="Search events">
                     <button id="rsEventsSearchClear" class="rs-events-search-clear" type="button" aria-label="Clear search">
                       <span aria-hidden="true">Ã—</span>
                     </button>
@@ -6014,7 +6014,7 @@
                   </tr>
                 </thead>
                 <tbody id="eventsTbody">
-                  <tr><td colspan="6" style="color: var(--muted);">Loading”¦</td></tr>
+                  <tr><td colspan="6" style="color: var(--muted);">Loading”...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -6243,7 +6243,7 @@
     <div class="rs-scope-toast-head">
       <span class="rs-scope-toast-dot" aria-hidden="true"></span>
       <div class="rs-scope-toast-text">
-        <div id="rsScopeToastTitle" class="rs-scope-toast-title">Updating scope”¦</div>
+          <div id="rsScopeToastTitle" class="rs-scope-toast-title">Updating scope”...</div>
         <div id="rsScopeToastBody" class="rs-scope-toast-body">—</div>
       </div>
     </div>
@@ -8054,7 +8054,7 @@
         assetBarsFlipPending = false;
       }
 
-      // Always refresh list (search + sort + “Showing ”¦”)
+      // Always refresh list (search + sort + “Showing ”...”)
       renderAssetLegend(legendAssetEl, src);
 
       if (prevLegendPos && legendAssetEl) {
@@ -8393,7 +8393,7 @@
 
     if (state === 'loading') {
       scopeToastEl.classList.add('is-loading');
-      if (scopeToastTitleEl) scopeToastTitleEl.textContent = 'Updating scope”¦';
+      if (scopeToastTitleEl) scopeToastTitleEl.textContent = 'Updating scope”...';
       if (scopeToastBodyEl) scopeToastBodyEl.textContent = `Applying: ${label}`;
     } else {
       const isPreview = (filtersMode === 'preview');
@@ -8651,7 +8651,7 @@
     const label = filtersLabel();
     const suffix =
       (filtersMode === 'preview') ? ' (preview)' :
-      (filtersMode === 'loading') ? ' (updating”¦)'
+      (filtersMode === 'loading') ? ' (updating”...)'
       : '';
 
     const range = scopeMetaEl ? String(scopeMetaEl.dataset.range || '').trim() : '';
@@ -9029,13 +9029,13 @@
 
       // Make it look intentional immediately (avoid blank tab)
       try {
-        w.document.title = 'Generating PDF”¦';
+        w.document.title = 'Generating PDF”...';
         w.document.body.style.margin = '0';
         w.document.body.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
         w.document.body.innerHTML = `
           <div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;">
             <div style="max-width:520px;width:100%;border:1px solid rgba(0,0,0,.12);border-radius:14px;padding:18px;">
-              <div style="font-weight:800;font-size:16px;">Generating PDF”¦</div>
+              <div style="font-weight:800;font-size:16px;">Generating PDF”...</div>
               <div style="margin-top:6px;opacity:.75;font-size:13px;line-height:1.35;">
                 Please keep this tab open. The PDF will appear automatically when ready.
               </div>
@@ -9073,7 +9073,7 @@
 
     // Null-safe: never throw; fall back to toast if modal elements are missing.
     if (!b || !close || !cancel || !openBtn || !iconEl || !msgEl || !metaEl || !cdWrap || !barFill) {
-      showToast('Generating PDF”¦');
+      showToast('Generating PDF”...');
       return {
         hide: () => {},
         isCancelled: () => false,
@@ -9105,7 +9105,7 @@
     };
 
     // Reset UI state each time modal opens
-    msgEl.textContent = 'Generating PDF”¦';
+    msgEl.textContent = 'Generating PDF”...';
     metaEl.textContent = 'Please keep this window open.';
     openBtn.style.display = 'none';
     openBtn.onclick = null;
@@ -9150,7 +9150,7 @@
         iconEl.classList.add('is-ready');
 
         msgEl.textContent = 'PDF is ready';
-        metaEl.textContent = 'Opening automatically”¦';
+        metaEl.textContent = 'Opening automatically”...';
 
         // Show bar and animate fill to 100% over 1.6s
         cdWrap.style.display = '';
@@ -9275,7 +9275,7 @@
           const st = String(pj.status || '');
           const msg = String(pj.message || '');
 
-          modal.setMsg(msg || (st === 'ready' ? 'Ready' : 'Generating PDF”¦'));
+          modal.setMsg(msg || (st === 'ready' ? 'Ready' : 'Generating PDF”...'));
 
           if (st === 'ready' && pj.pdf_url) {
             openWhenReady(pj.pdf_url);
@@ -10162,7 +10162,7 @@
     let line = 'Verified: Saved • Scope-applied • Subset export matches';
 
     if (isLoading) {
-      line = 'Updating”¦ applying scope changes';
+      line = 'Updating”... applying scope changes';
     } else if (warnCount > 0) {
       line = `Attention: ${warnCount} warning${warnCount === 1 ? '' : 's'} • Review in Info before export`;
     } else if (isPreview) {
@@ -10742,7 +10742,7 @@
     const s = String(h || '').trim();
     if (!s) return '—';
     if (s.length <= 18) return s;
-    return s.slice(0, 10) + '”¦' + s.slice(-6);
+    return s.slice(0, 10) + '”...' + s.slice(-6);
   }
 
   function fmtMs(ms) {
@@ -11246,7 +11246,7 @@
     jurisReadyCardEl.classList.remove('is-ok', 'is-warn');
     jurisReadyCardEl.classList.add('is-warn');
     jurisReadyBadgeEl.textContent = 'Loading';
-    jurisReadyBodyEl.textContent = 'Checking jurisdiction readiness”¦';
+    jurisReadyBodyEl.textContent = 'Checking jurisdiction readiness”...';
 
     try {
       const r = await fetch(`/jurisdiction/status?jurisdiction=${encodeURIComponent(j)}`, { credentials: 'same-origin' });
@@ -11300,9 +11300,9 @@
     }
 
     if (countryNotesLeadEl) {
-      countryNotesLeadEl.textContent = 'Loading country notes”¦';
+      countryNotesLeadEl.textContent = 'Loading country notes”...';
     }
-    countryNotesListEl.innerHTML = '<li style="opacity:0.85;">Loading”¦</li>';
+    countryNotesListEl.innerHTML = '<li style="opacity:0.85;">Loading”...</li>';
 
     try {
       const r = await fetch(`/country_notes?jurisdiction=${encodeURIComponent(j)}`, { credentials: 'same-origin' });
@@ -11587,7 +11587,7 @@
 
     if (isLoading) {
       taxesReadinessEl.classList.add('is-loading');
-      textEl.textContent = 'Updating”¦ preparing export-ready totals';
+      textEl.textContent = 'Updating”... preparing export-ready totals';
       return;
     }
 
@@ -11882,7 +11882,7 @@
     const token = ++_assetLegendRenderToken;
 
     // Fast initial paint to avoid “blank” feeling
-    el.innerHTML = '<div style="color: var(--muted); font-size:11px;">Rendering”¦</div>';
+    el.innerHTML = '<div style="color: var(--muted); font-size:11px;">Rendering”...</div>';
 
     const CHUNK = 60;
     let idx = 0;
@@ -13131,7 +13131,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
     </div>
 
     <div class="wo-modal-body">
-      <div id="wo-loading">Loading wallet transfers”¦</div>
+        <div id="wo-loading">Loading wallet transfers”...</div>
       <table id="wo-table" style="display:none; width:100%;">
         <thead>
           <tr>
@@ -13193,7 +13193,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
   <div class="rs-eb-modal">
     <div class="rs-eb-head">
       <div>
-        <div id="rsPdfGenTitle" class="rs-eb-title">Generating PDF”¦</div>
+          <div id="rsPdfGenTitle" class="rs-eb-title">Generating PDF”...</div>
         <div id="rsPdfGenSubtitle" class="rs-eb-sub">Large runs can take a few seconds.</div>
       </div>
       <button id="rsPdfGenClose" class="rs-eb-close" type="button" aria-label="Close">✕</button>
@@ -13209,7 +13209,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
             </svg>
           </div>
           <div>
-            <div id="rsPdfGenMsg" style="font-size:12px; color:var(--text); font-weight:700;">Starting”¦</div>
+              <div id="rsPdfGenMsg" style="font-size:12px; color:var(--text); font-weight:700;">Starting”...</div>
             <div id="rsPdfGenMeta" style="margin-top:4px; font-size:12px; color:var(--muted);">
               Please keep this window open.
             </div>
@@ -13217,7 +13217,7 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
               <div style="height:8px; border-radius:999px; background: color-mix(in srgb, var(--border) 70%, transparent); overflow:hidden;">
                 <div id="rsPdfGenBarFill" style="height:100%; width:0%; border-radius:999px; background: color-mix(in srgb, var(--text) 70%, transparent); transition: width 80ms linear;"></div>
               </div>
-              <div style="margin-top:6px; font-size:12px; color:var(--muted);">Opening automatically”¦</div>
+              <div style="margin-top:6px; font-size:12px; color:var(--muted);">Opening automatically”...</div>
             </div>
           </div>
         </div>
