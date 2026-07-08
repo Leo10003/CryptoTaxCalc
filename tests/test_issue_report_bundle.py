@@ -75,6 +75,7 @@ def test_issue_report_bundle_includes_safe_diagnostics_only(tmp_path, monkeypatc
         names = set(zf.namelist())
 
         assert "issue_report.json" in names
+        assert "diagnostics_inventory.json" in names
         assert "README_ISSUE_REPORT.txt" in names
         assert "_meta/bundle_manifest.json" in names
 
@@ -96,6 +97,15 @@ def test_issue_report_bundle_includes_safe_diagnostics_only(tmp_path, monkeypatc
 
         with zf.open("issue_report.json") as fh:
             report = json.loads(fh.read().decode("utf-8"))
+
+        with zf.open("diagnostics_inventory.json") as fh:
+            inventory = json.loads(fh.read().decode("utf-8"))
+
+        assert inventory["kind"] == "diagnostics_inventory"
+        assert "logs/calc/runs/123/trace.json" in inventory["included_files"]
+        assert "storage_raw/csv_sources/unsupported_structures.json" in inventory["included_files"]
+        assert inventory["privacy_omissions"]["raw_import_csv_files"] == "excluded_by_default"
+        assert inventory["privacy_omissions"]["database_snapshots"] == "excluded_by_default"
 
         assert report["kind"] == "issue_report"
         assert report["user_message"] == "Calculation failed after importing Binance CSV."
@@ -130,10 +140,18 @@ def test_issue_report_bundle_handles_missing_logs(tmp_path, monkeypatch):
         names = set(zf.namelist())
 
         assert "issue_report.json" in names
+        assert "diagnostics_inventory.json" in names
         assert "README_ISSUE_REPORT.txt" in names
         assert "_meta/bundle_manifest.json" in names
 
         with zf.open("issue_report.json") as fh:
             report = json.loads(fh.read().decode("utf-8"))
+
+        with zf.open("diagnostics_inventory.json") as fh:
+            inventory = json.loads(fh.read().decode("utf-8"))
+
+        assert "logs/calc/last_run.json" in inventory["missing_expected_files"]
+        assert "logs/workspace/errors.txt" in inventory["missing_expected_files"]
+        assert inventory["trace_files"] == []
 
         assert report["user_message"] == "Something went wrong."

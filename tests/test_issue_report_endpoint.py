@@ -79,6 +79,7 @@ def test_issue_report_endpoint_creates_bundle_when_authorized(tmp_path, monkeypa
         names = set(zf.namelist())
 
     assert "issue_report.json" in names
+    assert "diagnostics_inventory.json" in names
     assert "logs/calc/runs/77/trace.json" in names
     assert "_meta/bundle_manifest.json" in names
 

@@ -317,6 +317,40 @@ def _issue_report_candidate_files() -> List[Path]:
     return out
 
 
+def _issue_report_inventory(candidate_files: List[Path]) -> Dict[str, Any]:
+    included = {_rel(p, PROJECT_ROOT) for p in candidate_files}
+
+    expected_static = list(ISSUE_REPORT_DEFAULT_FILES)
+    missing_static = [
+        rel
+        for rel in expected_static
+        if rel not in included and not (PROJECT_ROOT / rel).exists()
+    ]
+
+    trace_root = PROJECT_ROOT / "logs" / "calc" / "runs"
+    trace_files = sorted(
+        _rel(p, PROJECT_ROOT)
+        for p in trace_root.glob("*/trace.json")
+        if p.exists() and p.is_file()
+    ) if trace_root.exists() else []
+
+    return {
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "kind": "diagnostics_inventory",
+        "included_files": sorted(included),
+        "missing_expected_files": sorted(missing_static),
+        "trace_files": trace_files,
+        "privacy_omissions": {
+            "raw_import_csv_files": "excluded_by_default",
+            "database_snapshots": "excluded_by_default",
+            "environment_files": "excluded_by_default",
+            "virtualenv": "excluded_by_default",
+            "full_source_tree": "excluded_by_default",
+            "build_artifacts": "excluded_by_default",
+        },
+    }
+
+
 def build_issue_report_bundle(
     *,
     user_message: Optional[str] = None,
@@ -343,6 +377,8 @@ def build_issue_report_bundle(
     zip_path = out_dir / zip_name
 
     added_paths: List[Path] = []
+    candidate_files = _issue_report_candidate_files()
+    inventory = _issue_report_inventory(candidate_files)
     payload = _issue_report_payload(
         user_message=user_message,
         contact=contact,
@@ -358,9 +394,15 @@ def build_issue_report_bundle(
             compress_type=zipfile.ZIP_DEFLATED,
         )
 
-        for fp in _issue_report_candidate_files():
+        for fp in candidate_files:
             if _add_file(z, fp, arcname=_rel(fp, PROJECT_ROOT)):
                 added_paths.append(fp)
+
+        z.writestr(
+            "diagnostics_inventory.json",
+            json.dumps(inventory, indent=2, ensure_ascii=False).encode("utf-8"),
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
 
         readme = (
             "CryptoTaxCalc — Issue Report\n"
@@ -368,6 +410,7 @@ def build_issue_report_bundle(
             "This archive is intended for debugging a client-reported issue.\n\n"
             "Default contents:\n"
             "- issue_report.json: user message/contact/context\n"
+            "- diagnostics_inventory.json: included/missing diagnostics and privacy omissions\n"
             "- logs/latest_error_location.*: pointer to the latest component error\n"
             "- logs/workspace/*: workspace calculation/import error logs\n"
             "- logs/calc/last_run.json: latest calculation diagnostics\n"
