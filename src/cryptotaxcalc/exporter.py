@@ -11,6 +11,7 @@ import hashlib
 import logging
 import zipfile
 import shutil
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional, Dict, Any, List
@@ -264,11 +265,64 @@ ISSUE_REPORT_DEFAULT_FILES = [
 ISSUE_REPORT_TRACE_GLOB = "logs/calc/runs/*/trace.json"
 
 
+_SECRET_PATTERNS = [
+    # Authorization headers / bearer tokens
+    (
+        re.compile(r"(?i)\b(authorization\s*:\s*bearer\s+)([A-Za-z0-9._~+/=-]{12,})"),
+        r"\1[REDACTED]",
+    ),
+    (
+        re.compile(r"(?i)\b(bearer\s+)([A-Za-z0-9._~+/=-]{12,})"),
+        r"\1[REDACTED]",
+    ),
+
+    # Common key=value / key: value forms
+    (
+        re.compile(
+            r"(?i)\b("
+            r"admin_token|bundle_token|api_key|apikey|secret|password|passwd|pwd|token|access_token|refresh_token"
+            r")(\s*[:=]\s*)([^\s,;\"']{4,})"
+        ),
+        r"\1\2[REDACTED]",
+    ),
+
+    # dotenv-style quoted values
+    (
+        re.compile(
+            r"(?i)\b("
+            r"admin_token|bundle_token|api_key|apikey|secret|password|passwd|pwd|token|access_token|refresh_token"
+            r")(\s*[:=]\s*)([\"'])(.*?)([\"'])"
+        ),
+        r"\1\2\3[REDACTED]\5",
+    ),
+]
+
+
+def _redact_issue_text(text: str) -> str:
+    redacted = text
+    for pattern, replacement in _SECRET_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
+
+
 def _safe_issue_text(value: Optional[str], *, max_chars: int = 20_000) -> str:
     text = str(value or "").replace("\x00", "").strip()
+    text = _redact_issue_text(text)
     if len(text) > max_chars:
         return text[:max_chars] + "\n...[truncated]"
     return text
+
+
+def _safe_issue_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return _safe_issue_text(value)
+    if isinstance(value, dict):
+        return {str(k): _safe_issue_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_safe_issue_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [_safe_issue_value(v) for v in value]
+    return value
 
 
 def _issue_report_payload(
@@ -282,7 +336,7 @@ def _issue_report_payload(
         "kind": "issue_report",
         "user_message": _safe_issue_text(user_message),
         "contact": _safe_issue_text(contact, max_chars=500),
-        "app_context": app_context or {},
+        "app_context": _safe_issue_value(app_context or {}),
         "privacy_note": (
             "This issue report includes diagnostic logs and traces only by default. "
             "It does not intentionally include raw imported CSV files, database snapshots, "

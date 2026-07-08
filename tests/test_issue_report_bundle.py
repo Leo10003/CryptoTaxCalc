@@ -155,3 +155,49 @@ def test_issue_report_bundle_handles_missing_logs(tmp_path, monkeypatch):
         assert inventory["trace_files"] == []
 
         assert report["user_message"] == "Something went wrong."
+
+def test_issue_report_bundle_redacts_user_supplied_secrets(tmp_path, monkeypatch):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    monkeypatch.setattr(exporter, "PROJECT_ROOT", project_root)
+
+    bundle_path = exporter.build_issue_report_bundle(
+        user_message=(
+            "Calculation failed. "
+            "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456 "
+            "ADMIN_TOKEN=super-secret-token "
+            "password: hunter2"
+        ),
+        contact="client@example.com token=contact-secret",
+        app_context={
+            "route": "/calculate/v2",
+            "headers": {
+                "Authorization": "Bearer nestedtokenabcdefghijklmnop",
+                "X-Api-Key": "api_key=nested-secret",
+            },
+            "notes": ["refresh_token=list-secret-token"],
+        },
+        output_dir=tmp_path / "out",
+    )
+
+    with zipfile.ZipFile(bundle_path) as zf:
+        with zf.open("issue_report.json") as fh:
+            report_text = fh.read().decode("utf-8")
+            report = json.loads(report_text)
+
+    assert "abcdefghijklmnopqrstuvwxyz123456" not in report_text
+    assert "super-secret-token" not in report_text
+    assert "hunter2" not in report_text
+    assert "contact-secret" not in report_text
+    assert "nestedtokenabcdefghijklmnop" not in report_text
+    assert "nested-secret" not in report_text
+    assert "list-secret-token" not in report_text
+
+    assert "Authorization: Bearer [REDACTED]" in report["user_message"]
+    assert "ADMIN_TOKEN=[REDACTED]" in report["user_message"]
+    assert "password: [REDACTED]" in report["user_message"]
+    assert report["contact"] == "client@example.com token=[REDACTED]"
+    assert report["app_context"]["headers"]["Authorization"] == "Bearer [REDACTED]"
+    assert report["app_context"]["headers"]["X-Api-Key"] == "api_key=[REDACTED]"
+    assert report["app_context"]["notes"] == ["refresh_token=[REDACTED]"]
