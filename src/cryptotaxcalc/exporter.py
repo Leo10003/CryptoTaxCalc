@@ -482,6 +482,42 @@ def _issue_report_inventory(candidate_files: List[Path]) -> Dict[str, Any]:
     }
 
 
+def _append_issue_report_index(
+    *,
+    zip_path: Path,
+    inventory: Dict[str, Any],
+) -> None:
+    """
+    Append a safe local audit row for generated issue reports.
+
+    This index intentionally stores only bundle metadata, never user messages,
+    contact details, raw CSV contents, database contents, or full environment data.
+    """
+    try:
+        meta_dir = PROJECT_ROOT / "support_bundles" / "_meta"
+        meta_dir.mkdir(parents=True, exist_ok=True)
+
+        row = {
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "kind": "issue_report_index_entry",
+            "filename": zip_path.name,
+            "path": str(zip_path.resolve()),
+            "size_bytes": zip_path.stat().st_size if zip_path.exists() else 0,
+            "sha256": _sha256_file(zip_path) if zip_path.exists() else None,
+            "included_file_count": len(inventory.get("included_files") or []),
+            "missing_expected_file_count": len(inventory.get("missing_expected_files") or []),
+            "trace_file_count": len(inventory.get("trace_files") or []),
+            "raw_data_included": False,
+            "database_included": False,
+        }
+
+        with (meta_dir / "issue_reports.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except Exception as e:
+        # Indexing must never break report generation.
+        log.warning("Could not append issue report index entry for %s: %s", zip_path, e)
+
+
 def build_issue_report_bundle(
     *,
     user_message: Optional[str] = None,
@@ -560,6 +596,8 @@ def build_issue_report_bundle(
             "database_included": False,
         }
         z.writestr("_meta/bundle_manifest.json", json.dumps(meta, indent=2).encode("utf-8"))
+
+    _append_issue_report_index(zip_path=zip_path, inventory=inventory)
 
     log.info("Issue report bundle ready: %s", zip_path)
     return zip_path

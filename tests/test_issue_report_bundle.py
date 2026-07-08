@@ -300,3 +300,48 @@ def test_issue_report_environment_snapshot_avoids_sensitive_values(tmp_path, mon
     # Environment snapshot must not include full temp/project paths.
     assert str(project_root) not in json.dumps(env)
     assert str(tmp_path) not in json.dumps(env)
+
+def test_issue_report_bundle_appends_safe_local_index(tmp_path, monkeypatch):
+    project_root = tmp_path / "project"
+    trace_dir = project_root / "logs" / "calc" / "runs" / "99"
+    trace_dir.mkdir(parents=True)
+    (trace_dir / "trace.json").write_text(json.dumps({"run_id": 99}), encoding="utf-8")
+
+    monkeypatch.setattr(exporter, "PROJECT_ROOT", project_root)
+
+    bundle_path = exporter.build_issue_report_bundle(
+        user_message="Sensitive message should not be indexed. password=do-not-index",
+        contact="client@example.com",
+        output_dir=project_root / "support_bundles",
+    )
+
+    index_path = project_root / "support_bundles" / "_meta" / "issue_reports.jsonl"
+
+    assert index_path.exists()
+
+    rows = [
+        json.loads(line)
+        for line in index_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    assert len(rows) == 1
+
+    row = rows[0]
+
+    assert row["kind"] == "issue_report_index_entry"
+    assert row["filename"] == bundle_path.name
+    assert row["path"] == str(bundle_path.resolve())
+    assert row["size_bytes"] == bundle_path.stat().st_size
+    assert isinstance(row["sha256"], str)
+    assert len(row["sha256"]) == 64
+    assert row["included_file_count"] >= 1
+    assert row["trace_file_count"] == 1
+    assert row["raw_data_included"] is False
+    assert row["database_included"] is False
+
+    index_text = index_path.read_text(encoding="utf-8")
+
+    assert "Sensitive message should not be indexed" not in index_text
+    assert "do-not-index" not in index_text
+    assert "client@example.com" not in index_text
