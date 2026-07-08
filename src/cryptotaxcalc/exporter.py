@@ -12,6 +12,7 @@ import logging
 import zipfile
 import shutil
 import re
+import platform
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional, Dict, Any, List
@@ -364,6 +365,42 @@ def _safe_issue_value(value: Any) -> Any:
     return value
 
 
+def _issue_report_environment_snapshot() -> Dict[str, Any]:
+    """
+    Return non-sensitive runtime metadata for debugging issue reports.
+
+    Deliberately avoids:
+      - full filesystem paths
+      - environment variables
+      - usernames
+      - hostnames
+      - database paths
+      - raw imported data paths
+    """
+    diagnostics = {
+        rel: (PROJECT_ROOT / rel).exists()
+        for rel in ISSUE_REPORT_DEFAULT_FILES
+    }
+
+    trace_root = PROJECT_ROOT / "logs" / "calc" / "runs"
+    trace_count = 0
+    if trace_root.exists():
+        trace_count = sum(1 for p in trace_root.glob("*/trace.json") if p.exists() and p.is_file())
+
+    return {
+        "exporter_version": __version__,
+        "python_version": platform.python_version(),
+        "python_implementation": platform.python_implementation(),
+        "os_name": os.name,
+        "system": platform.system(),
+        "machine": platform.machine(),
+        "cwd_name": Path.cwd().name,
+        "project_root_name": PROJECT_ROOT.name,
+        "diagnostics_present": diagnostics,
+        "calc_trace_count": trace_count,
+    }
+
+
 def _issue_report_payload(
     *,
     user_message: Optional[str] = None,
@@ -376,6 +413,7 @@ def _issue_report_payload(
         "user_message": _safe_issue_text(user_message),
         "contact": _safe_issue_text(contact, max_chars=500),
         "app_context": _safe_issue_value(app_context or {}),
+        "environment": _issue_report_environment_snapshot(),
         "privacy_note": (
             "This issue report includes diagnostic logs and traces only by default. "
             "It does not intentionally include raw imported CSV files, database snapshots, "

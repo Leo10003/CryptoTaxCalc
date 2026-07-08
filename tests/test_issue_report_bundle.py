@@ -111,6 +111,13 @@ def test_issue_report_bundle_includes_safe_diagnostics_only(tmp_path, monkeypatc
         assert report["user_message"] == "Calculation failed after importing Binance CSV."
         assert report["contact"] == "client@example.com"
         assert report["app_context"] == {"route": "/calculate/v2", "ui": "workspace"}
+        env = report["environment"]
+        assert env["exporter_version"]
+        assert env["python_version"]
+        assert env["project_root_name"] == "project"
+        assert env["diagnostics_present"]["logs/calc/last_run.json"] is True
+        assert env["diagnostics_present"]["logs/workspace/errors.txt"] is True
+        assert env["calc_trace_count"] == 1
 
         with zf.open("_meta/bundle_manifest.json") as fh:
             manifest = json.loads(fh.read().decode("utf-8"))
@@ -155,6 +162,10 @@ def test_issue_report_bundle_handles_missing_logs(tmp_path, monkeypatch):
         assert inventory["trace_files"] == []
 
         assert report["user_message"] == "Something went wrong."
+
+        assert report["environment"]["project_root_name"] == "project"
+        assert report["environment"]["calc_trace_count"] == 0
+        assert report["environment"]["diagnostics_present"]["logs/calc/last_run.json"] is False
 
 def test_issue_report_bundle_redacts_user_supplied_secrets(tmp_path, monkeypatch):
     project_root = tmp_path / "project"
@@ -257,3 +268,35 @@ def test_issue_report_bundle_redacts_secrets_from_diagnostic_files(tmp_path, mon
     assert "password: [REDACTED]" in bundled_log
     assert "Bearer [REDACTED]" in bundled_json
     assert "token=[REDACTED]" in bundled_json
+
+def test_issue_report_environment_snapshot_avoids_sensitive_values(tmp_path, monkeypatch):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    monkeypatch.setattr(exporter, "PROJECT_ROOT", project_root)
+
+    bundle_path = exporter.build_issue_report_bundle(
+        user_message="Need help.",
+        app_context={"full_path_should_not_leak": str(tmp_path)},
+        output_dir=tmp_path / "out",
+    )
+
+    with zipfile.ZipFile(bundle_path) as zf:
+        report_text = zf.read("issue_report.json").decode("utf-8")
+        report = json.loads(report_text)
+
+    env = report["environment"]
+
+    assert "python_version" in env
+    assert "system" in env
+    assert "diagnostics_present" in env
+
+    assert "cwd" not in env
+    assert "project_root" not in env
+    assert "environment_variables" not in env
+    assert "username" not in env
+    assert "hostname" not in env
+
+    # Environment snapshot must not include full temp/project paths.
+    assert str(project_root) not in json.dumps(env)
+    assert str(tmp_path) not in json.dumps(env)
