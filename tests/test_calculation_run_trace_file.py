@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -72,6 +72,7 @@ def test_calculation_writes_per_run_trace_file(tmp_path, monkeypatch):
         db_session.commit()
 
         run = CalcRun(
+            started_at=datetime.now(timezone.utc),
             jurisdiction="HR",
             rule_version="test-rule",
             tax_year=2024,
