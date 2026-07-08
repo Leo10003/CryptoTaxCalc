@@ -137,6 +137,45 @@ def _add_file(z: zipfile.ZipFile, file_path: Path, arcname: Optional[str] = None
         log.warning("Skip file %s: %s", file_path, e)
         return False
 
+
+_TEXT_DIAGNOSTIC_SUFFIXES = {
+    ".txt",
+    ".log",
+    ".json",
+    ".jsonl",
+    ".csv",
+    ".md",
+}
+
+
+def _add_issue_report_file(z: zipfile.ZipFile, file_path: Path, arcname: Optional[str] = None) -> bool:
+    """
+    Add a diagnostic file to an issue report.
+
+    Text-like diagnostic files are redacted while being copied into the zip.
+    The source file on disk is never modified.
+    """
+    try:
+        final_arcname = arcname or _rel(file_path, PROJECT_ROOT)
+        suffix = file_path.suffix.lower()
+
+        if suffix in _TEXT_DIAGNOSTIC_SUFFIXES:
+            raw = file_path.read_bytes()
+            text = raw.decode("utf-8", errors="replace")
+            redacted = _redact_issue_text(text)
+            z.writestr(
+                final_arcname,
+                redacted.encode("utf-8"),
+                compress_type=zipfile.ZIP_DEFLATED,
+            )
+            return True
+
+        return _add_file(z, file_path, final_arcname)
+    except Exception as e:
+        log.warning("Skip issue report file %s: %s", file_path, e)
+        return False
+
+
 def _add_dir(z: zipfile.ZipFile, dir_path: Path) -> int:
     """Return number of files written"""
     count = 0
@@ -449,7 +488,7 @@ def build_issue_report_bundle(
         )
 
         for fp in candidate_files:
-            if _add_file(z, fp, arcname=_rel(fp, PROJECT_ROOT)):
+            if _add_issue_report_file(z, fp, arcname=_rel(fp, PROJECT_ROOT)):
                 added_paths.append(fp)
 
         z.writestr(

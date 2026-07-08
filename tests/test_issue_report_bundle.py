@@ -201,3 +201,59 @@ def test_issue_report_bundle_redacts_user_supplied_secrets(tmp_path, monkeypatch
     assert report["app_context"]["headers"]["Authorization"] == "Bearer [REDACTED]"
     assert report["app_context"]["headers"]["X-Api-Key"] == "api_key=[REDACTED]"
     assert report["app_context"]["notes"] == ["refresh_token=[REDACTED]"]
+
+def test_issue_report_bundle_redacts_secrets_from_diagnostic_files(tmp_path, monkeypatch):
+    project_root = tmp_path / "project"
+    monkeypatch.setattr(exporter, "PROJECT_ROOT", project_root)
+
+    log_dir = project_root / "logs" / "workspace"
+    log_dir.mkdir(parents=True)
+
+    source_log = log_dir / "errors.txt"
+    source_log.write_text(
+        "Failure while calling API. "
+        "Authorization: Bearer logfiletokensecret123456 "
+        "api_key=log-api-key-secret "
+        "password: log-password-secret\n",
+        encoding="utf-8",
+    )
+
+    calc_dir = project_root / "logs" / "calc"
+    calc_dir.mkdir(parents=True)
+    source_json = calc_dir / "last_run.json"
+    source_json.write_text(
+        json.dumps(
+            {
+                "run_id": 123,
+                "debug_header": "Bearer jsonbearersecret123456",
+                "nested": {"token": "token=json-token-secret"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    bundle_path = exporter.build_issue_report_bundle(
+        user_message="Calculation failed.",
+        output_dir=tmp_path / "out",
+    )
+
+    # Source files are not mutated.
+    assert "logfiletokensecret123456" in source_log.read_text(encoding="utf-8")
+    assert "log-api-key-secret" in source_log.read_text(encoding="utf-8")
+    assert "json-token-secret" in source_json.read_text(encoding="utf-8")
+
+    with zipfile.ZipFile(bundle_path) as zf:
+        bundled_log = zf.read("logs/workspace/errors.txt").decode("utf-8")
+        bundled_json = zf.read("logs/calc/last_run.json").decode("utf-8")
+
+    assert "logfiletokensecret123456" not in bundled_log
+    assert "log-api-key-secret" not in bundled_log
+    assert "log-password-secret" not in bundled_log
+    assert "jsonbearersecret123456" not in bundled_json
+    assert "json-token-secret" not in bundled_json
+
+    assert "Authorization: Bearer [REDACTED]" in bundled_log
+    assert "api_key=[REDACTED]" in bundled_log
+    assert "password: [REDACTED]" in bundled_log
+    assert "Bearer [REDACTED]" in bundled_json
+    assert "token=[REDACTED]" in bundled_json
