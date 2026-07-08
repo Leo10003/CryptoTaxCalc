@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import zipfile
 
@@ -161,3 +162,125 @@ def test_issue_report_page_renders_client_form():
     assert "downloadBundle(data.download_url, data.filename)" in html
     assert "Excluded by default: raw CSVs" in html
     assert "Excluded by default: database snapshots" in html
+
+def test_issue_report_history_endpoint_lists_safe_index_rows(tmp_path, monkeypatch):
+    def allow_bundle_admin(**kwargs):
+        return None
+
+    monkeypatch.setattr(app_module, "require_bundle_admin", allow_bundle_admin)
+
+    project_root = tmp_path / "project"
+    meta_dir = project_root / "support_bundles" / "_meta"
+    meta_dir.mkdir(parents=True)
+
+    index_path = meta_dir / "issue_reports.jsonl"
+    index_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "created_at": "2026-07-08T21:00:00Z",
+                        "kind": "issue_report_index_entry",
+                        "filename": "issue_report_old.zip",
+                        "path": str(project_root / "support_bundles" / "issue_report_old.zip"),
+                        "size_bytes": 100,
+                        "sha256": "a" * 64,
+                        "included_file_count": 2,
+                        "missing_expected_file_count": 3,
+                        "trace_file_count": 1,
+                        "raw_data_included": False,
+                        "database_included": False,
+                    }
+                ),
+                "not-json",
+                json.dumps(
+                    {
+                        "created_at": "2026-07-08T22:00:00Z",
+                        "kind": "issue_report_index_entry",
+                        "filename": "issue_report_new.zip",
+                        "path": str(project_root / "support_bundles" / "issue_report_new.zip"),
+                        "size_bytes": 200,
+                        "sha256": "b" * 64,
+                        "included_file_count": 4,
+                        "missing_expected_file_count": 1,
+                        "trace_file_count": 2,
+                        "raw_data_included": False,
+                        "database_included": False,
+                        "user_message": "must not be exposed",
+                        "contact": "client@example.com",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "created_at": "2026-07-08T23:00:00Z",
+                        "filename": "../issue_report_escape.zip",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "created_at": "2026-07-08T23:30:00Z",
+                        "filename": "support_bundle_not_allowed.zip",
+                    }
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(app_module, "PROJECT_ROOT", project_root)
+
+    client = TestClient(app)
+
+    response = client.get(
+        "/support/report-issue/history",
+        headers={"X-Admin-Token": "test-token"},
+    )
+
+    assert response.status_code == 200, response.text
+
+    payload = response.json()
+
+    assert payload["ok"] is True
+    assert payload["count"] == 2
+
+    reports = payload["reports"]
+
+    assert reports[0]["filename"] == "issue_report_new.zip"
+    assert reports[0]["download_url"] == "/support/report-issue/download/issue_report_new.zip"
+    assert reports[0]["size_bytes"] == 200
+    assert reports[0]["included_file_count"] == 4
+    assert reports[0]["missing_expected_file_count"] == 1
+    assert reports[0]["trace_file_count"] == 2
+    assert reports[0]["raw_data_included"] is False
+    assert reports[0]["database_included"] is False
+
+    response_text = response.text
+    assert "must not be exposed" not in response_text
+    assert "client@example.com" not in response_text
+    assert "../issue_report_escape.zip" not in response_text
+    assert "support_bundle_not_allowed.zip" not in response_text
+
+
+def test_issue_report_history_endpoint_handles_missing_index(tmp_path, monkeypatch):
+    def allow_bundle_admin(**kwargs):
+        return None
+
+    monkeypatch.setattr(app_module, "require_bundle_admin", allow_bundle_admin)
+    monkeypatch.setattr(app_module, "PROJECT_ROOT", tmp_path / "project")
+
+    client = TestClient(app)
+
+    response = client.get(
+        "/support/report-issue/history",
+        headers={"X-Admin-Token": "test-token"},
+    )
+
+    assert response.status_code == 200, response.text
+
+    payload = response.json()
+
+    assert payload == {
+        "ok": True,
+        "count": 0,
+        "reports": [],
+    }
