@@ -67,6 +67,7 @@ def test_issue_report_endpoint_creates_bundle_when_authorized(tmp_path, monkeypa
     assert payload["ok"] is True
     assert payload["filename"].startswith("issue_report_")
     assert payload["filename"].endswith(".zip")
+    assert payload["download_url"] == f"/support/report-issue/download/{payload['filename']}"
     assert payload["size_bytes"] > 0
     assert payload["raw_data_included"] is False
     assert payload["database_included"] is False
@@ -140,3 +141,22 @@ def test_issue_report_download_rejects_non_issue_report_zip(tmp_path, monkeypatc
     )
 
     assert response.status_code == 400
+
+def test_issue_report_page_renders_client_form():
+    client = TestClient(app)
+
+    response = client.get("/support/report-issue")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "").lower()
+
+    html = response.text
+
+    assert "Report an issue" in html
+    assert "issueReportForm" in html
+    assert "userMessage" in html
+    assert "supportToken" in html
+    assert "/support/report-issue" in html
+    assert "downloadBundle(data.download_url, data.filename)" in html
+    assert "Excluded by default: raw CSVs" in html
+    assert "Excluded by default: database snapshots" in html
