@@ -250,6 +250,147 @@ def _safe_output_dir(path: Optional[Path]) -> Path:
     return out
 
 # -----------------------------------------------------------------------------
+# PUBLIC: Issue report bundle
+ISSUE_REPORT_DEFAULT_FILES = [
+    "logs/latest_error_location.json",
+    "logs/latest_error_location.txt",
+    "logs/workspace/errors.txt",
+    "logs/workspace/last_error.json",
+    "logs/workspace/errors.jsonl",
+    "logs/calc/last_run.json",
+    "storage_raw/csv_sources/unsupported_structures.json",
+]
+
+ISSUE_REPORT_TRACE_GLOB = "logs/calc/runs/*/trace.json"
+
+
+def _safe_issue_text(value: Optional[str], *, max_chars: int = 20_000) -> str:
+    text = str(value or "").replace("\x00", "").strip()
+    if len(text) > max_chars:
+        return text[:max_chars] + "\n...[truncated]"
+    return text
+
+
+def _issue_report_payload(
+    *,
+    user_message: Optional[str] = None,
+    contact: Optional[str] = None,
+    app_context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "kind": "issue_report",
+        "user_message": _safe_issue_text(user_message),
+        "contact": _safe_issue_text(contact, max_chars=500),
+        "app_context": app_context or {},
+        "privacy_note": (
+            "This issue report includes diagnostic logs and traces only by default. "
+            "It does not intentionally include raw imported CSV files, database snapshots, "
+            "environment files, virtual environments, or build artifacts."
+        ),
+    }
+    return payload
+
+
+def _issue_report_candidate_files() -> List[Path]:
+    candidates: List[Path] = []
+
+    for rel in ISSUE_REPORT_DEFAULT_FILES:
+        p = PROJECT_ROOT / rel
+        if p.exists() and p.is_file():
+            candidates.append(p)
+
+    for p in (PROJECT_ROOT / "logs" / "calc" / "runs").glob("*/trace.json"):
+        if p.exists() and p.is_file():
+            candidates.append(p)
+
+    # De-dup while preserving order.
+    seen: set[str] = set()
+    out: List[Path] = []
+    for p in candidates:
+        key = str(p.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+
+    return out
+
+
+def build_issue_report_bundle(
+    *,
+    user_message: Optional[str] = None,
+    contact: Optional[str] = None,
+    app_context: Optional[Dict[str, Any]] = None,
+    output_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Build a small, privacy-conscious issue report bundle.
+
+    Default contents:
+      - issue_report.json with user-supplied description/contact/context
+      - latest diagnostic pointers
+      - workspace error logs
+      - calculation last_run.json and per-run trace.json files
+      - unsupported CSV structure registry
+      - manifest with file hashes
+
+    It deliberately avoids raw CSVs, DB files, .env, .venv, artifacts, and full source.
+    """
+    out_dir = _safe_output_dir(output_dir or (PROJECT_ROOT / "support_bundles"))
+    ts = time.strftime("%Y-%m-%d_%H-%M-%S", time.gmtime())
+    zip_name = f"issue_report_{ts}.zip"
+    zip_path = out_dir / zip_name
+
+    added_paths: List[Path] = []
+    payload = _issue_report_payload(
+        user_message=user_message,
+        contact=contact,
+        app_context=app_context,
+    )
+
+    log.info("Building issue report bundle at %s", zip_path)
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr(
+            "issue_report.json",
+            json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8"),
+            compress_type=zipfile.ZIP_DEFLATED,
+        )
+
+        for fp in _issue_report_candidate_files():
+            if _add_file(z, fp, arcname=_rel(fp, PROJECT_ROOT)):
+                added_paths.append(fp)
+
+        readme = (
+            "CryptoTaxCalc — Issue Report\n"
+            "----------------------------\n"
+            "This archive is intended for debugging a client-reported issue.\n\n"
+            "Default contents:\n"
+            "- issue_report.json: user message/contact/context\n"
+            "- logs/latest_error_location.*: pointer to the latest component error\n"
+            "- logs/workspace/*: workspace calculation/import error logs\n"
+            "- logs/calc/last_run.json: latest calculation diagnostics\n"
+            "- logs/calc/runs/*/trace.json: per-run calculation traces\n"
+            "- storage_raw/csv_sources/unsupported_structures.json: unknown CSV structures\n\n"
+            "Privacy note:\n"
+            "This default issue report does not intentionally include raw imported CSV files, "
+            "database snapshots, .env files, virtual environments, or full source code.\n"
+        ).encode("utf-8")
+        z.writestr("README_ISSUE_REPORT.txt", readme, compress_type=zipfile.ZIP_DEFLATED)
+
+        meta = _collect_manifest(added_paths, zip_name)
+        meta["issue_report"] = {
+            "included_diagnostic_files": [_rel(p, PROJECT_ROOT) for p in added_paths],
+            "raw_data_included": False,
+            "database_included": False,
+        }
+        z.writestr("_meta/bundle_manifest.json", json.dumps(meta, indent=2).encode("utf-8"))
+
+    log.info("Issue report bundle ready: %s", zip_path)
+    return zip_path
+
+# -----------------------------------------------------------------------------
 # PUBLIC: Diagnostics export (used by /demo/diagnostics/export)
 def build_export_zip(opts: Optional[ExportOptions] = None) -> Path:
     """
@@ -418,6 +559,7 @@ __all__ = [
     "ExportSettings",
     "build_export_zip",
     "build_support_bundle",
+    "build_issue_report_bundle",
     "build_export_archive",
     "__version__",
 ]
