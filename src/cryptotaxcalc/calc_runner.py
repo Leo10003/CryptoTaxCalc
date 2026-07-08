@@ -32,6 +32,31 @@ WORKSPACE_ERRORS_TXT = WORKSPACE_LOG_DIR / "errors.txt"
 WORKSPACE_ERROR_PATH_POINTER = PROJECT_ROOT / "logs" / "workspace_error_log_path.txt"
 
 
+CALC_LOG_DIR = Path("logs/calc")
+CALC_RUNS_LOG_DIR = CALC_LOG_DIR / "runs"
+
+
+def _safe_run_log_id(run_id: Any) -> str:
+    text = str(run_id if run_id is not None else "unknown").strip()
+    if not text:
+        return "unknown"
+    return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in text)[:80]
+
+
+def _write_calc_run_trace(run_id: Any, payload: dict[str, Any]) -> None:
+    """
+    Write durable per-run diagnostics.
+
+    last_run.json is useful for quick local debugging, but it is overwritten.
+    logs/calc/runs/<run_id>/trace.json gives support/debugging a stable artifact
+    for a specific calculation run.
+    """
+    safe_id = _safe_run_log_id(run_id)
+    run_dir = CALC_RUNS_LOG_DIR / safe_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write_json(run_dir / "trace.json", payload)
+
+
 def log_workspace_error(
     *,
     stage: str,
@@ -1114,7 +1139,7 @@ def _run_core(
 
         # Audit diagnostics + persist summary_json
         try:
-            out_dir = Path("logs/calc")
+            out_dir = CALC_LOG_DIR
             out_dir.mkdir(parents=True, exist_ok=True)
 
             eur_summary = {
@@ -1168,14 +1193,30 @@ def _run_core(
 
             payload = {
                 "timestamp": start_ts,
+                "finished_at": _now_iso_z(),
                 "run_id": getattr(run, "id", None),
                 "jurisdiction": cfg.jurisdiction,
+                "rule_version": cfg.rule_version,
+                "tax_year": getattr(run, "tax_year", datetime.now(timezone.utc).year),
+                "persist_events": bool(persist_events),
                 "tx_count": len(tx_models),
+                "input_hash_count": len(inputs_to_persist),
                 "events_count": len(events),
                 "warnings_count": len(warnings),
+                "strict_fx": strict_fx,
+                "strict_fx_source": strict_fx_source,
+                "fx_batch_id": fx_batch_id,
+                "fx_fallback_used": fx_fallback_used,
+                "fx_fallback_days_count": fx_fallback_days_count,
+                "fx_fallback_pairs": fx_fallback_pairs,
+                "fee_valuation": fee_valuation,
+                "timings_ms": timings_ms,
+                "totals": totals.model_dump(),
+                "warnings": warnings,
                 "summary": summary_json,
             }
             _atomic_write_json(out_dir / "last_run.json", payload)
+            _write_calc_run_trace(getattr(run, "id", None), payload)
         except Exception as e:
             logger.warning(f"Could not write calculation diagnostics: {e}")
             
