@@ -76,6 +76,7 @@ def test_calculation_writes_per_run_trace_file(tmp_path, monkeypatch):
             jurisdiction="HR",
             rule_version="test-rule",
             tax_year=2024,
+            run_id="trace-test-run",
         )
         db_session.add(run)
         db_session.commit()
