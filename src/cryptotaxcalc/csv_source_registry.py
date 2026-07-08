@@ -355,17 +355,36 @@ def ensure_csv_source_registry_files() -> Tuple[Path, Path]:
             sources = []
             supported["sources"] = sources
 
-        existing_ids = {s.get("id") for s in sources if isinstance(s, dict) and s.get("id")}
+        existing_by_id = {
+            str(s.get("id")): s
+            for s in sources
+            if isinstance(s, dict) and s.get("id")
+        }
         changed = False
 
         for built in (_DEFAULT_SUPPORTED.get("sources") or []):
             if not isinstance(built, dict):
                 continue
-            bid = built.get("id")
-            if bid and bid not in existing_ids:
+
+            bid = str(built.get("id") or "").strip()
+            if not bid:
+                continue
+
+            existing = existing_by_id.get(bid)
+
+            if existing is None:
                 sources.append(built)
-                existing_ids.add(bid)
+                existing_by_id[bid] = built
                 changed = True
+                continue
+
+            # Built-in supported source definitions are part of the application
+            # contract. Keep existing user installations current when parser
+            # header requirements are relaxed or otherwise corrected.
+            for key in ("name", "status", "parser", "match"):
+                if existing.get(key) != built.get(key):
+                    existing[key] = built.get(key)
+                    changed = True
 
         if supported.get("version") != _DEFAULT_SUPPORTED.get("version"):
             supported["version"] = _DEFAULT_SUPPORTED.get("version", 1)
