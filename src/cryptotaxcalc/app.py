@@ -1841,6 +1841,13 @@ async def request_validation_exception_handler(request: Request, exc: RequestVal
 
 templates = Jinja2Templates(directory=str((RESOURCE_ROOT / "templates").resolve()))
 
+def _html_response(content: str, status_code: int = 200) -> HTMLResponse:
+    return HTMLResponse(
+        content=content,
+        status_code=status_code,
+        media_type="text/html; charset=utf-8",
+    )
+
 
 # --- CORS (dev-friendly defaults; production requires explicit allowlist) ---
 # Psychology: predictable security posture reduces perceived risk when users upload financial history.
@@ -2765,7 +2772,7 @@ def issue_report_page():
 </body>
 </html>
 """
-    return HTMLResponse(content=html)
+    return _html_response(html)
 
 
 @app.get("/support/report-issue/download/{filename}", tags=["support"])
@@ -7249,7 +7256,7 @@ def export_events_csv_preview(
 </body>
 </html>
 """
-    return HTMLResponse(content=html_doc)
+    return _html_response(html_doc)
 
 
 @app.get("/export/events_csv/preview_data", tags=["export"])
