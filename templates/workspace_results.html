@@ -5374,6 +5374,184 @@
     to { stroke-dashoffset: 0; }
   }
   @keyframes rsSpin { to { transform: rotate(360deg); } }
+
+    .rs-help-overlay[hidden] {
+        display: none !important;
+    }
+
+    .rs-help-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 220;
+    }
+
+    .rs-help-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.58);
+        backdrop-filter: blur(8px);
+    }
+
+    .rs-help-panel {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        bottom: 18px;
+        width: min(520px, calc(100vw - 36px));
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background: color-mix(in srgb, var(--surface) 96%, transparent);
+        box-shadow: 0 24px 80px rgba(0,0,0,0.34);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .rs-help-head {
+        padding: 20px 20px 16px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+    }
+
+    .rs-help-kicker {
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+
+    .rs-help-head h2 {
+        margin: 4px 0 6px;
+        font-size: 24px;
+        letter-spacing: -0.04em;
+    }
+
+    .rs-help-head p,
+    .rs-help-card p,
+    .rs-help-card li {
+        color: var(--muted);
+        line-height: 1.45;
+    }
+
+    .rs-help-close {
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        color: var(--text);
+        border-radius: 999px;
+        width: 34px;
+        height: 34px;
+        cursor: pointer;
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    .rs-help-body {
+        padding: 16px;
+        overflow: auto;
+        display: grid;
+        gap: 12px;
+    }
+
+    .rs-help-card {
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: color-mix(in srgb, var(--surface) 90%, transparent);
+        padding: 14px;
+    }
+
+        .rs-help-card h3 {
+            margin: 0 0 8px;
+            font-size: 15px;
+        }
+
+    .rs-help-label {
+        display: block;
+        margin-top: 12px;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .rs-help-input,
+    .rs-help-textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--surface) 96%, transparent);
+        color: var(--text);
+        padding: 10px 12px;
+        outline: none;
+    }
+
+    .rs-help-textarea {
+        resize: vertical;
+    }
+
+    .rs-help-actions,
+    .rs-help-row {
+        margin-top: 12px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .rs-help-status {
+        display: none;
+        margin-top: 12px;
+        border-radius: 14px;
+        padding: 10px 12px;
+        white-space: pre-wrap;
+    }
+
+        .rs-help-status.is-ok {
+            display: block;
+            border: 1px solid rgba(34,197,94,.28);
+            background: rgba(34,197,94,.10);
+        }
+
+        .rs-help-status.is-bad {
+            display: block;
+            border: 1px solid rgba(239,68,68,.28);
+            background: rgba(239,68,68,.10);
+        }
+
+    .rs-help-history {
+        display: grid;
+        gap: 8px;
+    }
+
+    .rs-help-empty,
+    .rs-help-report {
+        border: 1px dashed var(--border);
+        border-radius: 14px;
+        padding: 10px 12px;
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .rs-help-report {
+        border-style: solid;
+    }
+
+    .rs-help-report-name {
+        color: var(--text);
+        font-weight: 900;
+        overflow-wrap: anywhere;
+    }
+
+    .rs-help-report-meta {
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
+    }
 </style>
 {% endblock %}
 
@@ -13120,6 +13298,189 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
   document.getElementById('walletOutModal').style.display = 'none';
 });
   
+
+const helpOverlay = document.getElementById('rsHelpOverlay');
+  const helpClose = document.getElementById('rsHelpClose');
+  const helpMessage = document.getElementById('rsHelpMessage');
+  const helpContact = document.getElementById('rsHelpContact');
+  const helpToken = document.getElementById('rsHelpToken');
+  const helpCreateReport = document.getElementById('rsHelpCreateReport');
+  const helpRefreshHistory = document.getElementById('rsHelpRefreshHistory');
+  const helpHistory = document.getElementById('rsHelpHistory');
+  const helpStatus = document.getElementById('rsHelpStatus');
+
+  function rsHelpSetStatus(kind, text) {
+    if (!helpStatus) return;
+    helpStatus.classList.remove('is-ok', 'is-bad');
+    helpStatus.classList.add(kind === 'ok' ? 'is-ok' : 'is-bad');
+    helpStatus.textContent = text;
+  }
+
+  function rsHelpHeaders() {
+    const token = helpToken ? helpToken.value.trim() : '';
+    const headers = {'Content-Type': 'application/json'};
+    if (token) headers['X-Admin-Token'] = token;
+    return headers;
+  }
+
+  function rsHelpOpen(event) {
+    if (event) event.preventDefault();
+    if (!helpOverlay) return;
+    helpOverlay.hidden = false;
+    setTimeout(() => helpMessage && helpMessage.focus(), 0);
+  }
+
+  function rsHelpClose() {
+    if (!helpOverlay) return;
+    helpOverlay.hidden = true;
+  }
+
+  function rsHelpFormatBytes(bytes) {
+    const n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = n;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value = value / 1024;
+      unit += 1;
+    }
+    return value.toFixed(unit === 0 ? 0 : 1) + ' ' + units[unit];
+  }
+
+  async function rsHelpDownload(url, filename) {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: rsHelpHeaders()
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || ('HTTP ' + response.status));
+    }
+
+    const blob = await response.blob();
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = filename || 'issue_report.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(href);
+  }
+
+  async function rsHelpLoadHistory() {
+    if (!helpHistory) return;
+    helpHistory.innerHTML = '<div class="rs-help-empty">Loading recent reports…</div>';
+
+    try {
+      const response = await fetch('/support/report-issue/history?limit=5', {
+        method: 'GET',
+        headers: rsHelpHeaders()
+      });
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.detail || ('HTTP ' + response.status));
+
+      const reports = Array.isArray(data.reports) ? data.reports : [];
+      if (!reports.length) {
+        helpHistory.innerHTML = '<div class="rs-help-empty">No issue reports found.</div>';
+        return;
+      }
+
+      helpHistory.innerHTML = reports.map((r) => `
+        <div class="rs-help-report">
+          <div class="rs-help-report-name">${escapeHtml(r.filename || '')}</div>
+          <div class="rs-help-report-meta">
+            ${escapeHtml(r.created_at || 'unknown time')} · ${rsHelpFormatBytes(r.size_bytes)} · traces: ${escapeHtml(r.trace_file_count ?? 0)}
+          </div>
+          <div class="rs-help-actions">
+            <button class="btn btn-outline" type="button"
+              data-help-download-url="${escapeHtml(r.download_url || '')}"
+              data-help-filename="${escapeHtml(r.filename || 'issue_report.zip')}">
+              Download
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      helpHistory.querySelectorAll('[data-help-download-url]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            btn.disabled = true;
+            await rsHelpDownload(btn.getAttribute('data-help-download-url'), btn.getAttribute('data-help-filename'));
+            rsHelpSetStatus('ok', 'Download ready.');
+          } catch (err) {
+            rsHelpSetStatus('bad', 'Could not download report.\n' + String(err && err.message ? err.message : err));
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (err) {
+      helpHistory.innerHTML = '<div class="rs-help-empty">Could not load history. Enter/check support token, then refresh.</div>';
+    }
+  }
+
+  async function rsHelpCreateIssueReport() {
+    if (!helpCreateReport) return;
+
+    try {
+      helpCreateReport.disabled = true;
+      rsHelpSetStatus('ok', 'Creating issue report…');
+
+      const response = await fetch('/support/report-issue', {
+        method: 'POST',
+        headers: rsHelpHeaders(),
+        body: JSON.stringify({
+          user_message: helpMessage ? helpMessage.value : '',
+          contact: helpContact ? helpContact.value : '',
+          app_context: {
+            surface: 'workspace_results_help_overlay',
+            url: window.location.pathname,
+            title: document.title
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || ('HTTP ' + response.status));
+
+      rsHelpSetStatus(
+        'ok',
+        'Issue report created: ' + data.filename + '\nSize: ' + rsHelpFormatBytes(data.size_bytes)
+      );
+
+      if (data.download_url) {
+        await rsHelpDownload(data.download_url, data.filename);
+      }
+
+      await rsHelpLoadHistory();
+    } catch (err) {
+      rsHelpSetStatus('bad', 'Could not create issue report.\n' + String(err && err.message ? err.message : err));
+    } finally {
+      helpCreateReport.disabled = false;
+    }
+  }
+
+  document.querySelectorAll('[data-help-open="true"]').forEach((el) => {
+    el.addEventListener('click', rsHelpOpen);
+  });
+
+  document.querySelectorAll('[data-help-close="true"]').forEach((el) => {
+    el.addEventListener('click', rsHelpClose);
+  });
+
+  if (helpClose) helpClose.addEventListener('click', rsHelpClose);
+  if (helpCreateReport) helpCreateReport.addEventListener('click', rsHelpCreateIssueReport);
+  if (helpRefreshHistory) helpRefreshHistory.addEventListener('click', rsHelpLoadHistory);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && helpOverlay && !helpOverlay.hidden) {
+      rsHelpClose();
+    }
+  });
 </script>
 <!-- Wallet OUT classification modal -->
 <div id="walletOutModal" class="wo-modal" style="display:none;">
@@ -13234,6 +13595,65 @@ document.getElementById('wo-close')?.addEventListener('click', () => {
       </div>
     </div>
   </div>
+</div>
+<div id="rsHelpOverlay" class="rs-help-overlay" hidden>
+    <div class="rs-help-backdrop" data-help-close="true"></div>
+
+    <aside class="rs-help-panel" role="dialog" aria-modal="true" aria-labelledby="rsHelpTitle">
+        <div class="rs-help-head">
+            <div>
+                <div class="rs-help-kicker">Support</div>
+                <h2 id="rsHelpTitle">How can we help?</h2>
+                <p>Generate a safe issue report or open support tools without leaving this page.</p>
+            </div>
+            <button id="rsHelpClose" class="rs-help-close" type="button" aria-label="Close support panel">×</button>
+        </div>
+
+        <div class="rs-help-body">
+            <section class="rs-help-card">
+                <h3>Quick checks</h3>
+                <ul>
+                    <li>Review warnings and blockers on this result page.</li>
+                    <li>Confirm all CSV files were imported successfully.</li>
+                    <li>If numbers look wrong, create an issue report and send it to support.</li>
+                </ul>
+            </section>
+
+            <section class="rs-help-card">
+                <h3>Report an issue</h3>
+                <p>
+                    Issue reports include sanitized diagnostics, calculation traces, and error logs.
+                    Raw CSV files and database snapshots are excluded by default.
+                </p>
+
+                <label class="rs-help-label" for="rsHelpMessage">What happened?</label>
+                <textarea id="rsHelpMessage" class="rs-help-textarea" rows="5" placeholder="Describe what you expected, what happened, and what you clicked before the problem."></textarea>
+
+                <label class="rs-help-label" for="rsHelpContact">Contact email or reference</label>
+                <input id="rsHelpContact" class="rs-help-input" type="text" placeholder="optional">
+
+                <label class="rs-help-label" for="rsHelpToken">Support token</label>
+                <input id="rsHelpToken" class="rs-help-input" type="password" placeholder="required if support tools are protected">
+
+                <div class="rs-help-actions">
+                    <button id="rsHelpCreateReport" class="btn btn-primary" type="button">Create issue report</button>
+                    <a class="btn btn-outline" href="/support/report-issue" target="_blank" rel="noopener">Open full support page</a>
+                </div>
+
+                <div id="rsHelpStatus" class="rs-help-status" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="rs-help-card">
+                <div class="rs-help-row">
+                    <h3>Recent reports</h3>
+                    <button id="rsHelpRefreshHistory" class="btn btn-outline" type="button">Refresh</button>
+                </div>
+                <div id="rsHelpHistory" class="rs-help-history">
+                    <div class="rs-help-empty">Enter support token and refresh to load recent reports.</div>
+                </div>
+            </section>
+        </div>
+    </aside>
 </div>
 {% endblock %}
 
