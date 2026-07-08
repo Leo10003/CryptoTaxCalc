@@ -43,15 +43,12 @@ def test_workspace_results_template_has_no_common_mojibake_sequences():
     html = template_path.read_text(encoding="utf-8")
 
     forbidden = [
-        "â‚¬",
-        "â€¢",
-        "â€”",
-        "â€“",
-        "â€œ",
-        "â€",
-        "â€˜",
-        "â€™",
-        "â–¾",
+        "â",      # generic UTF-8-as-cp1252 mojibake marker
+        "Â",      # common mojibake marker for symbols such as £ / NBSP
+        "\u009d", # cp1252 control remnant from broken right quote
+        "\u008f",
+        "\u008d",
+        "�",      # replacement character
     ]
 
     found = [s for s in forbidden if s in html]
