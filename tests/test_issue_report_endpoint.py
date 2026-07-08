@@ -162,6 +162,12 @@ def test_issue_report_page_renders_client_form():
     assert "downloadBundle(data.download_url, data.filename)" in html
     assert "Excluded by default: raw CSVs" in html
     assert "Excluded by default: database snapshots" in html
+    assert "Recent issue reports" in html
+    assert "refreshHistoryBtn" in html
+    assert "historyList" in html
+    assert "/support/report-issue/history?limit=20" in html
+    assert "renderHistory" in html
+    assert "downloadBundle(url, filename)" in html
 
 def test_issue_report_history_endpoint_lists_safe_index_rows(tmp_path, monkeypatch):
     def allow_bundle_admin(**kwargs):

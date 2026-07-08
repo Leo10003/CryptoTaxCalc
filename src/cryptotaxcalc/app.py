@@ -2551,6 +2551,16 @@ def issue_report_page():
         </div>
 
         <div id="status" class="status" role="status" aria-live="polite"></div>
+
+        <section class="history" aria-label="Recent issue reports">
+          <div class="history-head">
+            <h2>Recent issue reports</h2>
+            <button id="refreshHistoryBtn" class="secondary-btn" type="button">Refresh</button>
+          </div>
+          <div id="historyList" class="history-list">
+            <div class="history-empty">Enter a support token and refresh to load recent reports.</div>
+          </div>
+        </section>
       </form>
     </section>
   </main>
@@ -2561,6 +2571,9 @@ def issue_report_page():
     const statusEl = document.getElementById('status');
     const downloadLink = document.getElementById('downloadLink');
 
+    const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+    const historyList = document.getElementById('historyList');
+
     function setStatus(kind, message) {
       statusEl.className = 'status ' + kind;
       statusEl.textContent = message;
@@ -2569,6 +2582,103 @@ def issue_report_page():
     function tokenHeaders() {
       const token = document.getElementById('supportToken').value.trim();
       return token ? { 'X-Admin-Token': token } : {};
+    }
+
+    function formatBytes(bytes) {
+      const n = Number(bytes || 0);
+      if (!Number.isFinite(n) || n <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let value = n;
+      let unit = 0;
+      while (value >= 1024 && unit < units.length - 1) {
+        value = value / 1024;
+        unit += 1;
+      }
+      return value.toFixed(unit === 0 ? 0 : 1) + ' ' + units[unit];
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function renderHistory(reports) {
+      const rows = Array.isArray(reports) ? reports : [];
+
+      if (!rows.length) {
+        historyList.innerHTML = '<div class="history-empty">No issue reports found.</div>';
+        return;
+      }
+
+      historyList.innerHTML = rows.map((r) => {
+        const filename = String(r.filename || '');
+        const downloadUrl = String(r.download_url || '');
+        return `
+          <div class="history-item">
+            <div class="history-main">
+              <div class="history-name">${escapeHtml(filename)}</div>
+              <button class="secondary-btn" type="button"
+                data-download-url="${escapeHtml(downloadUrl)}"
+                data-filename="${escapeHtml(filename)}">
+                Download
+              </button>
+            </div>
+            <div class="history-meta">
+              <span>${escapeHtml(r.created_at || 'unknown time')}</span>
+              <span>${formatBytes(r.size_bytes)}</span>
+              <span>traces: ${escapeHtml(r.trace_file_count ?? 0)}</span>
+              <span>missing diagnostics: ${escapeHtml(r.missing_expected_file_count ?? 0)}</span>
+              <span>raw data: ${escapeHtml(String(!!r.raw_data_included))}</span>
+              <span>database: ${escapeHtml(String(!!r.database_included))}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      historyList.querySelectorAll('button[data-download-url]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const url = btn.getAttribute('data-download-url');
+          const filename = btn.getAttribute('data-filename');
+          try {
+            btn.disabled = true;
+            await downloadBundle(url, filename);
+            setStatus('ok', 'Download ready: ' + filename);
+          } catch (err) {
+            setStatus('bad', 'Could not download report.\\n' + String(err && err.message ? err.message : err));
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    async function loadHistory() {
+      if (!historyList) return;
+
+      historyList.innerHTML = '<div class="history-empty">Loading recent reports…</div>';
+
+      try {
+        const response = await fetch('/support/report-issue/history?limit=20', {
+          method: 'GET',
+          headers: tokenHeaders()
+        });
+
+        const text = await response.text();
+        let data = {};
+        try { data = JSON.parse(text); } catch (_) {}
+
+        if (!response.ok) {
+          throw new Error(data.detail || text || ('HTTP ' + response.status));
+        }
+
+        renderHistory(data.reports || []);
+      } catch (err) {
+        historyList.innerHTML = '<div class="history-empty">Could not load history. Enter/check support token, then refresh.</div>';
+      }
     }
 
     async function downloadBundle(downloadUrl, filename) {
@@ -2636,6 +2746,9 @@ def issue_report_page():
           'Raw data included: ' + data.raw_data_included + '\\n' +
           'Database included: ' + data.database_included
         );
+
+        await loadHistory();
+
       } catch (err) {
         setStatus(
           'bad',
@@ -2646,6 +2759,8 @@ def issue_report_page():
         submitBtn.disabled = false;
       }
     });
+
+    refreshHistoryBtn.addEventListener('click', loadHistory);
   </script>
 </body>
 </html>
@@ -6787,6 +6902,68 @@ def export_events_csv_preview(
     .status {{
       font-size: 12px;
       color: var(--muted);
+    }}
+
+    .history {{
+      margin-top: 20px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+    }}
+    .history-head {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }}
+    .history-head h2 {{
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }}
+    .history-list {{
+      display: grid;
+      gap: 10px;
+    }}
+    .history-item {{
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.04);
+      border-radius: 16px;
+      padding: 13px 14px;
+    }}
+    .history-main {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      align-items: center;
+      justify-content: space-between;
+    }}
+    .history-name {{
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }}
+    .history-meta {{
+      color: var(--muted);
+      font-size: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+    }}
+    .history-empty {{
+      color: var(--muted);
+      font-size: 14px;
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      padding: 13px 14px;
+    }}
+    .secondary-btn {{
+      color: var(--text);
+      background: rgba(255,255,255,.08);
+      border: 1px solid var(--border);
+      min-height: 38px;
+      padding: 9px 14px;
     }}
 
     .mono {{
