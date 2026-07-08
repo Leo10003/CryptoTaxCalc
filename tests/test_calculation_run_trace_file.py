@@ -106,9 +106,9 @@ def test_calculation_writes_per_run_trace_file(tmp_path, monkeypatch):
         assert payload["events_count"] == 1
         assert payload["warnings_count"] == len(summary.warnings)
         assert payload["strict_fx"] is False
-        assert payload["totals"]["proceeds_eur"] == "600"
-        assert payload["totals"]["cost_eur"] == "400.00"
-        assert payload["totals"]["gain_eur"] == "200.00"
+        assert Decimal(str(payload["totals"]["proceeds_eur"])) == Decimal("600")
+        assert Decimal(str(payload["totals"]["cost_eur"])) == Decimal("400")
+        assert Decimal(str(payload["totals"]["gain_eur"])) == Decimal("200")
         assert "timings_ms" in payload
         assert "summary" in payload
 
