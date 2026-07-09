@@ -154,15 +154,16 @@ def test_issue_report_page_renders_client_form():
 
     html = response.text
 
-    assert "Report an issue" in html
+    assert "Report a problem" in html
     assert "issueReportForm" in html
     assert "userMessage" in html
-    assert "supportToken" in html
-    assert "/support/report-issue" in html
+    assert "Create support file" in html
+    assert "/support/report-issue/client" in html
+    assert "Support token" not in html
+    assert "Recent issue reports" not in html
     assert "downloadBundle(data.download_url, data.filename)" in html
     assert "Excluded by default: raw CSVs" in html
     assert "Excluded by default: database snapshots" in html
-    assert "Recent issue reports" in html
     assert "refreshHistoryBtn" in html
     assert "historyList" in html
     assert "/support/report-issue/history?limit=20" in html

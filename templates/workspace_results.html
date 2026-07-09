@@ -5599,13 +5599,13 @@
           </span>
           <span class="label-text">Settings</span>
         </button>
-        <button type="button" class="ws-nav-item" data-tip="Help">
+        <a class="ws-nav-item" href="/support/report-issue" data-tip="Help" data-help-open="true">
           <span class="ws-nav-icon">
             <img src="/static/img/icons/help_icon_white.png" alt="" class="icon-dark">
             <img src="/static/img/icons/help_icon_black.png" alt="" class="icon-light">
           </span>
           <span class="label-text">Help</span>
-        </button>
+        </a>
       </div>
     </div>
   </aside>
@@ -13324,8 +13324,12 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
   }
 
   function rsHelpOpen(event) {
+    if (!helpOverlay) {
+      return;
+    }
+
     if (event) event.preventDefault();
-    if (!helpOverlay) return;
+
     helpOverlay.hidden = false;
     setTimeout(() => helpMessage && helpMessage.focus(), 0);
   }

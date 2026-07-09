@@ -2337,171 +2337,235 @@ def issue_report_page():
     """
     Client-facing issue report form.
 
-    The page itself is intentionally simple. The sensitive actions are still protected
-    by the POST/create and GET/download endpoints.
+    This page does not expose admin tokens, report history, or protected support tools.
+    It uses /support/report-issue/client, which creates the default sanitized bundle
+    and returns the zip directly to the browser.
     """
     html = """
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Report an issue — CryptoTaxCalc</title>
+  <title>Report a problem - CryptoTaxCalc</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0b1020;
+      --bg: #070b16;
       --panel: #111936;
-      --panel-2: #0f172f;
+      --panel-soft: rgba(255,255,255,.045);
       --text: #eef3ff;
       --muted: #a8b3cf;
       --border: rgba(255,255,255,.14);
       --accent: #7dd3fc;
+      --accent-2: #a7f3d0;
       --ok: #86efac;
       --bad: #fca5a5;
       --warn: #fde68a;
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #172554 0, var(--bg) 42%);
-      color: var(--text);
       min-height: 100vh;
-      padding: 32px 18px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(75,155,255,.24), transparent 42%),
+        radial-gradient(circle at 90% 100%, rgba(125,211,252,.13), transparent 44%),
+        linear-gradient(180deg, #050814 0%, var(--bg) 100%);
+      color: var(--text);
+      padding: 28px 18px;
     }
+
     main {
-      width: min(920px, 100%);
+      width: min(860px, 100%);
       margin: 0 auto;
     }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .back-link:hover {
+      color: var(--text);
+    }
+
     .card {
-      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
       border: 1px solid var(--border);
-      border-radius: 22px;
-      box-shadow: 0 24px 70px rgba(0,0,0,.35);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.035));
+      box-shadow: 0 24px 70px rgba(0,0,0,.34);
       overflow: hidden;
     }
+
     .hero {
-      padding: 28px 28px 18px;
+      padding: 30px 30px 22px;
       border-bottom: 1px solid var(--border);
     }
-    h1 {
-      margin: 0 0 8px;
-      font-size: clamp(26px, 4vw, 42px);
-      letter-spacing: -0.04em;
+
+    .kicker {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .14em;
+      text-transform: uppercase;
     }
-    p {
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 46px);
+      line-height: 1.02;
+      letter-spacing: -0.05em;
+    }
+
+    .sub {
+      margin: 12px 0 0;
       color: var(--muted);
       line-height: 1.55;
+      max-width: 720px;
     }
-    form {
-      padding: 24px 28px 28px;
+
+    .privacy-grid {
       display: grid;
-      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
     }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255,255,255,.045);
+      padding: 9px 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    form {
+      padding: 26px 30px 30px;
+      display: grid;
+      gap: 18px;
+    }
+
     label {
       display: grid;
-      gap: 7px;
+      gap: 8px;
+      font-weight: 750;
       color: var(--text);
-      font-weight: 650;
     }
+
     small {
       color: var(--muted);
-      font-weight: 450;
+      font-weight: 500;
+      line-height: 1.45;
     }
-    textarea, input {
+
+    textarea,
+    input {
       width: 100%;
       border: 1px solid var(--border);
-      background: rgba(2,6,23,.55);
+      background: rgba(2,6,23,.58);
       color: var(--text);
-      border-radius: 14px;
+      border-radius: 16px;
       padding: 13px 14px;
       outline: none;
       font: inherit;
     }
+
     textarea {
       min-height: 170px;
       resize: vertical;
     }
-    textarea:focus, input:focus {
-      border-color: rgba(125,211,252,.75);
-      box-shadow: 0 0 0 4px rgba(125,211,252,.12);
+
+    textarea:focus,
+    input:focus {
+      border-color: rgba(125,211,252,.78);
+      box-shadow: 0 0 0 4px rgba(125,211,252,.13);
     }
+
     .notice {
-      border: 1px solid rgba(253,230,138,.35);
-      background: rgba(253,230,138,.08);
+      border: 1px solid rgba(253,230,138,.30);
+      background: rgba(253,230,138,.075);
       color: var(--warn);
       border-radius: 16px;
       padding: 13px 14px;
       font-size: 14px;
       line-height: 1.45;
     }
+
     .actions {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
       align-items: center;
-      margin-top: 4px;
+      margin-top: 2px;
     }
-    button, .download {
+
+    button,
+    .btn {
+      font: inherit;
       border: 0;
       border-radius: 999px;
       padding: 12px 18px;
-      font-weight: 800;
+      min-height: 44px;
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 44px;
+      font-weight: 750;
+      letter-spacing: 0;
     }
-    button {
+
+    .primary {
       color: #06101d;
-      background: linear-gradient(135deg, #7dd3fc, #a7f3d0);
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 12px 30px rgba(125,211,252,.18);
     }
+
+    .secondary {
+      color: var(--text);
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border);
+    }
+
     button[disabled] {
-      opacity: .55;
+      opacity: .58;
       cursor: not-allowed;
     }
-    .download {
-      color: #062014;
-      background: var(--ok);
-    }
+
     .status {
-      margin-top: 8px;
+      display: none;
       border-radius: 16px;
       padding: 13px 14px;
-      display: none;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       line-height: 1.45;
     }
+
     .status.ok {
       display: block;
       border: 1px solid rgba(134,239,172,.35);
       background: rgba(134,239,172,.09);
       color: var(--ok);
     }
+
     .status.bad {
       display: block;
       border: 1px solid rgba(252,165,165,.35);
       background: rgba(252,165,165,.09);
       color: var(--bad);
     }
-    .privacy-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 10px;
-    }
-    .pill {
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,.04);
-      border-radius: 999px;
-      padding: 9px 11px;
-      color: var(--muted);
-      font-size: 13px;
-    }
+
     @media (max-width: 680px) {
       body { padding: 18px 12px; }
       .hero, form { padding-left: 18px; padding-right: 18px; }
@@ -2511,13 +2575,18 @@ def issue_report_page():
 </head>
 <body>
   <main>
+    <a class="back-link" id="backLink" href="/workspace">&larr; Back</a>
+
     <section class="card">
       <div class="hero">
-        <h1>Report an issue</h1>
-        <p>
-          Create a diagnostic zip you can send to support. By default it includes logs,
-          latest error pointers, calculation traces, and unsupported CSV structure details.
+        <div class="kicker">Support</div>
+        <h1>Report a problem</h1>
+        <p class="sub">
+          Tell us what happened and generate a safe support file you can send manually.
+          The file helps diagnose calculation, import, and export issues without including
+          raw CSV files or database snapshots by default.
         </p>
+
         <div class="privacy-grid">
           <div class="pill">Included: diagnostic logs</div>
           <div class="pill">Included: calculation traces</div>
@@ -2531,7 +2600,7 @@ def issue_report_page():
           What happened?
           <small>Describe what you clicked, what you expected, and what went wrong.</small>
           <textarea id="userMessage" name="user_message" maxlength="20000" required
-            placeholder="Example: I imported a Binance CSV, clicked Calculate, and the result page showed an error."></textarea>
+            placeholder="Example: I imported a Binance CSV, clicked Calculate, and the result page looked wrong."></textarea>
         </label>
 
         <label>
@@ -2540,34 +2609,18 @@ def issue_report_page():
           <input id="contact" name="contact" maxlength="500" placeholder="client@example.com">
         </label>
 
-        <label>
-          Support token
-          <small>Required only when support/report endpoints are protected in this build.</small>
-          <input id="supportToken" name="support_token" type="password" autocomplete="off"
-                 placeholder="Paste support token if provided">
-        </label>
-
         <div class="notice">
-          This page does not send the report anywhere automatically. It creates a local zip file,
-          then downloads it in your browser so you can send it manually.
+          This page does not send anything automatically. It creates a local support zip,
+          downloads it in your browser, and you can send it manually.
         </div>
 
         <div class="actions">
-          <button id="submitBtn" type="submit">Create issue report</button>
-          <a id="downloadLink" class="download" href="#" download style="display:none;">Download report</a>
+          <button id="submitBtn" class="primary" type="submit">Create support file</button>
+          <a id="downloadLink" class="btn secondary" href="#" download style="display:none;">Download support file</a>
+          <a class="btn secondary" href="/workspace">Back to workspace</a>
         </div>
 
         <div id="status" class="status" role="status" aria-live="polite"></div>
-
-        <section class="history" aria-label="Recent issue reports">
-          <div class="history-head">
-            <h2>Recent issue reports</h2>
-            <button id="refreshHistoryBtn" class="secondary-btn" type="button">Refresh</button>
-          </div>
-          <div id="historyList" class="history-list">
-            <div class="history-empty">Enter a support token and refresh to load recent reports.</div>
-          </div>
-        </section>
       </form>
     </section>
   </main>
@@ -2577,142 +2630,43 @@ def issue_report_page():
     const submitBtn = document.getElementById('submitBtn');
     const statusEl = document.getElementById('status');
     const downloadLink = document.getElementById('downloadLink');
+    const backLink = document.getElementById('backLink');
 
-    const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
-    const historyList = document.getElementById('historyList');
+    if (backLink && document.referrer) {
+      try {
+        const ref = new URL(document.referrer);
+        if (ref.origin === window.location.origin) {
+          backLink.href = ref.pathname + ref.search + ref.hash;
+        }
+      } catch (_) {}
+    }
 
     function setStatus(kind, message) {
-      statusEl.className = 'status ' + kind;
-      statusEl.textContent = message;
+      statusEl.className = kind ? ('status ' + kind) : 'status';
+      statusEl.textContent = message || '';
     }
 
-    function tokenHeaders() {
-      const token = document.getElementById('supportToken').value.trim();
-      return token ? { 'X-Admin-Token': token } : {};
-    }
-
-    function formatBytes(bytes) {
-      const n = Number(bytes || 0);
-      if (!Number.isFinite(n) || n <= 0) return '0 B';
-      const units = ['B', 'KB', 'MB', 'GB'];
-      let value = n;
-      let unit = 0;
-      while (value >= 1024 && unit < units.length - 1) {
-        value = value / 1024;
-        unit += 1;
-      }
-      return value.toFixed(unit === 0 ? 0 : 1) + ' ' + units[unit];
-    }
-
-    function escapeHtml(value) {
-      return String(value == null ? '' : value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-    }
-
-    function renderHistory(reports) {
-      const rows = Array.isArray(reports) ? reports : [];
-
-      if (!rows.length) {
-        historyList.innerHTML = '<div class="history-empty">No issue reports found.</div>';
-        return;
-      }
-
-      historyList.innerHTML = rows.map((r) => {
-        const filename = String(r.filename || '');
-        const downloadUrl = String(r.download_url || '');
-        return `
-          <div class="history-item">
-            <div class="history-main">
-              <div class="history-name">${escapeHtml(filename)}</div>
-              <button class="secondary-btn" type="button"
-                data-download-url="${escapeHtml(downloadUrl)}"
-                data-filename="${escapeHtml(filename)}">
-                Download
-              </button>
-            </div>
-            <div class="history-meta">
-              <span>${escapeHtml(r.created_at || 'unknown time')}</span>
-              <span>${formatBytes(r.size_bytes)}</span>
-              <span>traces: ${escapeHtml(r.trace_file_count ?? 0)}</span>
-              <span>missing diagnostics: ${escapeHtml(r.missing_expected_file_count ?? 0)}</span>
-              <span>raw data: ${escapeHtml(String(!!r.raw_data_included))}</span>
-              <span>database: ${escapeHtml(String(!!r.database_included))}</span>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      historyList.querySelectorAll('button[data-download-url]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          const url = btn.getAttribute('data-download-url');
-          const filename = btn.getAttribute('data-filename');
-          try {
-            btn.disabled = true;
-            await downloadBundle(url, filename);
-            setStatus('ok', 'Download ready: ' + filename);
-          } catch (err) {
-            setStatus('bad', 'Could not download report.\\n' + String(err && err.message ? err.message : err));
-          } finally {
-            btn.disabled = false;
-          }
-        });
-      });
-    }
-
-    async function loadHistory() {
-      if (!historyList) return;
-
-      historyList.innerHTML = '<div class="history-empty">Loading recent reports…</div>';
-
-      try {
-        const response = await fetch('/support/report-issue/history?limit=20', {
-          method: 'GET',
-          headers: tokenHeaders()
-        });
-
-        const text = await response.text();
-        let data = {};
-        try { data = JSON.parse(text); } catch (_) {}
-
-        if (!response.ok) {
-          throw new Error(data.detail || text || ('HTTP ' + response.status));
-        }
-
-        renderHistory(data.reports || []);
-      } catch (err) {
-        historyList.innerHTML = '<div class="history-empty">Could not load history. Enter/check support token, then refresh.</div>';
-      }
-    }
-
-    async function downloadBundle(downloadUrl, filename) {
-      const response = await fetch(downloadUrl, {
-        method: 'GET',
-        headers: tokenHeaders()
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error('Download failed: HTTP ' + response.status + ' ' + text);
-      }
-
-      const blob = await response.blob();
+    function downloadBlob(blob, filename) {
       const objectUrl = URL.createObjectURL(blob);
-
       downloadLink.href = objectUrl;
       downloadLink.download = filename || 'issue_report.zip';
       downloadLink.style.display = 'inline-flex';
-      downloadLink.textContent = 'Download ' + (filename || 'issue report');
+      downloadLink.textContent = 'Download ' + (filename || 'support file');
+
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename || 'issue_report.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     }
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      downloadLink.style.display = 'none';
+
       submitBtn.disabled = true;
-      setStatus('', '');
+      downloadLink.style.display = 'none';
+      setStatus('ok', 'Creating support file...');
 
       const payload = {
         user_message: document.getElementById('userMessage').value,
@@ -2720,54 +2674,47 @@ def issue_report_page():
         app_context: {
           page_url: window.location.href,
           user_agent: navigator.userAgent,
-          generated_from: 'support_report_issue_page'
+          generated_from: 'client_support_report_page'
         }
       };
 
       try {
-        setStatus('ok', 'Creating issue report…');
-
-        const response = await fetch('/support/report-issue', {
+        const response = await fetch('/support/report-issue/client', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...tokenHeaders()
-          },
+          headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload)
         });
 
-        const text = await response.text();
-        let data = {};
-        try { data = JSON.parse(text); } catch (_) {}
-
         if (!response.ok) {
-          throw new Error(data.detail || text || ('HTTP ' + response.status));
+          let detail = 'Could not create the support file.';
+          try {
+            const data = await response.json();
+            detail = data.detail || detail;
+          } catch (_) {}
+          throw new Error(detail);
         }
 
-        await downloadBundle(data.download_url, data.filename);
+        const blob = await response.blob();
+        const filename =
+          response.headers.get('X-Issue-Report-Filename') ||
+          'issue_report.zip';
+
+        downloadBlob(blob, filename);
 
         setStatus(
           'ok',
-          'Issue report created. File: ' + data.filename + '\\n' +
-          'Size: ' + data.size_bytes + ' bytes\\n' +
-          'Raw data included: ' + data.raw_data_included + '\\n' +
-          'Database included: ' + data.database_included
+          'Support file created and downloaded. Send this zip file to support so we can investigate.'
         );
-
-        await loadHistory();
-
       } catch (err) {
         setStatus(
           'bad',
-          'Could not create/download issue report.\\n' +
+          'Could not create the support file.\\n' +
           String(err && err.message ? err.message : err)
         );
       } finally {
         submitBtn.disabled = false;
       }
     });
-
-    refreshHistoryBtn.addEventListener('click', loadHistory);
   </script>
 </body>
 </html>
@@ -2824,6 +2771,43 @@ def download_issue_report_bundle(
         media_type="application/zip",
         filename=safe_name,
     )
+
+
+@app.post("/support/report-issue/client", tags=["support"])
+def create_client_issue_report_bundle(req: IssueReportRequest):
+    """
+    Client-facing issue report creation.
+
+    This endpoint intentionally creates only the default sanitized support bundle:
+    no raw CSVs, no database snapshot, no .env, no source tree.
+    It returns the zip directly so the client does not need a support/admin token.
+    """
+    try:
+        from cryptotaxcalc.exporter import build_issue_report_bundle
+
+        bundle_path = build_issue_report_bundle(
+            user_message=req.user_message,
+            contact=req.contact,
+            app_context={
+                **(req.app_context or {}),
+                "surface": (req.app_context or {}).get("surface") or "client_support_page",
+                "client_endpoint": "/support/report-issue/client",
+            },
+        )
+
+        return FileResponse(
+            str(bundle_path.resolve()),
+            media_type="application/zip",
+            filename=bundle_path.name,
+            headers={
+                "X-Issue-Report-Filename": bundle_path.name,
+                "X-Issue-Report-Size": str(bundle_path.stat().st_size if bundle_path.exists() else 0),
+            },
+        )
+    except Exception as e:
+        logger = get_logger("support")
+        logger.exception("Failed to create client issue report bundle: %s", e)
+        raise HTTPException(status_code=500, detail="Could not create the support file.")
 
 
 @app.post("/support/report-issue", response_model=IssueReportResponse, tags=["support"])
