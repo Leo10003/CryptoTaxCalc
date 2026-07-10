@@ -1727,15 +1727,6 @@ def _support_contact_email() -> str | None:
     return value or None
 
 
-@app.get("/support/contact", response_model=SupportContactResponse, tags=["support"])
-def get_support_contact():
-    email = _support_contact_email()
-    return SupportContactResponse(
-        email=email,
-        label=email or "your CryptoTaxCalc support contact",
-    )
-
-
 class IssueReportHistoryItem(BaseModel):
     created_at: str | None = None
     filename: str
@@ -1820,6 +1811,17 @@ app = FastAPI(
     lifespan=lifespan,
     description="Backend API for parsing crypto transactions and storing them safely.",
 )
+
+
+@app.get("/support/contact", response_model=SupportContactResponse, tags=["support"])
+def get_support_contact():
+    email = _support_contact_email()
+    return SupportContactResponse(
+        email=email,
+        label=email or "your CryptoTaxCalc support contact",
+    )
+
+
 
 
 @app.exception_handler(RequestValidationError)
