@@ -13304,6 +13304,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
   const helpMessage = document.getElementById('rsHelpMessage');
   const helpContact = document.getElementById('rsHelpContact');
     const helpCreateReport = document.getElementById('rsHelpCreateReport');
+  const helpEmailSupport = document.getElementById('rsHelpEmailSupport');
   const helpStatus = document.getElementById('rsHelpStatus');
   const helpSupportDestination = document.getElementById('rsHelpSupportDestination');
 
@@ -13373,6 +13374,18 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
     return value.toFixed(unit === 0 ? 0 : 1) + ' ' + units[unit];
   }
 
+  function rsHelpPayload(surface) {
+    return {
+      user_message: helpMessage ? helpMessage.value : '',
+      contact: helpContact ? helpContact.value : '',
+      app_context: {
+        surface: surface,
+        url: window.location.pathname,
+        title: document.title
+      }
+    };
+  }
+
   async function rsHelpCreateIssueReport() {
     if (!helpCreateReport) return;
 
@@ -13383,15 +13396,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
       const response = await fetch('/support/report-issue/client', {
         method: 'POST',
         headers: rsHelpHeaders(),
-        body: JSON.stringify({
-          user_message: helpMessage ? helpMessage.value : '',
-          contact: helpContact ? helpContact.value : '',
-          app_context: {
-            surface: 'workspace_results_help_overlay',
-            url: window.location.pathname,
-            title: document.title
-          }
-        })
+        body: JSON.stringify(rsHelpPayload('workspace_results_help_overlay'))
       });
 
       if (!response.ok) {
@@ -13427,6 +13432,36 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
     }
   }
 
+  async function rsHelpEmailSupportReport() {
+    if (!helpEmailSupport) return;
+
+    try {
+      helpEmailSupport.disabled = true;
+      rsHelpSetStatus('ok', 'Creating and emailing support file...');
+
+      const response = await fetch('/support/report-issue/email', {
+        method: 'POST',
+        headers: rsHelpHeaders(),
+        body: JSON.stringify(rsHelpPayload('workspace_results_help_overlay_email'))
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Could not email the support file.');
+      }
+
+      rsHelpSetStatus(
+        'ok',
+        'Support file emailed to ' + (data.sent_to || rsHelpSupportDestinationText()) + '.'
+      );
+    } catch (err) {
+      rsHelpSetStatus('bad', 'Could not email the support file.\n' + String(err && err.message ? err.message : err));
+    } finally {
+      helpEmailSupport.disabled = false;
+    }
+  }
+
   document.querySelectorAll('[data-help-open="true"]').forEach((el) => {
     el.addEventListener('click', rsHelpOpen);
   });
@@ -13437,6 +13472,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
 
   if (helpClose) helpClose.addEventListener('click', rsHelpClose);
   if (helpCreateReport) helpCreateReport.addEventListener('click', rsHelpCreateIssueReport);
+  if (helpEmailSupport) helpEmailSupport.addEventListener('click', rsHelpEmailSupportReport);
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && helpOverlay && !helpOverlay.hidden) {
@@ -13600,6 +13636,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
 
                 <div class="rs-help-actions">
                     <button id="rsHelpCreateReport" class="btn btn-primary" type="button">Create support file</button>
+                    <button id="rsHelpEmailSupport" class="btn btn-outline" type="button">Email support</button>
                     <a class="btn btn-outline" href="/support/report-issue">Open support page</a>
                 </div>
 

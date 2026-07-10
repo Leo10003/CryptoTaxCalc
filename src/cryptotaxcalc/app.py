@@ -2353,6 +2353,175 @@ def export_status(db: Session = Depends(get_db)):
     }
 
 
+
+class IssueReportEmailResponse(BaseModel):
+    ok: bool
+    sent_to: str
+    filename: str
+    size_bytes: int
+    message: str
+
+
+def _smtp_bool(name: str, default: bool = True) -> bool:
+    value = (os.getenv(name) or "").strip().lower()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "on"}
+
+
+def _smtp_int(name: str, default: int) -> int:
+    value = (os.getenv(name) or "").strip()
+    if not value:
+        return default
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _support_email_config() -> dict[str, Any]:
+    support_email = _support_contact_email()
+    host = (os.getenv("CTC_SMTP_HOST") or "").strip()
+    port = _smtp_int("CTC_SMTP_PORT", 587)
+    username = (os.getenv("CTC_SMTP_USERNAME") or "").strip()
+    password = (os.getenv("CTC_SMTP_PASSWORD") or "").strip()
+    sender = (os.getenv("CTC_SMTP_FROM") or username or support_email or "").strip()
+    use_tls = _smtp_bool("CTC_SMTP_TLS", default=True)
+
+    missing = []
+    if not support_email:
+        missing.append("CTC_SUPPORT_EMAIL")
+    if not host:
+        missing.append("CTC_SMTP_HOST")
+    if not sender:
+        missing.append("CTC_SMTP_FROM or CTC_SMTP_USERNAME")
+    if not password:
+        missing.append("CTC_SMTP_PASSWORD")
+
+    return {
+        "ok": not missing,
+        "missing": missing,
+        "support_email": support_email,
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "sender": sender,
+        "use_tls": use_tls,
+    }
+
+
+def _send_support_email_with_attachment(
+    *,
+    to_email: str,
+    from_email: str,
+    smtp_host: str,
+    smtp_port: int,
+    smtp_username: str,
+    smtp_password: str,
+    smtp_use_tls: bool,
+    subject: str,
+    body: str,
+    attachment_path: FSPath,
+) -> None:
+    import smtplib
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+
+    attachment_bytes = attachment_path.read_bytes()
+    msg.add_attachment(
+        attachment_bytes,
+        maintype="application",
+        subtype="zip",
+        filename=attachment_path.name,
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as smtp:
+        smtp.ehlo()
+        if smtp_use_tls:
+            smtp.starttls()
+            smtp.ehlo()
+        if smtp_username or smtp_password:
+            smtp.login(smtp_username or from_email, smtp_password)
+        smtp.send_message(msg)
+
+
+@app.post("/support/report-issue/email", response_model=IssueReportEmailResponse, tags=["support"])
+def email_client_issue_report_bundle(req: IssueReportRequest):
+    """
+    Client-facing email submission.
+
+    Creates the same default sanitized support zip as the download flow, then
+    emails it to the configured support address. This endpoint never includes
+    raw CSV files or database snapshots.
+    """
+    cfg = _support_email_config()
+
+    if not cfg["ok"]:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Email support is not configured. Missing: "
+                + ", ".join(cfg["missing"])
+                + ". Use Create support file and send the downloaded zip manually."
+            ),
+        )
+
+    try:
+        from cryptotaxcalc.exporter import build_issue_report_bundle
+
+        bundle_path = build_issue_report_bundle(
+            user_message=req.user_message,
+            contact=req.contact,
+            app_context={
+                **(req.app_context or {}),
+                "surface": (req.app_context or {}).get("surface") or "client_support_email",
+                "client_endpoint": "/support/report-issue/email",
+            },
+        )
+
+        body = (
+            "A CryptoTaxCalc support file was submitted.\n\n"
+            f"Contact/reference: {req.contact or 'not provided'}\n\n"
+            "User message:\n"
+            f"{req.user_message or 'not provided'}\n\n"
+            "The attached zip is the default sanitized support bundle. "
+            "Raw CSV files and database snapshots are excluded by default.\n"
+        )
+
+        _send_support_email_with_attachment(
+            to_email=cfg["support_email"],
+            from_email=cfg["sender"],
+            smtp_host=cfg["host"],
+            smtp_port=cfg["port"],
+            smtp_username=cfg["username"],
+            smtp_password=cfg["password"],
+            smtp_use_tls=bool(cfg["use_tls"]),
+            subject="CryptoTaxCalc support request",
+            body=body,
+            attachment_path=FSPath(bundle_path),
+        )
+
+        return IssueReportEmailResponse(
+            ok=True,
+            sent_to=cfg["support_email"],
+            filename=bundle_path.name,
+            size_bytes=bundle_path.stat().st_size if bundle_path.exists() else 0,
+            message="Support file emailed successfully.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger = get_logger("support")
+        logger.exception("Failed to email client issue report bundle: %s", e)
+        raise HTTPException(status_code=500, detail="Could not email the support file.")
+
+
 @app.get("/support/report-issue", response_class=HTMLResponse, tags=["support"])
 def issue_report_page():
     """
@@ -2649,6 +2818,7 @@ def issue_report_page():
 
         <div class="actions">
           <button id="submitBtn" class="primary" type="submit">Create support file</button>
+          <button id="emailSupportBtn" class="secondary" type="button">Email support</button>
           <a id="downloadLink" class="btn secondary" href="#" download style="display:none;">Download support file</a>
           <a class="btn secondary" href="/workspace">Back to workspace</a>
         </div>
@@ -2661,19 +2831,11 @@ def issue_report_page():
   <script>
     const form = document.getElementById('issueReportForm');
     const submitBtn = document.getElementById('submitBtn');
+    const emailSupportBtn = document.getElementById('emailSupportBtn');
     const statusEl = document.getElementById('status');
     const downloadLink = document.getElementById('downloadLink');
     const backLink = document.getElementById('backLink');
     const supportDestinationLink = document.getElementById('supportDestination');
-
-    if (backLink && document.referrer) {
-      try {
-        const ref = new URL(document.referrer);
-        if (ref.origin === window.location.origin) {
-          backLink.href = ref.pathname + ref.search + ref.hash;
-        }
-      } catch (_) {}
-    }
 
     function setStatus(kind, message) {
       statusEl.className = kind ? ('status ' + kind) : 'status';
@@ -2684,6 +2846,30 @@ def issue_report_page():
       return supportDestinationLink && supportDestinationLink.textContent
         ? supportDestinationLink.textContent
         : 'your CryptoTaxCalc support contact';
+    }
+
+    function issueReportPayload(generatedFrom) {
+      return {
+        user_message: document.getElementById('userMessage').value,
+        contact: document.getElementById('contact').value,
+        app_context: {
+          page_url: window.location.href,
+          user_agent: navigator.userAgent,
+          generated_from: generatedFrom
+        }
+      };
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = window.URL.createObjectURL(blob);
+      downloadLink.href = url;
+      downloadLink.download = filename;
+      downloadLink.style.display = 'inline-flex';
+      downloadLink.click();
+
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 30000);
     }
 
     async function loadSupportContact() {
@@ -2704,77 +2890,105 @@ def issue_report_page():
       }
     }
 
-    loadSupportContact();
-
-    function downloadBlob(blob, filename) {
-      const objectUrl = URL.createObjectURL(blob);
-      downloadLink.href = objectUrl;
-      downloadLink.download = filename || 'issue_report.zip';
-      downloadLink.style.display = 'inline-flex';
-      downloadLink.textContent = 'Download ' + (filename || 'support file');
-
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = filename || 'issue_report.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-
-    form.addEventListener('submit', async (event) => {
+    async function createSupportFile(event) {
       event.preventDefault();
 
       submitBtn.disabled = true;
       downloadLink.style.display = 'none';
       setStatus('ok', 'Creating support file...');
 
-      const payload = {
-        user_message: document.getElementById('userMessage').value,
-        contact: document.getElementById('contact').value,
-        app_context: {
-          page_url: window.location.href,
-          user_agent: navigator.userAgent,
-          generated_from: 'client_support_report_page'
-        }
-      };
-
       try {
         const response = await fetch('/support/report-issue/client', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
+          body: JSON.stringify(issueReportPayload('client_support_report_page'))
         });
 
         if (!response.ok) {
-          let detail = 'Could not create the support file.';
-          try {
-            const data = await response.json();
-            detail = data.detail || detail;
-          } catch (_) {}
-          throw new Error(detail);
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || 'Could not create the support file.');
         }
 
         const blob = await response.blob();
         const filename =
           response.headers.get('X-Issue-Report-Filename') ||
-          'issue_report.zip';
+          'cryptotaxcalc_support_report.zip';
 
         downloadBlob(blob, filename);
 
         setStatus(
           'ok',
-          'Support file created and downloaded. Attach this zip file to an email and send it to ' + supportDestinationText() + '.'
+          'Support file created and downloaded. Attach this zip file to an email and send it to ' +
+          supportDestinationText() +
+          '.'
         );
       } catch (err) {
         setStatus(
           'bad',
-          'Could not create the support file.\\n' +
+          'Could not create the support file.\n' +
           String(err && err.message ? err.message : err)
         );
       } finally {
         submitBtn.disabled = false;
       }
-    });
+    }
+
+    async function emailSupportFile() {
+      if (!emailSupportBtn) return;
+
+      emailSupportBtn.disabled = true;
+      setStatus('ok', 'Creating and emailing support file...');
+
+      try {
+        const response = await fetch('/support/report-issue/email', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(issueReportPayload('client_support_email_page'))
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Could not email the support file.');
+        }
+
+        setStatus(
+          'ok',
+          'Support file emailed to ' + (data.sent_to || supportDestinationText()) + '.'
+        );
+      } catch (err) {
+        setStatus(
+          'bad',
+          'Could not email the support file.\n' +
+          String(err && err.message ? err.message : err)
+        );
+      } finally {
+        emailSupportBtn.disabled = false;
+      }
+    }
+
+    form.addEventListener('submit', createSupportFile);
+    if (emailSupportBtn) emailSupportBtn.addEventListener('click', emailSupportFile);
+
+    if (backLink) {
+      backLink.addEventListener('click', (event) => {
+        event.preventDefault();
+
+        const fallback = '/workspace';
+        const referrer = document.referrer;
+
+        try {
+          if (referrer && new URL(referrer).origin === window.location.origin) {
+            window.history.back();
+            return;
+          }
+        } catch (_) {}
+
+        window.location.href = fallback;
+      });
+    }
+
+    loadSupportContact();
   </script>
 </body>
 </html>
