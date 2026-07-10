@@ -159,16 +159,25 @@ def test_issue_report_page_renders_client_form():
     assert "userMessage" in html
     assert "Create support file" in html
     assert "/support/report-issue/client" in html
-    assert "Support token" not in html
-    assert "Recent issue reports" not in html
-    assert "downloadBundle(data.download_url, data.filename)" in html
+
+    assert "response.blob()" in html
+    assert "X-Issue-Report-Filename" in html
+    assert "downloadBlob(blob, filename)" in html
+
     assert "Excluded by default: raw CSVs" in html
     assert "Excluded by default: database snapshots" in html
-    assert "refreshHistoryBtn" in html
-    assert "historyList" in html
-    assert "/support/report-issue/history?limit=20" in html
-    assert "renderHistory" in html
-    assert "downloadBundle(url, filename)" in html
+
+    assert "Back" in html
+    assert "Back to workspace" in html
+
+    assert "Support token" not in html
+    assert "supportToken" not in html
+    assert "X-Admin-Token" not in html
+    assert "tokenHeaders" not in html
+    assert "Recent issue reports" not in html
+    assert "refreshHistoryBtn" not in html
+    assert "historyList" not in html
+    assert "/support/report-issue/history" not in html
 
 def test_issue_report_history_endpoint_lists_safe_index_rows(tmp_path, monkeypatch):
     def allow_bundle_admin(**kwargs):
