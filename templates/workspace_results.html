@@ -13303,10 +13303,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
   const helpClose = document.getElementById('rsHelpClose');
   const helpMessage = document.getElementById('rsHelpMessage');
   const helpContact = document.getElementById('rsHelpContact');
-  const helpToken = document.getElementById('rsHelpToken');
-  const helpCreateReport = document.getElementById('rsHelpCreateReport');
-  const helpRefreshHistory = document.getElementById('rsHelpRefreshHistory');
-  const helpHistory = document.getElementById('rsHelpHistory');
+    const helpCreateReport = document.getElementById('rsHelpCreateReport');
   const helpStatus = document.getElementById('rsHelpStatus');
 
   function rsHelpSetStatus(kind, text) {
@@ -13317,10 +13314,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
   }
 
   function rsHelpHeaders() {
-    const token = helpToken ? helpToken.value.trim() : '';
-    const headers = {'Content-Type': 'application/json'};
-    if (token) headers['X-Admin-Token'] = token;
-    return headers;
+    return {'Content-Type': 'application/json'};
   }
 
   function rsHelpOpen(event) {
@@ -13352,89 +13346,14 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
     return value.toFixed(unit === 0 ? 0 : 1) + ' ' + units[unit];
   }
 
-  async function rsHelpDownload(url, filename) {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: rsHelpHeaders()
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || ('HTTP ' + response.status));
-    }
-
-    const blob = await response.blob();
-    const href = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = href;
-    a.download = filename || 'issue_report.zip';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(href);
-  }
-
-  async function rsHelpLoadHistory() {
-    if (!helpHistory) return;
-    helpHistory.innerHTML = '<div class="rs-help-empty">Loading recent reports…</div>';
-
-    try {
-      const response = await fetch('/support/report-issue/history?limit=5', {
-        method: 'GET',
-        headers: rsHelpHeaders()
-      });
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.detail || ('HTTP ' + response.status));
-
-      const reports = Array.isArray(data.reports) ? data.reports : [];
-      if (!reports.length) {
-        helpHistory.innerHTML = '<div class="rs-help-empty">No issue reports found.</div>';
-        return;
-      }
-
-      helpHistory.innerHTML = reports.map((r) => `
-        <div class="rs-help-report">
-          <div class="rs-help-report-name">${escapeHtml(r.filename || '')}</div>
-          <div class="rs-help-report-meta">
-            ${escapeHtml(r.created_at || 'unknown time')} · ${rsHelpFormatBytes(r.size_bytes)} · traces: ${escapeHtml(r.trace_file_count ?? 0)}
-          </div>
-          <div class="rs-help-actions">
-            <button class="btn btn-outline" type="button"
-              data-help-download-url="${escapeHtml(r.download_url || '')}"
-              data-help-filename="${escapeHtml(r.filename || 'issue_report.zip')}">
-              Download
-            </button>
-          </div>
-        </div>
-      `).join('');
-
-      helpHistory.querySelectorAll('[data-help-download-url]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          try {
-            btn.disabled = true;
-            await rsHelpDownload(btn.getAttribute('data-help-download-url'), btn.getAttribute('data-help-filename'));
-            rsHelpSetStatus('ok', 'Download ready.');
-          } catch (err) {
-            rsHelpSetStatus('bad', 'Could not download report.\n' + String(err && err.message ? err.message : err));
-          } finally {
-            btn.disabled = false;
-          }
-        });
-      });
-    } catch (err) {
-      helpHistory.innerHTML = '<div class="rs-help-empty">Could not load history. Enter/check support token, then refresh.</div>';
-    }
-  }
-
   async function rsHelpCreateIssueReport() {
     if (!helpCreateReport) return;
 
     try {
       helpCreateReport.disabled = true;
-      rsHelpSetStatus('ok', 'Creating issue report…');
+      rsHelpSetStatus('ok', 'Creating support file...');
 
-      const response = await fetch('/support/report-issue', {
+      const response = await fetch('/support/report-issue/client', {
         method: 'POST',
         headers: rsHelpHeaders(),
         body: JSON.stringify({
@@ -13448,21 +13367,34 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || ('HTTP ' + response.status));
+      if (!response.ok) {
+        let detail = 'Could not create the support file.';
+        try {
+          const data = await response.json();
+          detail = data.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
+
+      const blob = await response.blob();
+      const filename =
+        response.headers.get('X-Issue-Report-Filename') ||
+        'issue_report.zip';
+
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
 
       rsHelpSetStatus(
         'ok',
-        'Issue report created: ' + data.filename + '\nSize: ' + rsHelpFormatBytes(data.size_bytes)
+        'Support file created and downloaded. Send this zip file to support so we can investigate.'
       );
-
-      if (data.download_url) {
-        await rsHelpDownload(data.download_url, data.filename);
-      }
-
-      await rsHelpLoadHistory();
     } catch (err) {
-      rsHelpSetStatus('bad', 'Could not create issue report.\n' + String(err && err.message ? err.message : err));
+      rsHelpSetStatus('bad', 'Could not create the support file.\n' + String(err && err.message ? err.message : err));
     } finally {
       helpCreateReport.disabled = false;
     }
@@ -13478,7 +13410,6 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
 
   if (helpClose) helpClose.addEventListener('click', rsHelpClose);
   if (helpCreateReport) helpCreateReport.addEventListener('click', rsHelpCreateIssueReport);
-  if (helpRefreshHistory) helpRefreshHistory.addEventListener('click', rsHelpLoadHistory);
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && helpOverlay && !helpOverlay.hidden) {
@@ -13608,7 +13539,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
             <div>
                 <div class="rs-help-kicker">Support</div>
                 <h2 id="rsHelpTitle">How can we help?</h2>
-                <p>Generate a safe issue report or open support tools without leaving this page.</p>
+                <p>Generate a safe support file without leaving this page.</p>
             </div>
             <button id="rsHelpClose" class="rs-help-close" type="button" aria-label="Close support panel">×</button>
         </div>
@@ -13619,12 +13550,12 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
                 <ul>
                     <li>Review warnings and blockers on this result page.</li>
                     <li>Confirm all CSV files were imported successfully.</li>
-                    <li>If numbers look wrong, create an issue report and send it to support.</li>
+                    <li>If numbers look wrong, create a support file and send it to support.</li>
                 </ul>
             </section>
 
             <section class="rs-help-card">
-                <h3>Report an issue</h3>
+                <h3>Report a problem</h3>
                 <p>
                     Issue reports include sanitized diagnostics, calculation traces, and error logs.
                     Raw CSV files and database snapshots are excluded by default.
@@ -13636,26 +13567,14 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
                 <label class="rs-help-label" for="rsHelpContact">Contact email or reference</label>
                 <input id="rsHelpContact" class="rs-help-input" type="text" placeholder="optional">
 
-                <label class="rs-help-label" for="rsHelpToken">Support token</label>
-                <input id="rsHelpToken" class="rs-help-input" type="password" placeholder="required if support tools are protected">
-
                 <div class="rs-help-actions">
-                    <button id="rsHelpCreateReport" class="btn btn-primary" type="button">Create issue report</button>
-                    <a class="btn btn-outline" href="/support/report-issue" target="_blank" rel="noopener">Open full support page</a>
+                    <button id="rsHelpCreateReport" class="btn btn-primary" type="button">Create support file</button>
+                    <a class="btn btn-outline" href="/support/report-issue">Open support page</a>
                 </div>
 
                 <div id="rsHelpStatus" class="rs-help-status" role="status" aria-live="polite"></div>
             </section>
 
-            <section class="rs-help-card">
-                <div class="rs-help-row">
-                    <h3>Recent reports</h3>
-                    <button id="rsHelpRefreshHistory" class="btn btn-outline" type="button">Refresh</button>
-                </div>
-                <div id="rsHelpHistory" class="rs-help-history">
-                    <div class="rs-help-empty">Enter support token and refresh to load recent reports.</div>
-                </div>
-            </section>
         </div>
     </aside>
 </div>
