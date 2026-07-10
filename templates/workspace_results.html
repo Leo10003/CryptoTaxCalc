@@ -13305,6 +13305,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
   const helpContact = document.getElementById('rsHelpContact');
     const helpCreateReport = document.getElementById('rsHelpCreateReport');
   const helpStatus = document.getElementById('rsHelpStatus');
+  const helpSupportDestination = document.getElementById('rsHelpSupportDestination');
 
   function rsHelpSetStatus(kind, text) {
     if (!helpStatus) return;
@@ -13312,6 +13313,32 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
     helpStatus.classList.add(kind === 'ok' ? 'is-ok' : 'is-bad');
     helpStatus.textContent = text;
   }
+
+  function rsHelpSupportDestinationText() {
+    return helpSupportDestination && helpSupportDestination.textContent
+      ? helpSupportDestination.textContent
+      : 'your CryptoTaxCalc support contact';
+  }
+
+  async function rsHelpLoadSupportContact() {
+    if (!helpSupportDestination) return;
+
+    try {
+      const response = await fetch('/support/contact', {method: 'GET'});
+      const data = await response.json();
+
+      const label = data.label || data.email || 'your CryptoTaxCalc support contact';
+      helpSupportDestination.textContent = label;
+
+      if (data.email) {
+        helpSupportDestination.href = 'mailto:' + encodeURIComponent(data.email);
+      }
+    } catch (_) {
+      helpSupportDestination.textContent = 'your CryptoTaxCalc support contact';
+    }
+  }
+
+  rsHelpLoadSupportContact();
 
   function rsHelpHeaders() {
     return {'Content-Type': 'application/json'};
@@ -13391,7 +13418,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
 
       rsHelpSetStatus(
         'ok',
-        'Support file created and downloaded. Send this zip file to support so we can investigate.'
+        'Support file created and downloaded. Attach this zip file to an email and send it to ' + rsHelpSupportDestinationText() + '.'
       );
     } catch (err) {
       rsHelpSetStatus('bad', 'Could not create the support file.\n' + String(err && err.message ? err.message : err));
@@ -13559,6 +13586,10 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
                 <p>
                     Issue reports include sanitized diagnostics, calculation traces, and error logs.
                     Raw CSV files and database snapshots are excluded by default.
+                </p>
+                <p>
+                    After download, attach the zip to an email and send it to
+                    <a id="rsHelpSupportDestination" href="/support/report-issue">your CryptoTaxCalc support contact</a>.
                 </p>
 
                 <label class="rs-help-label" for="rsHelpMessage">What happened?</label>

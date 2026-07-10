@@ -1717,6 +1717,25 @@ class IssueReportResponse(BaseModel):
     message: str
 
 
+class SupportContactResponse(BaseModel):
+    email: str | None = None
+    label: str = "your CryptoTaxCalc support contact"
+
+
+def _support_contact_email() -> str | None:
+    value = (os.getenv("CTC_SUPPORT_EMAIL") or os.getenv("SUPPORT_EMAIL") or "").strip()
+    return value or None
+
+
+@app.get("/support/contact", response_model=SupportContactResponse, tags=["support"])
+def get_support_contact():
+    email = _support_contact_email()
+    return SupportContactResponse(
+        email=email,
+        label=email or "your CryptoTaxCalc support contact",
+    )
+
+
 class IssueReportHistoryItem(BaseModel):
     created_at: str | None = None
     filename: str
@@ -2398,6 +2417,17 @@ def issue_report_page():
       color: var(--text);
     }
 
+    .inline-link {
+      color: var(--accent);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .inline-link:hover {
+      color: var(--text);
+      text-decoration: underline;
+    }
+
     .card {
       border: 1px solid var(--border);
       border-radius: 24px;
@@ -2610,8 +2640,9 @@ def issue_report_page():
         </label>
 
         <div class="notice">
-          This page does not send anything automatically. It creates a local support zip,
-          downloads it in your browser, and you can send it manually.
+          This page does not send anything automatically. It creates a local support zip
+          and downloads it in your browser. Attach the downloaded zip to an email and send it to
+          <a id="supportDestination" class="inline-link" href="/support/report-issue">your CryptoTaxCalc support contact</a>.
         </div>
 
         <div class="actions">
@@ -2631,6 +2662,7 @@ def issue_report_page():
     const statusEl = document.getElementById('status');
     const downloadLink = document.getElementById('downloadLink');
     const backLink = document.getElementById('backLink');
+    const supportDestinationLink = document.getElementById('supportDestination');
 
     if (backLink && document.referrer) {
       try {
@@ -2645,6 +2677,32 @@ def issue_report_page():
       statusEl.className = kind ? ('status ' + kind) : 'status';
       statusEl.textContent = message || '';
     }
+
+    function supportDestinationText() {
+      return supportDestinationLink && supportDestinationLink.textContent
+        ? supportDestinationLink.textContent
+        : 'your CryptoTaxCalc support contact';
+    }
+
+    async function loadSupportContact() {
+      if (!supportDestinationLink) return;
+
+      try {
+        const response = await fetch('/support/contact', {method: 'GET'});
+        const data = await response.json();
+
+        const label = data.label || data.email || 'your CryptoTaxCalc support contact';
+        supportDestinationLink.textContent = label;
+
+        if (data.email) {
+          supportDestinationLink.href = 'mailto:' + encodeURIComponent(data.email);
+        }
+      } catch (_) {
+        supportDestinationLink.textContent = 'your CryptoTaxCalc support contact';
+      }
+    }
+
+    loadSupportContact();
 
     function downloadBlob(blob, filename) {
       const objectUrl = URL.createObjectURL(blob);
@@ -2703,7 +2761,7 @@ def issue_report_page():
 
         setStatus(
           'ok',
-          'Support file created and downloaded. Send this zip file to support so we can investigate.'
+          'Support file created and downloaded. Attach this zip file to an email and send it to ' + supportDestinationText() + '.'
         );
       } catch (err) {
         setStatus(
