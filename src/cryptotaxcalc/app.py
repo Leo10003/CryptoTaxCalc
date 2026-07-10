@@ -2796,7 +2796,7 @@ def issue_report_page():
         </div>
       </div>
 
-      <form id="issueReportForm">
+      <form id="issueReportForm" action="javascript:void(0)" method="post">
         <label>
           What happened?
           <small>Describe what you clicked, what you expected, and what went wrong.</small>
@@ -2925,7 +2925,7 @@ def issue_report_page():
       } catch (err) {
         setStatus(
           'bad',
-          'Could not create the support file.\n' +
+          'Could not create the support file.\\n' +
           String(err && err.message ? err.message : err)
         );
       } finally {
@@ -2959,7 +2959,7 @@ def issue_report_page():
       } catch (err) {
         setStatus(
           'bad',
-          'Could not email the support file.\n' +
+          'Could not email the support file.\\n' +
           String(err && err.message ? err.message : err)
         );
       } finally {
