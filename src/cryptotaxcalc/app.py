@@ -2451,6 +2451,43 @@ def _send_support_email_with_attachment(
         smtp.send_message(msg)
 
 
+
+class SupportConfigStatusResponse(BaseModel):
+    support_email_configured: bool
+    smtp_host_configured: bool
+    smtp_port: int
+    smtp_username_configured: bool
+    smtp_password_configured: bool
+    smtp_from_configured: bool
+    smtp_tls_enabled: bool
+    email_support_ready: bool
+    missing: list[str]
+
+
+@app.get("/support/config/status", response_model=SupportConfigStatusResponse, tags=["support"])
+def get_support_config_status(_: None = Depends(require_bundle_admin)):
+    """
+    Protected operator diagnostic.
+
+    Reports whether support email configuration is present without returning
+    secret values such as SMTP passwords, admin tokens, Telegram tokens, or
+    raw environment content.
+    """
+    cfg = _support_email_config()
+
+    return SupportConfigStatusResponse(
+        support_email_configured=bool(cfg["support_email"]),
+        smtp_host_configured=bool(cfg["host"]),
+        smtp_port=int(cfg["port"]),
+        smtp_username_configured=bool(cfg["username"]),
+        smtp_password_configured=bool(cfg["password"]),
+        smtp_from_configured=bool(cfg["sender"]),
+        smtp_tls_enabled=bool(cfg["use_tls"]),
+        email_support_ready=bool(cfg["ok"]),
+        missing=list(cfg["missing"]),
+    )
+
+
 @app.post("/support/report-issue/email", response_model=IssueReportEmailResponse, tags=["support"])
 def email_client_issue_report_bundle(req: IssueReportRequest):
     """
