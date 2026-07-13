@@ -353,16 +353,45 @@ def _safe_issue_text(value: Optional[str], *, max_chars: int = 20_000) -> str:
     return text
 
 
-def _safe_issue_value(value: Any) -> Any:
+_SUPPORT_SECRET_KEY_FRAGMENTS = (
+    "secret",
+    "token",
+    "password",
+    "passwd",
+    "pwd",
+    "credential",
+    "credentials",
+    "api_key",
+    "apikey",
+    "private_key",
+)
+
+
+def _is_support_secret_key(key: Any) -> bool:
+    key_text = str(key or "").strip().lower()
+    return any(fragment in key_text for fragment in _SUPPORT_SECRET_KEY_FRAGMENTS)
+
+
+def _safe_issue_value(value: Any, *, key: Any = "") -> Any:
+    if _is_support_secret_key(key):
+        return "[REDACTED]"
+
+    if isinstance(value, dict):
+        return {
+            str(child_key): _safe_issue_value(child_value, key=child_key)
+            for child_key, child_value in value.items()
+        }
+
+    if isinstance(value, (list, tuple)):
+        return [_safe_issue_value(item) for item in value]
+
     if isinstance(value, str):
         return _safe_issue_text(value)
-    if isinstance(value, dict):
-        return {str(k): _safe_issue_value(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_safe_issue_value(v) for v in value]
-    if isinstance(value, tuple):
-        return [_safe_issue_value(v) for v in value]
-    return value
+
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+
+    return _safe_issue_text(str(value))
 
 
 def _issue_report_environment_snapshot() -> Dict[str, Any]:
