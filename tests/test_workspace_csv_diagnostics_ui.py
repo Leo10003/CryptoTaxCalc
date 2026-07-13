@@ -17,11 +17,15 @@ def test_workspace_template_contains_real_import_diagnostics_renderer():
     html = response.text
 
     assert "function renderCsvImportDiagnostics(importResults)" in html
-    assert "CSV rows need attention" in html
-    assert "error_details" in html
-    assert "error_summary" in html
-    assert "setWizardErrorHtml(diagnosticsHtml)" in html
-
+    assert "user_guidance" in html
+    assert "user_title" in html
+    assert "import_error_kind" in html
+    assert "failed_filename" in html
+    assert "support_page_url" in html
+    assert "Create support report" in html
+    assert "CSV import needs attention" in html
+    assert "ws-import-guidance-card" in html
+    assert "ws-import-guidance-details" in html
 
 def test_import_multiple_returns_row_diagnostics_used_by_workspace_ui():
     csv_text = "\n".join(
