@@ -2559,6 +2559,427 @@ def email_client_issue_report_bundle(req: IssueReportRequest):
         raise HTTPException(status_code=500, detail="Could not email the support file.")
 
 
+
+@app.get("/support/admin", response_class=HTMLResponse, tags=["support"])
+def support_admin_page():
+    """
+    Operator support console.
+
+    The page shell is safe to serve because it does not include diagnostics,
+    bundle history, secrets, or environment values. Protected data is fetched
+    only after the operator provides the admin token in the browser.
+    """
+    html = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Support admin - CryptoTaxCalc</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b16;
+      --panel: #111936;
+      --text: #eef3ff;
+      --muted: #a8b3cf;
+      --border: rgba(255,255,255,.14);
+      --accent: #7dd3fc;
+      --ok: #86efac;
+      --bad: #fca5a5;
+      --warn: #fde68a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(75,155,255,.24), transparent 42%),
+        linear-gradient(180deg, #050814 0%, var(--bg) 100%);
+      color: var(--text);
+      padding: 28px 18px;
+    }
+
+    main {
+      width: min(980px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 750;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.035));
+      box-shadow: 0 24px 70px rgba(0,0,0,.28);
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 44px);
+      letter-spacing: -0.05em;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-weight: 750;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: rgba(2,6,23,.58);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      outline: none;
+      font: inherit;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button,
+    .btn {
+      font: inherit;
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 16px;
+      min-height: 42px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 750;
+      text-decoration: none;
+    }
+
+    .primary {
+      color: #06101d;
+      background: linear-gradient(135deg, var(--accent), #a7f3d0);
+    }
+
+    .secondary {
+      color: var(--text);
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border);
+    }
+
+    button[disabled] {
+      opacity: .58;
+      cursor: not-allowed;
+    }
+
+    .status {
+      display: none;
+      border-radius: 14px;
+      padding: 12px 14px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: 1.45;
+    }
+
+    .status.ok {
+      display: block;
+      border: 1px solid rgba(134,239,172,.35);
+      background: rgba(134,239,172,.09);
+      color: var(--ok);
+    }
+
+    .status.bad {
+      display: block;
+      border: 1px solid rgba(252,165,165,.35);
+      background: rgba(252,165,165,.09);
+      color: var(--bad);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255,255,255,.045);
+      padding: 12px;
+      color: var(--muted);
+    }
+
+    .pill strong {
+      display: block;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .history {
+      display: grid;
+      gap: 10px;
+    }
+
+    .history-item {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255,255,255,.045);
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+      body { padding: 18px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="/support/report-issue">&larr; Back to client support page</a>
+
+    <section class="card">
+      <h1>Support admin</h1>
+      <p>
+        Operator-only diagnostics for support email readiness and recent issue bundles.
+        This page does not display passwords, tokens, raw environment values, raw CSV files,
+        or database snapshots.
+      </p>
+
+      <label>
+        Admin token
+        <input id="adminToken" type="password" autocomplete="off" placeholder="Paste admin token">
+      </label>
+
+      <div class="actions">
+        <button id="loadConfigBtn" class="primary" type="button">Check email configuration</button>
+        <button id="loadHistoryBtn" class="secondary" type="button">Load recent reports</button>
+      </div>
+
+      <div id="adminStatus" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <h2>Email support configuration</h2>
+      <div id="configGrid" class="grid">
+        <div class="pill">Not loaded yet.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Recent issue reports</h2>
+      <div id="historyList" class="history">
+        <div class="pill">Not loaded yet.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const adminToken = document.getElementById('adminToken');
+    const loadConfigBtn = document.getElementById('loadConfigBtn');
+    const loadHistoryBtn = document.getElementById('loadHistoryBtn');
+    const adminStatus = document.getElementById('adminStatus');
+    const configGrid = document.getElementById('configGrid');
+    const historyList = document.getElementById('historyList');
+
+    function headers() {
+      const token = adminToken.value.trim();
+      return token ? {'X-Admin-Token': token} : {};
+    }
+
+    function setStatus(kind, message) {
+      adminStatus.className = kind ? ('status ' + kind) : 'status';
+      adminStatus.textContent = message || '';
+    }
+
+    function yesNo(value) {
+      return value ? 'yes' : 'no';
+    }
+
+    function pill(label, value) {
+      const item = document.createElement('div');
+      item.className = 'pill';
+
+      const strong = document.createElement('strong');
+      strong.textContent = label;
+
+      const span = document.createElement('span');
+      span.textContent = value;
+
+      item.appendChild(strong);
+      item.appendChild(span);
+      return item;
+    }
+
+    async function loadConfig() {
+      loadConfigBtn.disabled = true;
+      setStatus('ok', 'Loading configuration status...');
+
+      try {
+        const response = await fetch('/support/config/status', {
+          method: 'GET',
+          headers: headers()
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Could not load configuration status.');
+        }
+
+        configGrid.replaceChildren(
+          pill('Email support ready', yesNo(data.email_support_ready)),
+          pill('Support email configured', yesNo(data.support_email_configured)),
+          pill('SMTP host configured', yesNo(data.smtp_host_configured)),
+          pill('SMTP port', String(data.smtp_port || 'not configured')),
+          pill('SMTP username configured', yesNo(data.smtp_username_configured)),
+          pill('SMTP password configured', yesNo(data.smtp_password_configured)),
+          pill('SMTP sender configured', yesNo(data.smtp_from_configured)),
+          pill('TLS enabled', yesNo(data.smtp_tls_enabled)),
+          pill('Missing settings', data.missing && data.missing.length ? data.missing.join(', ') : 'none')
+        );
+
+        setStatus('ok', 'Configuration status loaded.');
+      } catch (err) {
+        setStatus('bad', String(err && err.message ? err.message : err));
+      } finally {
+        loadConfigBtn.disabled = false;
+      }
+    }
+
+    async function downloadReport(filename) {
+      setStatus('ok', 'Downloading ' + filename + '...');
+
+      try {
+        const response = await fetch('/support/report-issue/download/' + encodeURIComponent(filename), {
+          method: 'GET',
+          headers: headers()
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || 'Could not download support bundle.');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 30000);
+        setStatus('ok', 'Download started.');
+      } catch (err) {
+        setStatus('bad', String(err && err.message ? err.message : err));
+      }
+    }
+
+    function renderHistory(items) {
+      historyList.replaceChildren();
+
+      if (!items || !items.length) {
+        historyList.appendChild(pill('Recent issue reports', 'none found'));
+        return;
+      }
+
+      for (const item of items) {
+        const row = document.createElement('div');
+        row.className = 'history-item';
+
+        const filename = document.createElement('div');
+        filename.className = 'mono';
+        filename.textContent = item.filename || '(unknown file)';
+
+        const meta = document.createElement('div');
+        meta.textContent =
+          'Created: ' + (item.created_at || 'unknown') +
+          ' | Size: ' + String(item.size_bytes || 0) + ' bytes';
+
+        const btn = document.createElement('button');
+        btn.className = 'secondary';
+        btn.type = 'button';
+        btn.textContent = 'Download';
+        btn.addEventListener('click', () => downloadReport(item.filename));
+
+        row.appendChild(filename);
+        row.appendChild(meta);
+        row.appendChild(btn);
+
+        historyList.appendChild(row);
+      }
+    }
+
+    async function loadHistory() {
+      loadHistoryBtn.disabled = true;
+      setStatus('ok', 'Loading recent issue reports...');
+
+      try {
+        const response = await fetch('/support/report-issue/history?limit=10', {
+          method: 'GET',
+          headers: headers()
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Could not load issue report history.');
+        }
+
+        renderHistory(data.items || data.reports || data || []);
+        setStatus('ok', 'Recent issue reports loaded.');
+      } catch (err) {
+        setStatus('bad', String(err && err.message ? err.message : err));
+      } finally {
+        loadHistoryBtn.disabled = false;
+      }
+    }
+
+    loadConfigBtn.addEventListener('click', loadConfig);
+    loadHistoryBtn.addEventListener('click', loadHistory);
+  </script>
+</body>
+</html>
+"""
+    return _html_response(html)
+
+
 @app.get("/support/report-issue", response_class=HTMLResponse, tags=["support"])
 def issue_report_page():
     """
