@@ -4803,6 +4803,129 @@ async def precheck_import(
     )
 
 
+
+def _import_error_guidance(result: dict[str, Any]) -> dict[str, str]:
+    """
+    Convert low-level import errors into client-facing guidance.
+
+    This keeps existing response keys intact while adding stable UX fields
+    that templates/frontends can show directly.
+    """
+    filename = str(result.get("filename") or "(unknown file)")
+    errors = result.get("errors") or []
+    if isinstance(errors, str):
+        errors = [errors]
+
+    error_text = " ".join(str(e) for e in errors)
+    if result.get("error"):
+        error_text = (error_text + " " + str(result.get("error"))).strip()
+
+    lower = error_text.lower()
+    source_status = str(result.get("recognized_source_status") or "").lower()
+
+    if "only .csv files are supported" in lower:
+        return {
+            "import_error_kind": "file_type",
+            "user_title": "Unsupported file type",
+            "user_guidance": (
+                "Upload a CSV file. If your exchange exported Excel, PDF, ZIP, or another format, "
+                "export it again as CSV before importing."
+            ),
+        }
+
+    if "empty file" in lower:
+        return {
+            "import_error_kind": "empty_file",
+            "user_title": "Empty CSV file",
+            "user_guidance": (
+                "The uploaded file is empty. Export the transaction history again and make sure "
+                "the CSV contains a header row and transaction rows."
+            ),
+        }
+
+    if (
+        "unrecognized csv format" in lower
+        or "unsupported" in lower
+        or source_status == "unsupported"
+    ):
+        return {
+            "import_error_kind": "unsupported_format",
+            "user_title": "Unsupported CSV format",
+            "user_guidance": (
+                "This CSV layout is not supported yet. Export from a supported exchange, "
+                "use Ledger Live where available, or convert the file to the CryptoTaxCalc "
+                "normalized template."
+            ),
+        }
+
+    if "missing" in lower and ("column" in lower or "header" in lower):
+        return {
+            "import_error_kind": "missing_columns",
+            "user_title": "Missing required CSV columns",
+            "user_guidance": (
+                "The CSV is missing one or more required columns. Compare the header row with "
+                "the CryptoTaxCalc normalized template or export again from the exchange."
+            ),
+        }
+
+    if "date" in lower or "timestamp" in lower:
+        return {
+            "import_error_kind": "invalid_date",
+            "user_title": "Invalid date or timestamp",
+            "user_guidance": (
+                "One or more rows contain a date or timestamp CryptoTaxCalc cannot read. "
+                "Use an ISO-style date/time or export the CSV again from the exchange."
+            ),
+        }
+
+    if (
+        "decimal" in lower
+        or "number" in lower
+        or "numeric" in lower
+        or "amount" in lower
+        or "invalid literal" in lower
+    ):
+        return {
+            "import_error_kind": "invalid_number",
+            "user_title": "Invalid numeric value",
+            "user_guidance": (
+                "One or more rows contain an amount, price, or fee value that cannot be parsed. "
+                "Check for currency symbols, thousands separators, or malformed numbers."
+            ),
+        }
+
+    return {
+        "import_error_kind": "parse_error",
+        "user_title": "CSV import failed",
+        "user_guidance": (
+            "CryptoTaxCalc could not import this file. Check that it is the correct exchange "
+            "export and create a support report if the problem is unclear."
+        ),
+    }
+
+
+def _enrich_import_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+
+    for result in results:
+        item = dict(result)
+        has_error = bool(
+            item.get("error")
+            or item.get("errors")
+            or int(item.get("skipped_errors") or 0) > 0
+        )
+
+        if has_error:
+            item.setdefault("failed_filename", item.get("filename") or "(unknown file)")
+            item.setdefault("support_page_url", "/support/report-issue")
+            item.update(_import_error_guidance(item))
+
+        enriched.append(item)
+
+    return enriched
+
+
+
 @app.post("/import/multiple")
 async def import_multiple(
     files: List[UploadFile] = File(...),
@@ -4972,7 +5095,7 @@ async def import_multiple(
 
     if preflight_has_errors:
         return {
-            "results": preflight_results,
+            "results": _enrich_import_results(preflight_results),
             "meta": {
                 "min_year": None,
                 "max_year": None,
@@ -5274,7 +5397,7 @@ async def import_multiple(
         })
 
     return {
-        "results": results,
+        "results": _enrich_import_results(results),
         "meta": {
             "min_year": global_min_year,
             "max_year": global_max_year,
