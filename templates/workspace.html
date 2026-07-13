@@ -1728,6 +1728,66 @@
   }
 
 
+
+  /* CTC_PATCH: compact unsupported CSV panel */
+  .ws-wizard-dialog {
+    max-height: min(92vh, 860px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .ws-wizard-body,
+  .ws-wizard-content {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  #wsWizardStep1 {
+    min-height: 0;
+  }
+
+  #wizardFileList {
+    max-height: clamp(150px, 24vh, 280px);
+  }
+
+  #wizardUnsupportedPanel {
+    max-height: clamp(180px, 30vh, 320px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  #wizardUnsupportedPanel .ws-unsup-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: color-mix(in srgb, var(--surface) 94%, #d9534f 6%);
+    padding-bottom: 8px;
+  }
+
+  #wizardUnsupportedFiles {
+    max-height: 72px;
+    overflow-y: auto;
+  }
+
+  #wizardSupportedSourceDetails {
+    max-height: 128px;
+    overflow-y: auto;
+  }
+
+  .ws-unsup-detail {
+    font-size: 12px;
+  }
+
+  .ws-unsup-sub {
+    line-height: 1.35;
+  }
+
+  .ws-wizard-footer {
+    flex-shrink: 0;
+  }
+
+
   /* Upload input: visually hidden but accessible */
   .ws-upload-input {
     position: absolute;
@@ -5467,6 +5527,10 @@
         });
 
         renderSourceDetails(id);
+        const detailsEl = document.getElementById('wizardSupportedSourceDetails');
+        if (detailsEl && !detailsEl.dataset.userOpened) {
+          detailsEl.style.display = 'none';
+        }
       });
     }
 
