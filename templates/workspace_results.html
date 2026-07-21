@@ -11041,6 +11041,26 @@
     return warningReviewItems(rawWarnings).length;
   }
 
+
+  function shouldShowDiagnostic(w) {
+    const c = classifyWarning(w);
+    if (!c) return false;
+
+    const u = String(w || '').toUpperCase();
+
+    // Internal table-coverage diagnostics are useful to developers but confusing
+    // to users when they are not tied to the current run/scope.
+    if (
+      c.level === 'info' &&
+      u.includes('FX CHECK:') &&
+      u.includes('ROWS IN FX_RATES')
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
   function warningRequiresExportConfirmation(w) {
     const classified = classifyWarning(w);
     return classified && (classified.level === 'warn' || classified.level === 'action');
@@ -11166,7 +11186,7 @@
     if (!warningsSummaryEl) return;
 
     const raw = Array.isArray(rawWarnings)
-      ? rawWarnings.filter(Boolean).map(w => String(w))
+      ? rawWarnings.filter(Boolean).map(w => String(w)).filter(shouldShowDiagnostic)
       : [];
 
     if (!raw.length) {
@@ -11266,7 +11286,7 @@
     if (!warningsListEl) return;
 
     const raw = Array.isArray(currentWarnings)
-      ? currentWarnings.filter(Boolean).map(w => String(w))
+      ? currentWarnings.filter(Boolean).map(w => String(w)).filter(shouldShowDiagnostic)
       : [];
 
     renderWarningsSummary(raw);
