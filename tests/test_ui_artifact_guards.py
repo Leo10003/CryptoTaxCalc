@@ -19,12 +19,11 @@ TEXT_EXTENSIONS = {
 }
 
 FORBIDDEN_TOKENS = [
-    # Common UTF-8 / Windows-1252 mojibake fragments seen in the UI.
     "Ã",
     "Â",
     "â€™",
     "â€œ",
-    "â€",
+    "â€",
     "â€¦",
     "â€”",
     "â€“",
@@ -34,16 +33,11 @@ FORBIDDEN_TOKENS = [
     "îˆ",
     "î‡",
     "”¦",
+    "”...",
     "�",
-
-    # Specific artifacts previously seen.
     "Opening automatically”",
     "Generating PDF”",
     "Updating”",
-]
-
-ALLOWED_SUBSTRINGS = [
-    # Keep this list tiny. Add only if a token is truly intentional.
 ]
 
 
@@ -72,12 +66,8 @@ def test_source_ui_text_has_no_common_encoding_artifacts():
                 continue
 
             for line_no, line in enumerate(text.splitlines(), start=1):
-                if token not in line:
-                    continue
-                if any(allowed in line for allowed in ALLOWED_SUBSTRINGS):
-                    continue
-
-                offenders.append(f"{path}:{line_no}: contains {token!r}: {line.strip()[:220]}")
+                if token in line:
+                    offenders.append(f"{path}:{line_no}: contains {token!r}: {line.strip()[:220]}")
 
     assert checked > 0, "No source UI files checked"
     assert not offenders, "\n".join(offenders[:80])

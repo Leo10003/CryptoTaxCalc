@@ -2179,7 +2179,7 @@
     opacity: 0.8;
   }
 
-  /* Month legend: show month key as a small tag so labels don’t truncate to “Latest”...” */
+  /* Month legend: show month key as a small tag so labels don’t truncate to “Latest...” */
   .rs-month-tag {
     flex: 0 0 auto;
     font-size: 10px;
@@ -5714,7 +5714,7 @@
             </div>
 
             <button id="rsFilterClear" class="rs-filter-clear" type="button" style="display:none;">Clear</button>
-            <span id="rsFilterStatus" class="rs-filter-status" style="display:none;">Applying”...</span>
+            <span id="rsFilterStatus" class="rs-filter-status" style="display:none;">Applying...</span>
 
             <div class="rs-filters-hint" aria-label="Current scope and impact">
               <div class="rs-filters-hint-text">
@@ -5806,7 +5806,7 @@
                           <span id="kStatusTitle" class="rs-status-title">Data quality</span>
                           <span id="kStatusBadge" class="rs-status-badge">—</span>
                       </div>
-                      <div id="kStatusBody" class="rs-status-body">Checking”...</div>
+                      <div id="kStatusBody" class="rs-status-body">Checking...</div>
                       <ul id="kStatusList" class="rs-status-list" style="display:none;"></ul>
                       <button id="kStatusGoInfo" type="button" class="rs-link-mini" style="display:none;">View in Info</button>
 
@@ -5853,7 +5853,7 @@
                 <div class="rs-card-h-side">
                   <div class="rs-asset-tools" aria-label="Asset list controls">
                     <div class="rs-asset-search-wrap">
-                      <input id="rsAssetSearch" class="rs-asset-search" type="search" placeholder="Search”..." autocomplete="off" aria-label="Search assets">
+                      <input id="rsAssetSearch" class="rs-asset-search" type="search" placeholder="Search..." autocomplete="off" aria-label="Search assets">
                       <button id="rsAssetSearchClear" class="rs-asset-search-clear" type="button" aria-label="Clear search"><span aria-hidden="true">&times;</span></button>
                     </div>
                     <div class="rs-asset-sort-wrap rs-dd" data-dd="assetSort">
@@ -6203,7 +6203,7 @@
                   </tr>
                 </thead>
                 <tbody id="eventsTbody">
-                  <tr><td colspan="6" style="color: var(--muted);">Loading”...</td></tr>
+                  <tr><td colspan="6" style="color: var(--muted);">Loading...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -6432,7 +6432,7 @@
     <div class="rs-scope-toast-head">
       <span class="rs-scope-toast-dot" aria-hidden="true"></span>
       <div class="rs-scope-toast-text">
-          <div id="rsScopeToastTitle" class="rs-scope-toast-title">Updating scope”...</div>
+          <div id="rsScopeToastTitle" class="rs-scope-toast-title">Updating scope...</div>
         <div id="rsScopeToastBody" class="rs-scope-toast-body">—</div>
       </div>
     </div>
@@ -8243,7 +8243,7 @@
         assetBarsFlipPending = false;
       }
 
-      // Always refresh list (search + sort + “Showing ”...”)
+      // Always refresh list (search + sort + “Showing ...”)
       renderAssetLegend(legendAssetEl, src);
 
       if (prevLegendPos && legendAssetEl) {
@@ -8582,7 +8582,7 @@
 
     if (state === 'loading') {
       scopeToastEl.classList.add('is-loading');
-      if (scopeToastTitleEl) scopeToastTitleEl.textContent = 'Updating scope”...';
+      if (scopeToastTitleEl) scopeToastTitleEl.textContent = 'Updating scope...';
       if (scopeToastBodyEl) scopeToastBodyEl.textContent = `Applying: ${label}`;
     } else {
       const isPreview = (filtersMode === 'preview');
@@ -8840,7 +8840,7 @@
     const label = filtersLabel();
     const suffix =
       (filtersMode === 'preview') ? ' (preview)' :
-      (filtersMode === 'loading') ? ' (updating”...)'
+      (filtersMode === 'loading') ? ' (updating...)'
       : '';
 
     const range = scopeMetaEl ? String(scopeMetaEl.dataset.range || '').trim() : '';
@@ -10931,7 +10931,7 @@
     const s = String(h || '').trim();
     if (!s) return '—';
     if (s.length <= 18) return s;
-    return s.slice(0, 10) + '”...' + s.slice(-6);
+    return s.slice(0, 10) + '...' + s.slice(-6);
   }
 
   function fmtMs(ms) {
@@ -11508,7 +11508,7 @@
     jurisReadyCardEl.classList.remove('is-ok', 'is-warn');
     jurisReadyCardEl.classList.add('is-warn');
     jurisReadyBadgeEl.textContent = 'Loading';
-    jurisReadyBodyEl.textContent = 'Checking jurisdiction readiness”...';
+    jurisReadyBodyEl.textContent = 'Checking jurisdiction readiness...';
 
     try {
       const r = await fetch(`/jurisdiction/status?jurisdiction=${encodeURIComponent(j)}`, { credentials: 'same-origin' });
@@ -11562,9 +11562,9 @@
     }
 
     if (countryNotesLeadEl) {
-      countryNotesLeadEl.textContent = 'Loading country notes”...';
+      countryNotesLeadEl.textContent = 'Loading country notes...';
     }
-    countryNotesListEl.innerHTML = '<li style="opacity:0.85;">Loading”...</li>';
+    countryNotesListEl.innerHTML = '<li style="opacity:0.85;">Loading...</li>';
 
     try {
       const r = await fetch(`/country_notes?jurisdiction=${encodeURIComponent(j)}`, { credentials: 'same-origin' });
@@ -12146,7 +12146,7 @@
     const token = ++_assetLegendRenderToken;
 
     // Fast initial paint to avoid “blank” feeling
-    el.innerHTML = '<div style="color: var(--muted); font-size:11px;">Rendering”...</div>';
+    el.innerHTML = '<div style="color: var(--muted); font-size:11px;">Rendering...</div>';
 
     const CHUNK = 60;
     let idx = 0;
@@ -13578,7 +13578,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
     </div>
 
     <div class="wo-modal-body">
-        <div id="wo-loading">Loading wallet transfers”...</div>
+        <div id="wo-loading">Loading wallet transfers...</div>
       <table id="wo-table" style="display:none; width:100%;">
         <thead>
           <tr>
@@ -13656,7 +13656,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
             </svg>
           </div>
           <div>
-              <div id="rsPdfGenMsg" style="font-size:12px; color:var(--text); font-weight:700;">Starting”...</div>
+              <div id="rsPdfGenMsg" style="font-size:12px; color:var(--text); font-weight:700;">Starting...</div>
             <div id="rsPdfGenMeta" style="margin-top:4px; font-size:12px; color:var(--muted);">
               Please keep this window open.
             </div>
