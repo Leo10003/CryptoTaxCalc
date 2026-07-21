@@ -9207,13 +9207,13 @@
 
       // Make it look intentional immediately (avoid blank tab)
       try {
-        w.document.title = 'Generating PDF”...';
+        w.document.title = 'Generating PDF...';
         w.document.body.style.margin = '0';
         w.document.body.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
         w.document.body.innerHTML = `
           <div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;">
             <div style="max-width:520px;width:100%;border:1px solid rgba(0,0,0,.12);border-radius:14px;padding:18px;">
-              <div style="font-weight:800;font-size:16px;">Generating PDF”...</div>
+              <div style="font-weight:800;font-size:16px;">Generating PDF...</div>
               <div style="margin-top:6px;opacity:.75;font-size:13px;line-height:1.35;">
                 Please keep this tab open. The PDF will appear automatically when ready.
               </div>
@@ -9251,7 +9251,7 @@
 
     // Null-safe: never throw; fall back to toast if modal elements are missing.
     if (!b || !close || !cancel || !openBtn || !iconEl || !msgEl || !metaEl || !cdWrap || !barFill) {
-      showToast('Generating PDF”...');
+      showToast('Generating PDF...');
       return {
         hide: () => {},
         isCancelled: () => false,
@@ -9283,7 +9283,7 @@
     };
 
     // Reset UI state each time modal opens
-    msgEl.textContent = 'Generating PDF”...';
+    msgEl.textContent = 'Generating PDF...';
     metaEl.textContent = 'Please keep this window open.';
     openBtn.style.display = 'none';
     openBtn.onclick = null;
@@ -9453,7 +9453,7 @@
           const st = String(pj.status || '');
           const msg = String(pj.message || '');
 
-          modal.setMsg(msg || (st === 'ready' ? 'Ready' : 'Generating PDF”...'));
+          modal.setMsg(msg || (st === 'ready' ? 'Ready' : 'Generating PDF...'));
 
           if (st === 'ready' && pj.pdf_url) {
             openWhenReady(pj.pdf_url);
@@ -10340,7 +10340,7 @@
     let line = 'Verified: Saved • Scope-applied • Subset export matches';
 
     if (isLoading) {
-      line = 'Updating”... applying scope changes';
+      line = 'Updating... applying scope changes';
     } else if (warnCount > 0) {
       line = `Attention: ${warnCount} warning${warnCount === 1 ? '' : 's'} • Review in Info before export`;
     } else if (isPreview) {
@@ -11029,6 +11029,12 @@
       .map(x => x.w);
   }
 
+
+  function warningRequiresExportConfirmation(w) {
+    const classified = classifyWarning(w);
+    return classified && (classified.level === 'warn' || classified.level === 'action');
+  }
+
   function classifyWarning(w) {
     const u = String(w || '').toUpperCase();
 
@@ -11181,7 +11187,11 @@
 
   function buildSoftExportWarningDetail() {
     const warnings = Array.isArray(currentWarnings)
-      ? prioritizeWarnings(currentWarnings.filter(Boolean).map(w => String(w)))
+      ? prioritizeWarnings(
+          currentWarnings
+            .filter(warningRequiresExportConfirmation)
+            .map(w => String(w))
+        )
       : [];
 
     if (!warnings.length) return null;
@@ -11194,7 +11204,7 @@
     const hasAction = classified.some((item) => item.info && item.info.level === 'action');
 
     // Action-level warnings should remain governed by backend export blockers.
-    // This soft pre-export prompt is only for non-blocking warning/info cases.
+    // This soft pre-export prompt is only for non-blocking warning cases.
     if (hasAction) return null;
 
     const shown = classified.slice(0, 5).map((item) => {
@@ -11210,9 +11220,9 @@
     return {
       detail: {
         severity: 'warning',
-        title: 'Review warnings before export',
+        title: 'Review export warnings',
         reason: `${classified.length} non-blocking warning${classified.length === 1 ? '' : 's'} found in this run.`,
-        what_this_means: 'The export can be generated, but these warnings may affect how the report should be interpreted.',
+        what_this_means: 'The export can be generated, but these warning-level items may affect how the report should be interpreted.',
         how_to_fix: shown,
         technical_details: warnings.join('\n'),
       },
@@ -11797,7 +11807,7 @@
 
     if (isLoading) {
       taxesReadinessEl.classList.add('is-loading');
-      textEl.textContent = 'Updating”... preparing export-ready totals';
+      textEl.textContent = 'Updating... preparing export-ready totals';
       return;
     }
 
@@ -13586,7 +13596,7 @@ const helpOverlay = document.getElementById('rsHelpOverlay');
   <div class="rs-eb-modal">
     <div class="rs-eb-head">
       <div>
-          <div id="rsPdfGenTitle" class="rs-eb-title">Generating PDF”...</div>
+          <div id="rsPdfGenTitle" class="rs-eb-title">Generating PDF...</div>
         <div id="rsPdfGenSubtitle" class="rs-eb-sub">Large runs can take a few seconds.</div>
       </div>
       <button id="rsPdfGenClose" class="rs-eb-close" type="button" aria-label="Close">✕</button>
