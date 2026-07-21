@@ -12976,7 +12976,7 @@
 
           let pctTxt = '';
           if (Math.abs(pinnedVal) < 1e-12) {
-            pctTxt = ' (Δ% —)';
+            pctTxt = ' (change % —)';
           } else {
             const pct = (delta / Math.abs(pinnedVal)) * 100;
             const pctSigned = `${delta >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
@@ -12985,7 +12985,9 @@
 
           if (tipD) {
             tipD.style.display = '';
-            tipD.textContent = `Δ ${deltaTxt}${pctTxt}`;
+            const trendIcon = d > 0 ? '▲' : (d < 0 ? '▼' : '→');
+            const trendLabel = d > 0 ? 'up' : (d < 0 ? 'down' : 'flat');
+            tipD.textContent = `${trendIcon} ${trendLabel}: ${deltaTxt}${pctTxt}`;
             tipD.classList.toggle('is-neg', delta < 0);
             tipD.classList.toggle('is-pos', delta > 0);
           }
