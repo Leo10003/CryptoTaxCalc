@@ -11032,12 +11032,44 @@
   function classifyWarning(w) {
     const u = String(w || '').toUpperCase();
 
-    // Price autosync diagnostics are not fatal errors even if they contain "errors=0"
+    // Price autosync diagnostics with no errors are informational noise.
     if (u.includes('PRICE AUTOSYNC DIAG')) {
+      if (u.includes('ERRORS=0')) {
+        return {
+          level: 'info',
+          badge: 'Info',
+          hint: 'Autosync completed without errors.'
+        };
+      }
+
       return {
         level: 'warn',
         badge: 'Warn',
-        hint: 'Autosync diagnostics. If fee valuation is complete, this is informational.'
+        hint: 'Autosync reported errors. Review price coverage before exporting.'
+      };
+    }
+
+    // FX check rows mean coverage exists in the local fx_rates table.
+    // They should not be treated as warnings unless the message says something is missing.
+    if (u.includes('FX CHECK:') && u.includes('ROWS IN FX_RATES')) {
+      if (
+        u.includes('MISSING') ||
+        u.includes('ERROR') ||
+        u.includes('FAILED') ||
+        u.includes('FALLBACK') ||
+        u.includes('DEFAULT')
+      ) {
+        return {
+          level: 'warn',
+          badge: 'Warn',
+          hint: 'FX coverage needs review before exporting.'
+        };
+      }
+
+      return {
+        level: 'info',
+        badge: 'Info',
+        hint: 'FX coverage exists in the local rate table.'
       };
     }
 
