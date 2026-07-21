@@ -8567,7 +8567,7 @@
     scopeToastEl.classList.remove('is-loading', 'is-done', 'is-preview');
 
     const label = filtersLabel();
-    const warnCount = Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0;
+    const warnCount = warningReviewCount(currentWarnings);
 
     if (state === 'loading') {
       scopeToastEl.classList.add('is-loading');
@@ -8659,7 +8659,7 @@
       }
     }
 
-    const warnCount = Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0;
+    const warnCount = warningReviewCount(currentWarnings);
     if (integrityWarningsEl) {
       integrityWarningsEl.textContent = warnCount ? `${warnCount} warning${warnCount === 1 ? '' : 's'}` : '0 warnings';
     }
@@ -10322,7 +10322,7 @@
   function updateVerifiedSignals() {
     if (!verifiedLineEl) return;
 
-    const warnCount = Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0;
+    const warnCount = warningReviewCount(currentWarnings);
     const isPreview = (filtersMode === 'preview');
     const isLoading = (filtersMode === 'loading');
 
@@ -10365,7 +10365,7 @@
   function updateHeroConfidence() {
     if (!confidenceLineEl) return;
 
-    const warnCount = Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0;
+    const warnCount = warningReviewCount(currentWarnings);
     const dq = warnCount ? `Review (${warnCount})` : 'OK';
 
     const totals =
@@ -10381,7 +10381,7 @@
 
   function updateResultsExplanation(totals) {
     const t = (totals && typeof totals === 'object') ? totals : {};
-    const warnCount = Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0;
+    const warnCount = warningReviewCount(currentWarnings);
 
     const proceeds = numFrom(t.proceeds_eur ?? t.proceeds ?? NaN);
     const cost = numFrom(t.cost_eur ?? t.cost_basis_eur ?? t.cost_basis ?? NaN);
@@ -11030,6 +11030,17 @@
   }
 
 
+
+  function warningReviewItems(rawWarnings) {
+    return Array.isArray(rawWarnings)
+      ? rawWarnings.filter(warningRequiresExportConfirmation)
+      : [];
+  }
+
+  function warningReviewCount(rawWarnings) {
+    return warningReviewItems(rawWarnings).length;
+  }
+
   function warningRequiresExportConfirmation(w) {
     const classified = classifyWarning(w);
     return classified && (classified.level === 'warn' || classified.level === 'action');
@@ -11667,7 +11678,7 @@
     kSanityEl.classList.add('is-warn');
 
     if (kStatusBadgeEl) kStatusBadgeEl.textContent = `WARN ${list.length}`;
-    if (kStatusBodyEl) kStatusBodyEl.textContent = 'Warnings found — review before exporting.';
+    if (kStatusBodyEl) kStatusBodyEl.textContent = 'Review items found — review before exporting.';
 
     if (kStatusListEl) {
       kStatusListEl.style.display = '';
@@ -11797,7 +11808,7 @@
     renderWarningsList();
 
     const textEl = taxesReadinessTextEl || taxesReadinessEl;
-    const warnCount = Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0;
+    const warnCount = warningReviewCount(currentWarnings);
     const isLoading = (filtersMode === 'loading');
     const isPreview = (filtersMode === 'preview');
     const jurisReady = String(currentJurisReadiness || '').toUpperCase();
