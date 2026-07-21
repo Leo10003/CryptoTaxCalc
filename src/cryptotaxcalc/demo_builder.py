@@ -201,6 +201,14 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
         templates_dir = repo_root / "templates"
         static_dir = repo_root / "static"
 
+        # Clean stale root-level EXE artifacts. They are misleading for --onedir
+        # builds because they are outside the PyInstaller runtime folder.
+        for stale_exe in (EXE_READY, EXE_TMP):
+            try:
+                stale_exe.unlink(missing_ok=True)
+            except Exception:
+                pass
+
         cmd = [
             sys.executable,
             "-m",
@@ -223,7 +231,7 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
             f"{static_dir};static",
         ]
 
-        fx_csv = (repo_root / "automation" / "fx_ecb.csv")
+        fx_csv = repo_root / "automation" / "fx_ecb.csv"
         if fx_csv.exists():
             cmd += ["--add-data", f"{fx_csv};automation"]
 
@@ -241,40 +249,60 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
                 for line in p.stdout:
                     log_fp.write(line)
                     log_fp.flush()
+
                 ret = p.wait()
                 if ret != 0:
-                    _write_manifest("failed", {"reason": "PyInstaller failed", "returncode": ret})
+                    _write_manifest(
+                        "failed",
+                        {"reason": "PyInstaller failed", "returncode": ret},
+                    )
                     raise HTTPException(status_code=500, detail="Build failed")
 
-        dist_dir = Path("dist/CryptoTaxCalc_Demo")
+        dist_dir = Path("dist") / "CryptoTaxCalc_Demo"
         produced = dist_dir / "CryptoTaxCalc_Demo.exe"
-        # Copy the full onedir folder to a temp artifact folder for smoke testing.
-        # Running the exe without its _internal folder will fail to load python312.dll.
-        if DIST_TMP.exists():
-            shutil.rmtree(DIST_TMP, ignore_errors=True)
+
         if not dist_dir.exists():
             actual_dist_entries = []
             dist_root = Path("dist")
             if dist_root.exists():
                 actual_dist_entries = sorted(p.name for p in dist_root.iterdir())
-        
-            raise RuntimeError(
-                "PyInstaller did not create the expected demo EXE folder. "
-                f"Expected: {dist_dir}. "
-                f"Actual dist entries: {actual_dist_entries}. "
-                "Check the PyInstaller command, --name value, spec file, and warn-*.txt output."
+
+            _write_manifest(
+                "failed",
+                {
+                    "reason": "PyInstaller did not create expected onedir folder",
+                    "expected": str(dist_dir),
+                    "actual_dist_entries": actual_dist_entries,
+                },
             )
-        
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "PyInstaller did not create expected demo EXE folder",
+                    "expected": str(dist_dir),
+                    "actual_dist_entries": actual_dist_entries,
+                },
+            )
+
+        if not produced.exists():
+            _write_manifest(
+                "failed",
+                {
+                    "reason": "EXE not found after build",
+                    "expected": str(produced),
+                },
+            )
+            raise HTTPException(status_code=500, detail="No exe produced")
+
+        # Copy the full onedir folder to a temp artifact folder for smoke testing.
+        # Running the exe without its _internal folder can fail silently.
+        if DIST_TMP.exists():
+            shutil.rmtree(DIST_TMP, ignore_errors=True)
         shutil.copytree(dist_dir, DIST_TMP, dirs_exist_ok=True)
 
         tmp_exe = DIST_TMP / "CryptoTaxCalc_Demo.exe"
-        
-        if not produced.exists():
-            _write_manifest("failed", {"reason": "EXE not found after build"})
-            raise HTTPException(status_code=500, detail="No exe produced")
 
         _write_manifest("verifying", {"message": "Launching smoke test"})
-        shutil.copy2(produced, EXE_TMP)
         port = _find_free_port()
 
         with subprocess.Popen(
@@ -284,7 +312,6 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
             stderr=subprocess.STDOUT,
             text=True,
         ) as p:
-            # Frozen apps can take longer to warm up (import time, DLL load, etc.)
             time.sleep(2.0)
 
             try:
@@ -311,40 +338,55 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
                     detail={"error": reason, "ret": ret, "output_tail": tail},
                 )
 
-        # Keep legacy single EXE artifact for quick download
-        # Keep legacy single-exe artifact (optional convenience)
-        try:
-            shutil.copy2(tmp_exe, EXE_READY)
-        except Exception:
-            pass
-
-        # Persist the full onedir folder as the "ready" dist
+        # Persist the full onedir folder as the ready artifact.
         if DIST_READY.exists():
             shutil.rmtree(DIST_READY, ignore_errors=True)
         shutil.copytree(DIST_TMP, DIST_READY, dirs_exist_ok=True)
-        exe_sha = _sha256(EXE_READY)
 
-        # Create USB bundle folder in repo root and zip it
+        ready_exe = DIST_READY / "CryptoTaxCalc_Demo.exe"
+        exe_sha = _sha256(ready_exe)
+
+        # Add a root-level launcher for the artifact folder. This is safe because
+        # it starts the EXE from inside its working PyInstaller onedir folder.
+        launcher_path = ARTIFACTS / "START_DEMO.bat"
+        launcher_path.write_text(
+            '@echo off\r\n'
+            'setlocal\r\n'
+            'cd /d "%~dp0CryptoTaxCalc_Demo_dist"\r\n'
+            'start "" "CryptoTaxCalc_Demo.exe"\r\n',
+            encoding="ascii",
+        )
+
+        # Create USB bundle folder in repo root and zip it.
         ts = time.strftime("%Y-%m-%d_%H%M%S")
         bundle_dir = BUNDLES / f"CryptoTaxCalc_Demo_{ts}"
         if bundle_dir.exists():
             shutil.rmtree(bundle_dir, ignore_errors=True)
         bundle_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy full onedir dist (exe + all dependencies + add-data folders)
+        # Copy full onedir dist into the bundle root.
+        # The EXE works here because _internal and bundled resources are beside it.
         shutil.copytree(DIST_READY, bundle_dir, dirs_exist_ok=True)
 
-        # Copy build artifacts into bundle for traceability
+        bundle_launcher = bundle_dir / "START_DEMO.bat"
+        bundle_launcher.write_text(
+            '@echo off\r\n'
+            'setlocal\r\n'
+            'cd /d "%~dp0"\r\n'
+            'start "" "CryptoTaxCalc_Demo.exe"\r\n',
+            encoding="ascii",
+        )
+
         try:
             shutil.copy2(BUILDLOG, bundle_dir / "build.log")
         except Exception:
             pass
+
         try:
             shutil.copy2(MANIFEST, bundle_dir / "demo_build_manifest.json")
         except Exception:
             pass
 
-        # Zip the bundle directory
         zip_path = BUNDLES / f"{bundle_dir.name}.zip"
         if zip_path.exists():
             zip_path.unlink(missing_ok=True)
@@ -356,7 +398,6 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
 
         zip_sha = _sha256(zip_path)
 
-        # Update latest pointer zip
         try:
             shutil.copy2(zip_path, ZIP_LATEST)
         except Exception:
@@ -369,8 +410,11 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
                 "built_at": _now_iso_z(),
                 "version": os.getenv("APP_VERSION", "dev"),
                 "commit": os.getenv("GIT_COMMIT", "local"),
-                "exe_size": EXE_READY.stat().st_size,
+                "exe_path": str(ready_exe),
+                "exe_size": ready_exe.stat().st_size,
                 "exe_sha256": exe_sha,
+                "dist_dir": str(DIST_READY),
+                "launcher": str(launcher_path),
                 "bundle_dir": str(bundle_dir),
                 "zip_path": str(zip_path),
                 "zip_size": zip_path.stat().st_size,
