@@ -11286,7 +11286,7 @@
     if (!warningsListEl) return;
 
     const raw = Array.isArray(currentWarnings)
-      ? currentWarnings.filter(Boolean).map(w => String(w)).filter(shouldShowDiagnostic)
+      ? warningReviewItems(currentWarnings).map(w => String(w)).filter(shouldShowDiagnostic)
       : [];
 
     renderWarningsSummary(raw);
@@ -11698,7 +11698,7 @@
     kSanityEl.classList.add('is-warn');
 
     if (kStatusBadgeEl) kStatusBadgeEl.textContent = `WARN ${list.length}`;
-    if (kStatusBodyEl) kStatusBodyEl.textContent = 'Review items found — review before exporting.';
+    if (kStatusBodyEl) kStatusBodyEl.textContent = 'Warnings found — review before exporting.';
 
     if (kStatusListEl) {
       kStatusListEl.style.display = '';
