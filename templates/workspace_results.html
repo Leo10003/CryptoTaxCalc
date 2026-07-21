@@ -11286,7 +11286,7 @@
     if (!warningsListEl) return;
 
     const raw = Array.isArray(currentWarnings)
-      ? warningReviewItems(currentWarnings).map(w => String(w)).filter(shouldShowDiagnostic)
+      ? currentWarnings.filter(Boolean).map(w => String(w)).filter(shouldShowDiagnostic)
       : [];
 
     renderWarningsSummary(raw);
@@ -11666,7 +11666,9 @@
   function setDataQualityStatus(warnings) {
     if (!kSanityEl) return;
 
-    const list = prioritizeWarnings(warnings);
+    const list = prioritizeWarnings(
+      warningReviewItems(warnings).map(w => String(w))
+    );
     kSanityEl.classList.remove('is-ok', 'is-warn');
 
     const goInfo = document.getElementById('kStatusGoInfo');

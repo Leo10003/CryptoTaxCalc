@@ -10,6 +10,14 @@ def _html() -> str:
     return TEMPLATE.read_text(encoding="utf-8", errors="replace")
 
 
+def _section_between(html: str, start: str, end: str) -> str:
+    a = html.find(start)
+    assert a != -1, f"Missing start marker: {start}"
+    b = html.find(end, a)
+    assert b != -1, f"Missing end marker after {start}: {end}"
+    return html[a:b]
+
+
 def test_results_diagnostics_classify_harmless_items_as_info():
     html = _html()
 
@@ -54,16 +62,29 @@ def test_export_confirmation_ignores_info_only_diagnostics():
     assert "warning/info cases" not in html
 
 
-def test_overview_warning_cards_use_warning_review_items_not_info_diagnostics():
+def test_overview_data_quality_uses_warning_only_items():
     html = _html()
 
-    assert "function warningReviewItems(rawWarnings)" in html
-    assert "function warningReviewCount(rawWarnings)" in html
-    assert "warningReviewCount(currentWarnings)" in html
-    assert "warningReviewItems(currentWarnings)" in html
+    body = _section_between(
+        html,
+        "function setDataQualityStatus(warnings)",
+        "function setRunMeta(text)",
+    )
 
-    # Info tab should still show visible info diagnostics.
-    assert "filter(shouldShowDiagnostic)" in html
+    assert "warningReviewItems(warnings).map(w => String(w))" in body
+    assert "prioritizeWarnings(warnings)" not in body
+    assert "WARN ${list.length}" in body
 
-    # Old raw count must not drive overview warning totals.
-    assert "Array.isArray(currentWarnings) ? currentWarnings.filter(Boolean).length : 0" not in html
+
+def test_info_tab_still_shows_visible_info_diagnostics():
+    html = _html()
+
+    body = _section_between(
+        html,
+        "function renderWarningsList()",
+        "const feeValWarnCount = feeValIncompleteCount;",
+    )
+
+    assert "currentWarnings.filter(Boolean).map(w => String(w)).filter(shouldShowDiagnostic)" in body
+    assert "warningReviewItems(currentWarnings)" not in body
+    assert "renderWarningsSummary(raw)" in body
