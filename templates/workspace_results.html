@@ -12962,7 +12962,7 @@
           tipP.textContent = `Pinned ${pinnedLabel}: ${fmtEUR(pinnedVal)}`;
         }
 
-        // Only show Î” when comparing to a different point
+        // Only show Δ when comparing to a different point
         if (i === pIdx) {
           if (tipD) {
             tipD.style.display = 'none';
@@ -12976,7 +12976,7 @@
 
           let pctTxt = '';
           if (Math.abs(pinnedVal) < 1e-12) {
-            pctTxt = ' (Î”% —)';
+            pctTxt = ' (Δ% —)';
           } else {
             const pct = (delta / Math.abs(pinnedVal)) * 100;
             const pctSigned = `${delta >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
@@ -12985,7 +12985,7 @@
 
           if (tipD) {
             tipD.style.display = '';
-            tipD.textContent = `Î” ${deltaTxt}${pctTxt}`;
+            tipD.textContent = `Δ ${deltaTxt}${pctTxt}`;
             tipD.classList.toggle('is-neg', delta < 0);
             tipD.classList.toggle('is-pos', delta > 0);
           }
