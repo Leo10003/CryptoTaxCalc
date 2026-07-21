@@ -2080,19 +2080,32 @@
   }
 
   /* Pinned month row (click-to-pin) */
+  #legendMonth .rs-legend-row.is-pinned > div:first-child {
+    min-width: 0;
+    overflow: visible;
+  }
+
   #legendMonth .rs-legend-row.is-pinned > div:first-child::after {
     content: "Pinned";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
-    font-size: 10px;
+    min-width: max-content;
+    max-width: none;
+    white-space: nowrap;
+    overflow: visible;
+    font-size: 9px;
+    line-height: 1;
     font-weight: 900;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    padding: 2px 6px;
+    padding: 3px 7px;
+    margin-left: 6px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--ws-nav-accent) 30%, var(--border));
     background: color-mix(in srgb, var(--ws-nav-accent) 10%, var(--surface));
     color: color-mix(in srgb, var(--ws-nav-accent) 78%, var(--text));
-    opacity: 0.95;
   }
 
   /* Month legend layout: allow space for the micro-stat line below */
@@ -13060,8 +13073,8 @@
 
           if (tipD) {
             tipD.style.display = '';
-            const trendIcon = d > 0 ? '▲' : (d < 0 ? '▼' : '→');
-            const trendLabel = d > 0 ? 'up' : (d < 0 ? 'down' : 'flat');
+            const trendIcon = delta > 0 ? '▲' : (delta < 0 ? '▼' : '→');
+            const trendLabel = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
             tipD.textContent = `${trendIcon} ${trendLabel}: ${deltaTxt}${pctTxt}`;
             tipD.classList.toggle('is-neg', delta < 0);
             tipD.classList.toggle('is-pos', delta > 0);
@@ -13078,7 +13091,7 @@
       const pinnedLabel2 = String(el.dataset.tlPinned || '').trim();
       const hasPinned2 = !!pinnedLabel2;
 
-      const tipW = hasPinned2 ? 260 : 170;
+      const tipW = hasPinned2 ? 300 : 170;
       const tipH = hasPinned2 ? 88 : 44;
       const pad = 10;
 
