@@ -253,19 +253,19 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
         if DIST_TMP.exists():
             shutil.rmtree(DIST_TMP, ignore_errors=True)
         if not dist_dir.exists():
-        actual_dist_entries = []
-        dist_root = Path("dist")
-        if dist_root.exists():
-            actual_dist_entries = sorted(p.name for p in dist_root.iterdir())
-
-        raise RuntimeError(
-            "PyInstaller did not create the expected demo EXE folder. "
-            f"Expected: {dist_dir}. "
-            f"Actual dist entries: {actual_dist_entries}. "
-            "Check the PyInstaller command, --name value, spec file, and warn-*.txt output."
-        )
-
-    shutil.copytree(dist_dir, DIST_TMP, dirs_exist_ok=True)
+            actual_dist_entries = []
+            dist_root = Path("dist")
+            if dist_root.exists():
+                actual_dist_entries = sorted(p.name for p in dist_root.iterdir())
+        
+            raise RuntimeError(
+                "PyInstaller did not create the expected demo EXE folder. "
+                f"Expected: {dist_dir}. "
+                f"Actual dist entries: {actual_dist_entries}. "
+                "Check the PyInstaller command, --name value, spec file, and warn-*.txt output."
+            )
+        
+        shutil.copytree(dist_dir, DIST_TMP, dirs_exist_ok=True)
 
         tmp_exe = DIST_TMP / "CryptoTaxCalc_Demo.exe"
         
