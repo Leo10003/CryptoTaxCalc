@@ -8,6 +8,8 @@ def test_templates_do_not_contain_common_mojibake_or_ui_artifacts():
         "Opening automatically”...",
         "Opening automatically”",
         "Î”",
+        "Ã",
+        "Â",
         "îˆ",
         "î‡",
         "â€¦",

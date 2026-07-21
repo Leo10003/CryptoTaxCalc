@@ -5854,9 +5854,7 @@
                   <div class="rs-asset-tools" aria-label="Asset list controls">
                     <div class="rs-asset-search-wrap">
                       <input id="rsAssetSearch" class="rs-asset-search" type="search" placeholder="Search”..." autocomplete="off" aria-label="Search assets">
-                      <button id="rsAssetSearchClear" class="rs-asset-search-clear" type="button" aria-label="Clear search">
-                        <span aria-hidden="true">Ã—</span>
-                      </button>
+                      <button id="rsAssetSearchClear" class="rs-asset-search-clear" type="button" aria-label="Clear search"><span aria-hidden="true">&times;</span></button>
                     </div>
                     <div class="rs-asset-sort-wrap rs-dd" data-dd="assetSort">
                       <select id="rsAssetSort" class="rs-asset-sort" aria-label="Sort assets" tabindex="-1" aria-hidden="true">
@@ -6141,9 +6139,9 @@
               <div class="rs-events-left">
                 <div class="rs-events-controls">
                   <div class="rs-events-search-wrap">
-                    <input id="rsEventsSearch" class="rs-events-search" type="search" placeholder="Search events”..." autocomplete="off" aria-label="Search events">
+                    <input id="rsEventsSearch" class="rs-events-search" type="search" placeholder="Search events..." autocomplete="off" aria-label="Search events">
                     <button id="rsEventsSearchClear" class="rs-events-search-clear" type="button" aria-label="Clear search">
-                      <span aria-hidden="true">Ã—</span>
+                      <span aria-hidden="true">&times;</span>
                     </button>
                   </div>
 
@@ -6803,7 +6801,7 @@
       const baseTxt = Number.isFinite(base) ? fmtEUR(base) : '—';
       const rateTxt = Number.isFinite(eff) ? fmtPct(eff) : '—';
       const taxTxt = Number.isFinite(tax) ? fmtEUR(tax) : '—';
-      taxesFormulaEl.textContent = `Tax = ${baseTxt} Ã— ${rateTxt} = ${taxTxt}`;
+      taxesFormulaEl.textContent = `Tax = ${baseTxt} &times; ${rateTxt} = ${taxTxt}`;
     }
 
     animCtx.enabled = prevEnabled;
