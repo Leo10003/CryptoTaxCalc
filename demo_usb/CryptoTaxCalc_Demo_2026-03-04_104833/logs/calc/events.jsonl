@@ -1,6 +1,0 @@
-{"timestamp": "2026-03-04T09:49:04Z", "level": "INFO", "component": "calc", "message": "Run 1 started for HR at 2026-03-04T09:49:04Z", "logger": "cryptotaxcalc.calc"}
-{"timestamp": "2026-03-04T09:49:04Z", "level": "INFO", "component": "calc", "message": "Loaded 4 transactions from DB", "logger": "cryptotaxcalc.calc"}
-{"timestamp": "2026-03-04T09:49:04Z", "level": "INFO", "component": "calc", "message": "Run 1 completed in 0.016s | events=2 warnings=0", "logger": "cryptotaxcalc.calc"}
-{"timestamp": "2026-03-04T09:49:41Z", "level": "INFO", "component": "calc", "message": "Run 2 started for HR at 2026-03-04T09:49:41Z", "logger": "cryptotaxcalc.calc"}
-{"timestamp": "2026-03-04T09:49:41Z", "level": "INFO", "component": "calc", "message": "Loaded 17636 transactions from DB", "logger": "cryptotaxcalc.calc"}
-{"timestamp": "2026-03-04T09:49:52Z", "level": "INFO", "component": "calc", "message": "Run 2 completed in 11.155s | events=11283 warnings=2767", "logger": "cryptotaxcalc.calc"}

@@ -1,6 +1,0 @@
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.calc: Run 1 started for HR at 2026-03-04T09:49:04Z
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.calc: Loaded 4 transactions from DB
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.calc: Run 1 completed in 0.016s | events=2 warnings=0
-2026-03-04T10:49:41Z [INFO] cryptotaxcalc.calc: Run 2 started for HR at 2026-03-04T09:49:41Z
-2026-03-04T10:49:41Z [INFO] cryptotaxcalc.calc: Loaded 17636 transactions from DB
-2026-03-04T10:49:52Z [INFO] cryptotaxcalc.calc: Run 2 completed in 11.155s | events=11283 warnings=2767

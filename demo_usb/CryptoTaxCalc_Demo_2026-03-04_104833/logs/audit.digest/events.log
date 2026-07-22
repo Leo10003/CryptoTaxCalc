@@ -1,6 +1,0 @@
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.audit.digest: [AUDIT] Building run manifest for run_id=1
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.audit.digest: [AUDIT] Manifest built for run_id=1 with 2 outputs.
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.audit.digest: [AUDIT] Digests computed input=00454481… output=d9ef937e… manifest=38e53f5b…
-2026-03-04T10:49:52Z [INFO] cryptotaxcalc.audit.digest: [AUDIT] Building run manifest for run_id=2
-2026-03-04T10:49:52Z [INFO] cryptotaxcalc.audit.digest: [AUDIT] Manifest built for run_id=2 with 11283 outputs.
-2026-03-04T10:49:52Z [INFO] cryptotaxcalc.audit.digest: [AUDIT] Digests computed input=d6f4814a… output=01b382fe… manifest=62f8701a…

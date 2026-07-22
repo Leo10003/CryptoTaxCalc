@@ -1,8 +1,0 @@
-{"timestamp": "2026-03-04T08:59:40Z", "level": "INFO", "component": "app", "message": "Loaded 51 routes.", "logger": "cryptotaxcalc.app"}
-{"timestamp": "2026-03-04T08:59:40Z", "level": "INFO", "component": "app", "message": "All core tables verified present.", "logger": "cryptotaxcalc.app"}
-{"timestamp": "2026-03-04T08:59:41Z", "level": "INFO", "component": "app", "message": "Startup completed successfully at 2026-03-04T08:59:41.692877+00:00", "logger": "cryptotaxcalc.app"}
-{"timestamp": "2026-03-04T08:59:41Z", "level": "INFO", "component": "app", "message": "Startup completed successfully at 2026-03-04T08:59:40Z", "logger": "cryptotaxcalc.app"}
-{"timestamp": "2026-03-04T08:59:41Z", "level": "INFO", "component": "app", "message": "GET /health -> 200 in 0.001s", "logger": "cryptotaxcalc.app"}
-{"timestamp": "2026-03-04T09:01:06Z", "level": "INFO", "component": "app", "message": "Loaded 51 routes.", "logger": "cryptotaxcalc.app"}
-{"timestamp": "2026-03-04T09:01:17Z", "level": "INFO", "component": "app", "message": "Loaded 51 routes.", "logger": "cryptotaxcalc.app"}
-{"timestamp": "2026-03-04T09:10:57Z", "level": "INFO", "component": "app", "message": "Loaded 51 routes.", "logger": "cryptotaxcalc.app"}

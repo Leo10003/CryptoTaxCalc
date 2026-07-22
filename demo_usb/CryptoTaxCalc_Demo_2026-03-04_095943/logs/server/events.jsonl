@@ -1,3 +1,0 @@
-{"timestamp": "2026-03-04T08:59:41Z", "level": "INFO", "component": "server", "message": "Application startup complete.", "logger": "uvicorn.error"}
-{"timestamp": "2026-03-04T08:59:41Z", "level": "INFO", "component": "server", "message": "Uvicorn running on http://127.0.0.1:57605 (Press CTRL+C to quit)", "logger": "uvicorn.error"}
-{"timestamp": "2026-03-04T08:59:41Z", "level": "INFO", "component": "server", "message": "127.0.0.1:57034 - \"GET /health HTTP/1.1\" 200", "logger": "uvicorn.access"}

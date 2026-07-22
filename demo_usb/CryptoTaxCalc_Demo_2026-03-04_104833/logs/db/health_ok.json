@@ -1,7 +1,0 @@
-{
-  "timestamp": "2026-03-04T09:48:56Z",
-  "component": "db",
-  "status": "ok",
-  "message": "Database initialized and schema verified.",
-  "context": {}
-}

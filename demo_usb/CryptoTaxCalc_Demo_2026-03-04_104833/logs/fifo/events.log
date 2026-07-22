@@ -1,4 +1,0 @@
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.fifo: FIFO run started at 2026-03-04T09:49:04Z, transactions=4
-2026-03-04T10:49:04Z [INFO] cryptotaxcalc.fifo: FIFO completed: 2 events, 0 warnings.
-2026-03-04T10:49:51Z [INFO] cryptotaxcalc.fifo: FIFO run started at 2026-03-04T09:49:51Z, transactions=20368
-2026-03-04T10:49:51Z [INFO] cryptotaxcalc.fifo: FIFO completed: 11283 events, 1305 warnings.
