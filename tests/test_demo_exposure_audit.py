@@ -1,9 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import importlib.util
 import sys
+import pytest
 import zipfile
 from pathlib import Path
+
+pytestmark = pytest.mark.smoke
 
 
 def _load_demo_exposure_audit_module():

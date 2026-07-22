@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from cryptotaxcalc.runtime_paths import RESOURCE_ROOT
 
