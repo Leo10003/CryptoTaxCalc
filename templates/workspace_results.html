@@ -7399,32 +7399,81 @@
     : (id) => window.clearTimeout(id);
 
   let _eventsAutoLoadHandle = 0;
+  const EVENTS_AUTOLOAD_TOTAL_CAP = 20000;
 
-  function scheduleEventsAutoLoad() {
-    // Cancel any previous auto-loader
+  function scheduleEventsAutoLoad(options = {}) {
+    // Background auto-load is intentionally incremental:
+    // one page per idle slice, no per-page table rerender, and capped for safety.
     _eventsAutoLoadToken += 1;
     const token = _eventsAutoLoadToken;
 
     if (_eventsAutoLoadHandle) _cRic2(_eventsAutoLoadHandle);
 
-    // Only auto-load when events section is visible; otherwise defer.
-    if (!eventsPanelVisible) {
+    const ignoreSearch = options && Object.prototype.hasOwnProperty.call(options, 'ignoreSearch')
+      ? !!options.ignoreSearch
+      : true;
+    const maxTotal = Number(options && options.maxTotal != null ? options.maxTotal : EVENTS_AUTOLOAD_TOTAL_CAP);
+
+    if (!currentRunRef || eventsLoadFailed || !eventsHasMore) {
       eventsAutoLoading = false;
+      updateEventsLoadControls();
+      return;
+    }
+
+    if (eventsTotalKnown != null && Number.isFinite(Number(eventsTotalKnown)) && Number(eventsTotalKnown) > maxTotal) {
+      eventsAutoLoading = false;
+      updateEventsLoadControls();
       return;
     }
 
     eventsAutoLoading = true;
+    eventsBulkLoading = true;
     updateEventsLoadControls();
+
+    const finish = () => {
+      if (token !== _eventsAutoLoadToken) return;
+
+      eventsAutoLoading = false;
+      eventsBulkLoading = false;
+      updateEventsLoadControls();
+
+      refreshFilterOptionsFromEvents();
+
+      if (eventsPanelVisible) {
+        renderEventsPreview();
+      } else {
+        eventsRenderArmed = true;
+      }
+    };
 
     const step = async () => {
       if (token !== _eventsAutoLoadToken) return;
-      if (!eventsPanelVisible) { eventsAutoLoading = false; updateEventsLoadControls(); return; }
-      if (!eventsHasMore || eventsLoadFailed) { eventsAutoLoading = false; updateEventsLoadControls(); return; }
 
-      // Load ONE page per idle slice to avoid blocking interactions.
-      await loadMoreEventsPages(1);
+      if (!currentRunRef || eventsLoadFailed || !eventsHasMore) {
+        finish();
+        return;
+      }
 
-      // Re-schedule next page load.
+      if (eventsTotalKnown != null && Number.isFinite(Number(eventsTotalKnown)) && Number(eventsTotalKnown) > maxTotal) {
+        finish();
+        return;
+      }
+
+      await loadMoreEventsPages(1, { ignoreSearch });
+
+      if (token !== _eventsAutoLoadToken) return;
+
+      if (!eventsHasMore || eventsLoadFailed) {
+        finish();
+        return;
+      }
+
+      if (eventsTotalKnown != null && Number.isFinite(Number(eventsTotalKnown)) && eventsOffset >= Number(eventsTotalKnown)) {
+        eventsHasMore = false;
+        finish();
+        return;
+      }
+
       _eventsAutoLoadHandle = _ric2(() => { step(); });
     };
 
@@ -13323,6 +13372,10 @@
     // 2) Apply filters (only after we have a run db id; otherwise show safe empty state)
     if (currentRunDbId) {
       await applyFilters();
+
+      // Seamlessly warm the Events cache after results are ready.
+      // This keeps UI search responsive without making the user click Load all.
+      scheduleEventsAutoLoad({ ignoreSearch: true, maxTotal: EVENTS_AUTOLOAD_TOTAL_CAP });
     } else {
       filtersMode = 'preview';
       updateFiltersUI();
