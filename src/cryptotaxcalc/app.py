@@ -18,6 +18,7 @@ Endpoints kept for continuity:
   Command to start the server: uvicorn app:app --reload
 """
 
+import re
 import os, shutil, tempfile, csv, io, json, csv as _csv, sys, time, subprocess, zipfile, traceback
 import asyncio
 import anyio
@@ -6889,7 +6890,7 @@ def export_workspace_summary(
 )
 def export_workspace_summary_subset(
     run_db_id: int,
-    year: int | None = Query(None, description="Optional tax-year filter (YYYY)"),
+    year: str | None = Query(None, description="Optional tax-year filter (YYYY)"),
     asset: str | None = Query(None, description="Optional asset filter (e.g. BTC)"),
     local_area: str | None = Query(None, description="Optional local area code (e.g. ZAGREB) for HR prirez ≤ 2023"),
     force: bool = Query(False, description="Proceed even if data-integrity blockers are present"),
@@ -6904,6 +6905,8 @@ def export_workspace_summary_subset(
     - We DO NOT re-run the engine on a truncated history.
     - Filters slice realized_events for this run so long-term exemptions stay intact.
     """
+
+    year_i = _optional_year_query_to_int(year)
 
     # 1) Load CalcRun metadata
     run = db.query(CalcRun).filter(CalcRun.id == run_db_id).first()
@@ -6937,10 +6940,10 @@ def export_workspace_summary_subset(
         .order_by(RealizedEvent.id.asc())
     )
 
-    if year is not None:
+    if year_i is not None:
         # RealizedEvent.timestamp is stored as ISO string -> filter with ISO string bounds
-        start = f"{year:04d}-01-01"
-        end = f"{year + 1:04d}-01-01"
+        start = f"{year_i:04d}-01-01"
+        end = f"{year_i + 1:04d}-01-01"
         q = q.filter(RealizedEvent.timestamp >= start, RealizedEvent.timestamp < end)
 
     if asset:
@@ -7238,7 +7241,7 @@ async def export_workspace_summary_job(
 @app.post("/export/workspace_summary/{run_db_id}/subset.pdf/job", tags=["export"])
 async def export_workspace_summary_subset_job(
     run_db_id: int,
-    year: int | None = Query(None),
+    year: str | None = Query(None),
     asset: str | None = Query(None),
     local_area: str | None = Query(None),
     force: bool = Query(False),
@@ -7247,7 +7250,14 @@ async def export_workspace_summary_subset_job(
 ):
     _pdf_job_prune()
 
-    qs = f"?year={year or ''}&asset={(asset or '')}&local_area={(local_area or '')}&force={'1' if force else '0'}&download={'1' if download else '0'}"
+    year_i = _optional_year_query_to_int(year)
+    qs = _subset_pdf_query_string(
+        year=year_i,
+        asset=asset,
+        local_area=local_area,
+        force=force,
+        download=download,
+    )
     pdf_url = f"/export/workspace_summary/{run_db_id}/subset.pdf{qs}"
 
     run = db.query(CalcRun).filter(CalcRun.id == run_db_id).first()
@@ -8987,6 +8997,48 @@ def _compute_subset_tax_split(run: CalcRun, events: list[RealizedEvent]) -> tupl
     return total_gain, taxable, exempt
 
 
+
+def _optional_year_query_to_int(year: object) -> int | None:
+    """Normalize optional year query values.
+
+    FastAPI cannot parse ?year= into int | None before route logic runs, so
+    routes that support "All years" accept year as string and normalize here.
+    """
+    s = "" if year is None else str(year).strip()
+    if not s:
+        return None
+    if not re.fullmatch(r"\d{4}", s):
+        raise HTTPException(status_code=422, detail="year must be a 4-digit integer")
+    return int(s)
+
+
+def _subset_pdf_query_string(
+    *,
+    year: int | None,
+    asset: str | None,
+    local_area: str | None,
+    force: bool,
+    download: bool,
+) -> str:
+    params = []
+    if year is not None:
+        params.append(("year", str(year)))
+    if asset:
+        params.append(("asset", str(asset).strip().upper()))
+    if local_area:
+        params.append(("local_area", str(local_area).strip()))
+    if force:
+        params.append(("force", "1"))
+    if download:
+        params.append(("download", "1"))
+
+    if not params:
+        return ""
+
+    from urllib.parse import urlencode
+    return "?" + urlencode(params)
+
+
 @app.get("/calc/run/{run_id}/summary_filtered", response_class=JSONResponse, tags=["calc"])
 def summary_filtered(
     run_id: int,
@@ -9001,15 +9053,17 @@ def summary_filtered(
     Filters slice the already-computed realized_events so long-term exemptions stay intact.
     Includes breakdowns (by_asset / by_month) so charts remain consistent across scope changes.
     """
+    year_i = _optional_year_query_to_int(year)
+
     run = db.query(CalcRun).filter(CalcRun.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
     q = db.query(RealizedEvent).filter(RealizedEvent.run_id == run_id)
 
-    if year is not None:
-        start = f"{year:04d}-01-01"
-        end = f"{year + 1:04d}-01-01"
+    if year_i is not None:
+        start = f"{year_i:04d}-01-01"
+        end = f"{year_i + 1:04d}-01-01"
         q = q.filter(RealizedEvent.timestamp >= start, RealizedEvent.timestamp < end)
 
     if asset:

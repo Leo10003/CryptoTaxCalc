@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}CryptoTaxCalc — Results{% endblock %}
 
@@ -9018,6 +9018,27 @@
   let _eventsWorkToken = 0;
   let _eventsWorkHandle = 0;
 
+
+  function buildSubsetPdfQuery() {
+    const params = {};
+
+    const y = String(activeFilters.year || '').trim();
+    const a = String(activeFilters.asset || '').trim().toUpperCase();
+    const la = String(taxLocalArea || '').trim();
+
+    // All years/assets must be omitted completely. Never send year= or asset=.
+    if (/^\d{4}$/.test(y)) params.year = y;
+    if (a && a !== 'ALL' && a !== 'ALL ASSETS') params.asset = a;
+    if (la) params.local_area = la;
+
+    return buildQuery(params);
+  }
+
+  function appendQueryParam(url, key, value) {
+    const sep = String(url || '').includes('?') ? '&' : '?';
+    return `${url}${sep}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+  }
+
   function scheduleDeferredEventsWork(force = false) {
     _eventsWorkToken += 1;
     const token = _eventsWorkToken;
@@ -9191,15 +9212,11 @@
     const a4 = document.getElementById('btnPdfSubsetDownload');
 
     if (exportPaths.subsetBase) {
-      const qs = buildQuery({
-        year: activeFilters.year || '',
-        asset: activeFilters.asset || '',
-        local_area: taxLocalArea || '',
-      });
+      const qs = buildSubsetPdfQuery();
 
       const url = `${exportPaths.subsetBase}${qs}`;
-      if (a3) a3.href = url;                   // preview (inline)
-      if (a4) a4.href = url + '&download=1';   // download (attachment)
+      if (a3) a3.href = url;                                  // preview (inline)
+      if (a4) a4.href = appendQueryParam(url, 'download', '1'); // download (attachment)
 
       warmupSubsetPdfDebounced();
     }
@@ -9224,11 +9241,7 @@
 
     window.clearTimeout(_pdfWarmSubsetT);
     _pdfWarmSubsetT = window.setTimeout(() => {
-      const qs = buildQuery({
-        year: y || '',
-        asset: a || '',
-        local_area: la || '',
-      });
+      const qs = buildSubsetPdfQuery();
 
       const url = `${exportPaths.subsetBase}${qs}`;
 
