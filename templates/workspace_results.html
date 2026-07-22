@@ -9676,14 +9676,17 @@
     eventsLoadAllBtn.disabled = eventsLoadingMore;
   }
 
-  async function fetchEventsPage(offset) {
+  async function fetchEventsPage(offset, options = {}) {
+    const ignoreSearch = !!(options && options.ignoreSearch);
+    const q = ignoreSearch ? '' : String(eventsSearch || '').trim();
+
     const qs = buildQuery({
       limit: EVENTS_CACHE_LIMIT,
       offset,
       year: activeFilters.year || '',
       asset: activeFilters.asset || '',
       mode: eventsGainMode || 'all',
-      q: String(eventsSearch || '').trim(),
+      q,
     });
 
     const r = await fetch(
@@ -9714,14 +9717,18 @@
     return { items, total: Number.isFinite(total) ? total : null, ok: true, minD, maxD };
   }
 
-  async function loadMoreEventsPages(maxPages) {
+  async function loadMoreEventsPages(maxPages, options = {}) {
     if (!currentRunRef) return;
+
+    const ignoreSearch = !!(options && options.ignoreSearch);
+    const qForKey = ignoreSearch ? '' : String(eventsSearch || '').trim();
+
     const key = [
       String(currentRunRef || ''),
       String(activeFilters.year || ''),
       String(activeFilters.asset || ''),
       String(eventsGainMode || 'all'),
-      String(eventsSearch || '').trim()
+      qForKey
     ].join('::');
 
     if (key !== eventsLastQueryKey) {
@@ -9738,7 +9745,7 @@
       const pages = Math.max(1, Number(maxPages) || 1);
 
       for (let p = 0; p < pages; p++) {
-        const res = await fetchEventsPage(eventsOffset);
+        const res = await fetchEventsPage(eventsOffset, { ignoreSearch });
         if (!res.ok) { eventsLoadFailed = true; break; }
 
         if (res.total != null) eventsTotalKnown = res.total;
@@ -9790,7 +9797,9 @@
         if (pages >= HARD_PAGE_CAP) break;
         pages += 1;
 
-        await loadMoreEventsPages(1);
+        // Load all must load the full server-side event scope, not the current
+        // Events search text. The search box remains a client-side display filter.
+        await loadMoreEventsPages(1, { ignoreSearch: true });
 
         // If the API provided a truthful total and we reached it, stop.
         if (eventsTotalKnown != null && Number.isFinite(Number(eventsTotalKnown))) {
