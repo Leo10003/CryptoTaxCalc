@@ -221,15 +221,19 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
             "--console",
             "--paths",
             str(src_dir),
-            "--add-data",
-            f"{demo_dir};demo",
-            "--add-data",
-            f"{logo_dir};logo",
-            "--add-data",
-            f"{templates_dir};templates",
-            "--add-data",
-            f"{static_dir};static",
         ]
+
+        def add_data_if_exists(src_path: Path, dest_name: str) -> None:
+            if src_path.exists():
+                cmd.extend(["--add-data", f"{src_path};{dest_name}"])
+            else:
+                logger.info("Skipping missing demo build data path: %s -> %s", src_path, dest_name)
+
+        # Optional demo assets must not break the EXE build when absent.
+        add_data_if_exists(demo_dir, "demo")
+        add_data_if_exists(logo_dir, "logo")
+        add_data_if_exists(templates_dir, "templates")
+        add_data_if_exists(static_dir, "static")
 
         fx_csv = repo_root / "automation" / "fx_ecb.csv"
         if fx_csv.exists():
