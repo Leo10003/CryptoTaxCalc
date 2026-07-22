@@ -68,6 +68,7 @@ artifacts/
 backups/
 support_bundles/
 logs/
+demo_usb/
 
 # Local databases and SQLite sidecars
 *.db

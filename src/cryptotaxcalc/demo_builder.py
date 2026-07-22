@@ -42,6 +42,8 @@ DIST_TMP = ARTIFACTS / "CryptoTaxCalc_Demo.tmp"
 DIST_READY = ARTIFACTS / "CryptoTaxCalc_Demo_dist"
 
 ZIP_LATEST = BUNDLES / "CryptoTaxCalc_Demo_LATEST.zip"
+ZIP_INVESTOR_SAFE_LATEST = BUNDLES / "CryptoTaxCalc_Demo_INVESTOR_SAFE_LATEST.zip"
+INVESTOR_SAFE_REPORT = BUNDLES / "CryptoTaxCalc_Demo_INVESTOR_SAFE_report.json"
 
 _build_lock = False
 
@@ -178,6 +180,63 @@ def _ensure_pyinstaller() -> None:
             "`python -m pip install pyinstaller==6.10.*`"
         ),
     )
+
+
+
+def _load_demo_exposure_audit_module():
+    """Load the repo-local investor ZIP sanitizer without requiring tools/ to be a package."""
+    import importlib.util
+
+    module_path = REPO_ROOT / "tools" / "demo_exposure_audit.py"
+    if not module_path.exists():
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Investor-safe ZIP sanitizer is missing",
+                "expected": str(module_path),
+            },
+        )
+
+    spec = importlib.util.spec_from_file_location("demo_exposure_audit", module_path)
+    if spec is None or spec.loader is None:
+        raise HTTPException(status_code=500, detail="Could not load investor-safe ZIP sanitizer")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _write_investor_safe_latest_zip(source_zip: Path) -> dict:
+    """Create one overwritten investor-safe latest ZIP beside the raw latest ZIP."""
+    audit_mod = _load_demo_exposure_audit_module()
+
+    if ZIP_INVESTOR_SAFE_LATEST.exists():
+        ZIP_INVESTOR_SAFE_LATEST.unlink(missing_ok=True)
+
+    report = audit_mod.sanitize_zip(source_zip, ZIP_INVESTOR_SAFE_LATEST)
+    findings = audit_mod.audit_zip(ZIP_INVESTOR_SAFE_LATEST)
+
+    full_report = {
+        "source_zip": str(source_zip),
+        "investor_safe_zip": str(ZIP_INVESTOR_SAFE_LATEST),
+        "sanitized": report,
+        "findings": [f.__dict__ for f in findings],
+    }
+    _atomic_write_json(INVESTOR_SAFE_REPORT, full_report)
+
+    if findings:
+        ZIP_INVESTOR_SAFE_LATEST.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Investor-safe ZIP audit failed",
+                "report": str(INVESTOR_SAFE_REPORT),
+                "findings": full_report["findings"][:30],
+            },
+        )
+
+    return full_report
 
 
 @router.post("/build_exe", include_in_schema=True)
@@ -400,10 +459,14 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
                 if p.is_file():
                     zf.write(p, arcname=str(p.relative_to(BUNDLES)))
 
+        # Remove timestamped staging folder after ZIP creation.
+        shutil.rmtree(bundle_dir, ignore_errors=True)
+
         zip_sha = _sha256(zip_path)
 
         try:
             shutil.copy2(zip_path, ZIP_LATEST)
+            investor_safe_report = _write_investor_safe_latest_zip(ZIP_LATEST)
         except Exception:
             pass
 
@@ -424,6 +487,9 @@ def build_exe(_admin: None = Depends(require_demo_builder_admin)):
                 "zip_size": zip_path.stat().st_size,
                 "zip_sha256": zip_sha,
                 "zip_latest": str(ZIP_LATEST),
+                "investor_safe_zip_latest": str(ZIP_INVESTOR_SAFE_LATEST),
+                "investor_safe_report": str(INVESTOR_SAFE_REPORT),
+                "investor_safe_removed_files": len(investor_safe_report.get("sanitized", {}).get("removed_files", [])),
             },
         )
         return {"ok": True, "manifest": info}
@@ -500,3 +566,19 @@ def download_zip(_admin: None = Depends(require_demo_builder_admin)):
         media_type="application/zip",
         filename=z.name,
     )
+
+@router.get("/download_investor_zip", include_in_schema=True)
+def download_investor_zip(_admin: None = Depends(require_demo_builder_admin)):
+    """
+    Download the latest investor-safe USB bundle ZIP.
+    This is the file intended for external investor/customer sharing.
+    """
+    if not ZIP_INVESTOR_SAFE_LATEST.exists():
+        raise HTTPException(status_code=404, detail="No investor-safe bundle zip found")
+
+    return FileResponse(
+        path=str(ZIP_INVESTOR_SAFE_LATEST),
+        media_type="application/zip",
+        filename=ZIP_INVESTOR_SAFE_LATEST.name,
+    )
+
