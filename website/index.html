@@ -1,0 +1,292 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CryptoTaxCalc™ — Crypto Tax Calculation and Reporting</title>
+  <meta name="description" content="CryptoTaxCalc is a crypto tax calculation and reporting platform focused on clarity, auditability, and professional review.">
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: #0d1b2d;
+      --text: #eef5ff;
+      --muted: #aebbd0;
+      --line: rgba(255,255,255,.14);
+      --accent: #7dd3fc;
+      --accent2: #a7f3d0;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(125,211,252,.18), transparent 34rem),
+        radial-gradient(circle at top right, rgba(167,243,208,.12), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .brand {
+      font-weight: 800;
+      letter-spacing: -.03em;
+      font-size: 20px;
+    }
+
+    .links {
+      display: flex;
+      gap: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .links a {
+      text-decoration: none;
+    }
+
+    .links a:hover {
+      color: var(--text);
+    }
+
+    .hero {
+      padding: 92px 0 64px;
+      max-width: 860px;
+    }
+
+    .eyebrow {
+      color: var(--accent2);
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(42px, 7vw, 76px);
+      line-height: .98;
+      letter-spacing: -.06em;
+    }
+
+    .lead {
+      margin: 26px 0 0;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: clamp(18px, 2vw, 22px);
+    }
+
+    .actions {
+      margin-top: 34px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 20px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 750;
+      border: 1px solid var(--line);
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #04111d;
+      border: 0;
+    }
+
+    .section {
+      padding: 42px 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .card {
+      background: rgba(13,27,45,.72);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 24px;
+    }
+
+    .card h2, .card h3 {
+      margin-top: 0;
+      line-height: 1.2;
+    }
+
+    .card p {
+      color: var(--muted);
+      margin-bottom: 0;
+    }
+
+    .wide {
+      grid-column: span 2;
+    }
+
+    ul {
+      margin: 12px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 28px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 800px) {
+      nav {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .wide {
+        grid-column: auto;
+      }
+
+      .hero {
+        padding-top: 64px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <nav>
+        <div class="brand">CryptoTaxCalc™</div>
+        <div class="links">
+          <a href="index.html">Home</a>
+          <a href="news.html">News</a>
+          <a href="privacy.html">Privacy</a>
+          <a href="mailto:support@cryptotaxcalc.eu">Contact</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="wrap hero">
+      <div class="eyebrow">Private investor demo stage</div>
+      <h1>Crypto tax calculation and reporting, designed for clarity.</h1>
+      <p class="lead">
+        CryptoTaxCalc™ helps users import, review, calculate, and export crypto tax information
+        in a transparent, structured, and professionally reviewable way.
+      </p>
+      <div class="actions">
+        <a class="btn primary" href="mailto:support@cryptotaxcalc.eu">Contact for private demo</a>
+        <a class="btn" href="news.html">View updates</a>
+      </div>
+    </section>
+
+    <section class="wrap section">
+      <div class="grid">
+        <article class="card wide">
+          <h2>Built for auditability, not only calculation.</h2>
+          <p>
+            Crypto users and professionals need more than a final number. They need to understand
+            how the result was produced, where the data may be incomplete, and what should be
+            reviewed before reporting.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>Current focus</h3>
+          <p>
+            A working demo/prototype focused on structured import, realized gain/loss calculation,
+            diagnostics, review workflows, and accountant-friendly exports.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>Current demo features</h3>
+          <ul>
+            <li>Structured crypto transaction import</li>
+            <li>Realized gain/loss calculation</li>
+            <li>Tax-year and asset filtering</li>
+            <li>Diagnostic warnings</li>
+            <li>PDF and CSV exports</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Future platform</h3>
+          <ul>
+            <li>Web-based product experience</li>
+            <li>Continuous updates</li>
+            <li>News and education section</li>
+            <li>Read-only exchange connections</li>
+            <li>Wallet-address synchronization</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Principles</h3>
+          <p>
+            Privacy, transparency, professional usability, careful diagnostics, and user control.
+            CSV upload will remain available as a reliable fallback even as automatic sync grows.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="wrap section">
+      <div class="card">
+        <h2>Investor and partnership inquiries</h2>
+        <p>
+          CryptoTaxCalc™ is currently available as a private investor evaluation demo.
+          The demo package is prepared without source code, private credentials, production
+          databases, or sensitive internal files.
+        </p>
+        <p>
+          Contact: <a href="mailto:support@cryptotaxcalc.eu">support@cryptotaxcalc.eu</a>
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      © 2026. All rights reserved. CryptoTaxCalc™ is a working product name used by the owner.
+      Trademark registration has not yet been completed.
+    </div>
+  </footer>
+</body>
+</html>
+
