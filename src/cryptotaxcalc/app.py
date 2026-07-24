@@ -3700,6 +3700,113 @@ def list_issue_report_history(
     )
 
 
+
+def _decimal_from_warning_value(value) -> Decimal:
+    try:
+        return Decimal(str(value or "0"))
+    except Exception:
+        return Decimal("0")
+
+
+def _summarize_missing_history_warnings(warnings: list) -> dict | None:
+    """
+    Build one user-facing partial-history summary from many detailed FIFO warnings.
+
+    Detailed missing_history warnings remain available for audit/debugging, but the UI
+    can show this single summary first so users understand the real problem quickly.
+    """
+    by_asset: dict[str, dict] = {}
+
+    for w in warnings or []:
+        if not isinstance(w, dict):
+            continue
+        if w.get("type") != "missing_history":
+            continue
+
+        asset = str(w.get("asset") or "").strip().upper()
+        if not asset:
+            continue
+
+        entry = by_asset.setdefault(
+            asset,
+            {
+                "asset": asset,
+                "missing_qty_total": Decimal("0"),
+                "largest_single_missing_qty": Decimal("0"),
+                "first_seen_ts": None,
+                "events": 0,
+            },
+        )
+
+        missing_qty = _decimal_from_warning_value(w.get("missing_qty"))
+        entry["missing_qty_total"] += missing_qty
+        if missing_qty > entry["largest_single_missing_qty"]:
+            entry["largest_single_missing_qty"] = missing_qty
+
+        ts = w.get("timestamp")
+        if ts and (entry["first_seen_ts"] is None or str(ts) < str(entry["first_seen_ts"])):
+            entry["first_seen_ts"] = str(ts)
+
+        entry["events"] += 1
+
+    if not by_asset:
+        return None
+
+    assets = []
+    for entry in by_asset.values():
+        assets.append(
+            {
+                "asset": entry["asset"],
+                "missing_qty_total": str(entry["missing_qty_total"]),
+                "largest_single_missing_qty": str(entry["largest_single_missing_qty"]),
+                "first_seen_ts": entry["first_seen_ts"],
+                "events": int(entry["events"]),
+            }
+        )
+
+    assets.sort(
+        key=lambda x: (
+            -int(x.get("events") or 0),
+            str(x.get("asset") or ""),
+        )
+    )
+
+    return {
+        "type": "partial_history_summary",
+        "severity": "blocker",
+        "message": (
+            "Partial history detected. Some assets were sold or disposed before "
+            "acquisition history was available in the imported data."
+        ),
+        "action_required": (
+            "Import earlier trades, deposits, or transfers, or enter opening balances "
+            "before exporting a tax report."
+        ),
+        "assets": assets,
+        "asset_count": len(assets),
+        "events": sum(int(a.get("events") or 0) for a in assets),
+    }
+
+
+def _with_partial_history_summary(warnings: list) -> list:
+    """Prepend one aggregated partial-history warning when missing_history exists."""
+    warnings_list = list(warnings or [])
+
+    # Avoid duplicating the summary if calculation/export code calls this twice.
+    warnings_list = [
+        w for w in warnings_list
+        if not (isinstance(w, dict) and w.get("type") == "partial_history_summary")
+    ]
+
+    summary = _summarize_missing_history_warnings(warnings_list)
+    if summary is None:
+        return warnings_list
+
+    return [summary] + warnings_list
+
+
+
+
 @app.get("/data_quality/missing_history", summary="Detect assets with missing acquisition history")
 def missing_history(db: Session = Depends(get_db)):
     """
@@ -5572,6 +5679,7 @@ def calculate_fifo(request: Request) -> Dict[str, Any]:
     try:
         # compute realized events
         events, summary, warnings = compute_fifo(tx_models)
+        warnings = _with_partial_history_summary(warnings)
         _export_block_if_blockers(warnings)
 
         # normalize events to plain dicts for stable hashing/JSON
@@ -6301,6 +6409,7 @@ def export_calculate_csv() -> Response:
         ))
 
     events, summary, warnings = compute_fifo(tx_models)
+    warnings = _with_partial_history_summary(warnings)
     _export_block_if_blockers(warnings)
 
     # Build CSV in-memory
@@ -6357,6 +6466,7 @@ def export_summary_csv(year: int | None = None) -> Response:
 
     # Compute FIFO once
     events, summary, warnings = compute_fifo(tx_models)
+    warnings = _with_partial_history_summary(warnings)
     _export_block_if_blockers(warnings)
 
     # Optional year filter
@@ -6503,6 +6613,7 @@ def export_summary_pdf(
 
     # 2) Compute FIFO once
     events, summary, warnings = compute_fifo(tx_models)
+    warnings = _with_partial_history_summary(warnings)
     _export_block_if_blockers(warnings)
 
     # 3) Optional filter by year (affects both tables and EUR conversion)
@@ -7365,6 +7476,7 @@ def export_calculate_pdf() -> StreamingResponse:
         ))
 
     events, summary, warnings = compute_fifo(tx_models)
+    warnings = _with_partial_history_summary(warnings)
     _export_block_if_blockers(warnings)
 
     # Build a compact PDF listing events only (reuse helper with empty summary)
@@ -8555,7 +8667,9 @@ def api_get_run_tax(
 
         w = summary_obj.get("warnings")
         if isinstance(w, list):
-            warnings = [str(x) for x in w if x is not None]
+            # Preserve structured warning dicts for the Results UI.
+            # Converting dicts with str(x) makes the browser render raw Python text.
+            warnings = [x for x in w if x is not None]
 
         fx = summary_obj.get("fx_context")
         if isinstance(fx, dict):

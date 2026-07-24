@@ -5302,6 +5302,50 @@
     user-select: none;
   }
   .rs-eb-mono {
+
+.rs-eb-warning-table-wrap {
+  margin-top: 10px;
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 12px;
+}
+
+.rs-eb-warning-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rs-eb-warning-table th,
+.rs-eb-warning-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+
+.rs-eb-warning-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+  color: var(--muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.rs-eb-warning-table td {
+  color: var(--text);
+}
+
+.rs-eb-warning-note {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
     margin-top: 8px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 11px;
@@ -5565,6 +5609,61 @@
         font-size: 12px;
         color: var(--muted);
     }
+
+.rs-missing-history-info-details {
+  display: block;
+  margin-top: 14px;
+  padding-top: 10px;
+  clear: both;
+}
+
+.rs-missing-history-info-details summary {
+  cursor: pointer;
+  color: var(--link);
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.rs-missing-history-info-details .rs-eb-warning-table-wrap {
+  display: block;
+  max-height: 320px;
+  overflow: auto;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.rs-missing-history-info-details .rs-eb-warning-table {
+  min-width: 720px;
+  table-layout: fixed;
+}
+
+.rs-missing-history-info-details .rs-eb-warning-table th:nth-child(1),
+.rs-missing-history-info-details .rs-eb-warning-table td:nth-child(1) {
+  width: 80px;
+}
+
+.rs-missing-history-info-details .rs-eb-warning-table th:nth-child(2),
+.rs-missing-history-info-details .rs-eb-warning-table td:nth-child(2) {
+  width: 150px;
+}
+
+.rs-missing-history-info-details .rs-eb-warning-table th:nth-child(3),
+.rs-missing-history-info-details .rs-eb-warning-table td:nth-child(3) {
+  width: 180px;
+}
+
+.rs-missing-history-info-details .rs-eb-warning-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.rs-missing-history-info-details .rs-eb-warning-note {
+  display: block;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
 </style>
 {% endblock %}
 
@@ -8627,7 +8726,7 @@
     scopeToastEl.classList.remove('is-loading', 'is-done', 'is-preview');
 
     const label = filtersLabel();
-    const warnCount = warningReviewCount(currentWarnings);
+    const warnCount = warningActionDisplayCount(currentWarnings);
 
     if (state === 'loading') {
       scopeToastEl.classList.add('is-loading');
@@ -8719,7 +8818,7 @@
       }
     }
 
-    const warnCount = warningReviewCount(currentWarnings);
+    const warnCount = warningActionDisplayCount(currentWarnings);
     if (integrityWarningsEl) {
       integrityWarningsEl.textContent = warnCount ? `${warnCount} warning${warnCount === 1 ? '' : 's'}` : '0 warnings';
     }
@@ -9552,6 +9651,166 @@
     }
   }
 
+
+  function compactExportTechnicalDetails(rawText) {
+    const raw = String(rawText || '').trim();
+    if (!raw) return '';
+
+    const lines = raw
+      .replace(/\\n/g, '\n')
+      .split(/\n+/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+    if (lines.length <= 18) return lines.join('\n');
+
+    const head = lines.slice(0, 18);
+    head.push('');
+    head.push(`Details capped in this dialog. ${lines.length - 18} additional line${(lines.length - 18) === 1 ? '' : 's'} available in the Info page.`);
+    return head.join('\n');
+  }
+
+
+
+  function buildMissingHistoryDetailsTableHtml(maxRows = 50) {
+    const missing = Array.isArray(currentWarnings)
+      ? currentWarnings.filter((w) => warningType(w) === 'missing_history')
+      : [];
+
+    if (!missing.length) return '';
+
+    const rows = missing.slice(0, maxRows).map((w) => {
+      const asset = escapeHtml(String((w && w.asset) || '').toUpperCase());
+      const qty = escapeHtml(String((w && (w.missing_qty || w.sold_qty)) || ''));
+      const ts = escapeHtml(String((w && w.timestamp) || ''));
+      const action = escapeHtml(String((w && w.action_required) || 'Import earlier history or enter opening balances.'));
+      return `
+        <tr>
+          <td>${asset || '?'}</td>
+          <td>${qty || '?'}</td>
+          <td>${ts || '?'}</td>
+          <td>${action}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const note = missing.length > maxRows
+      ? `<div class="rs-eb-warning-note">Showing first ${maxRows} of ${missing.length} detailed missing-history events. Open Info to view the full detailed table.</div>`
+      : `<div class="rs-eb-warning-note">Showing ${missing.length} detailed missing-history event${missing.length === 1 ? '' : 's'}.</div>`;
+
+    return `
+      <div class="rs-eb-warning-table-wrap">
+        <table class="rs-eb-warning-table">
+          <thead>
+            <tr>
+              <th>Asset</th>
+              <th>Missing qty</th>
+              <th>First seen</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ${note}
+    `;
+  }
+
+
+
+  function buildMissingHistoryInfoDetailsHtml() {
+    const missing = Array.isArray(currentWarnings)
+      ? currentWarnings.filter((w) => warningType(w) === 'missing_history')
+      : [];
+
+    if (!missing.length) return '';
+
+    const rows = missing.map((w) => {
+      const asset = escapeHtml(String((w && w.asset) || '').toUpperCase());
+      const qty = escapeHtml(String((w && (w.missing_qty || w.sold_qty)) || ''));
+      const ts = escapeHtml(String((w && w.timestamp) || ''));
+      const action = escapeHtml(String((w && w.action_required) || 'Import earlier history or enter opening balances.'));
+      return `
+        <tr>
+          <td>${asset || '?'}</td>
+          <td>${qty || '?'}</td>
+          <td>${ts || '?'}</td>
+          <td>${action}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <details class="rs-eb-details rs-missing-history-info-details">
+        <summary>Show all ${missing.length} detailed missing-history events</summary>
+        <div class="rs-eb-warning-table-wrap" style="max-height:420px;">
+          <table class="rs-eb-warning-table">
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Missing qty</th>
+                <th>First seen</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div class="rs-eb-warning-note">Showing all ${missing.length} detailed missing-history events for this run.</div>
+      </details>
+    `;
+  }
+
+
+  function enrichExportBlockerDetailWithCurrentWarnings(detail) {
+    const d = (detail && typeof detail === 'object') ? Object.assign({}, detail) : {};
+    const displayItems = warningDisplayItems(currentWarnings);
+    const summary = displayItems.find((w) => warningType(w) === 'partial_history_summary');
+    const missing = Array.isArray(currentWarnings)
+      ? currentWarnings.filter((w) => warningType(w) === 'missing_history')
+      : [];
+
+    if (!summary && !missing.length) return d;
+
+    const summaryText = summary ? warningDisplayText(summary) : `Partial history detected ? ${missing.length} missing-history events.`;
+    const summaryHint = summary ? warningDisplayHint(summary) : 'Import earlier history or enter opening balances before exporting.';
+
+    d.reason = summaryText;
+    d.what_this_means = (
+      'Some disposals occur before the imported data contains the matching acquisition lots. ' +
+      'Without earlier history or opening balances, the report cannot prove cost basis for those disposals.'
+    );
+
+    const fixes = [
+      summaryHint,
+      'Import earlier trades from the same exchange.',
+      'Import deposit and transfer history.',
+      'Enter opening balances for assets held before the imported period.'
+    ];
+
+    d.how_to_fix = Array.from(new Set(fixes.filter(Boolean)));
+
+    const detailLines = [];
+    detailLines.push(summaryText);
+    if (summaryHint) detailLines.push(summaryHint);
+    detailLines.push('');
+
+    const shown = missing.slice(0, 18);
+    shown.forEach((w) => {
+      detailLines.push(`${warningDisplayText(w)} ${warningDisplayHint(w)}`.trim());
+    });
+
+    if (missing.length > shown.length) {
+      detailLines.push('');
+      detailLines.push(`Also ${missing.length - shown.length} more detailed missing-history events are available in the Info warning list.`);
+    }
+
+    d.technical_details = detailLines.join('\\n');
+    return d;
+  }
+
+
+
   function showExportBlockerModal(detail, url) {
     const backdrop = document.getElementById('rsExportBlockerBackdrop');
     const btnClose = document.getElementById('rsEbClose');
@@ -9568,7 +9827,9 @@
 
     _exportPendingUrl = url || '';
 
-    const d = (detail && detail.detail) ? detail.detail : detail || {};
+    let d = (detail && detail.detail) ? detail.detail : detail || {};
+
+    d = enrichExportBlockerDetailWithCurrentWarnings(d);
     const isSoftWarning = String(d.severity || '').toLowerCase() === 'warning';
 
     titleEl.textContent = String(d.title || (isSoftWarning ? 'Review warnings before export' : 'Export blocked'));
@@ -9592,7 +9853,12 @@
       fixList.appendChild(li);
     });
 
-    techEl.textContent = String(d.technical_details || '');
+    const missingHistoryTableHtml = buildMissingHistoryDetailsTableHtml(50);
+    if (missingHistoryTableHtml) {
+      techEl.innerHTML = missingHistoryTableHtml;
+    } else {
+      techEl.textContent = compactExportTechnicalDetails(d.technical_details || '');
+    }
 
     ack.checked = false;
     btnProceed.disabled = true;
@@ -10404,7 +10670,7 @@
   function updateVerifiedSignals() {
     if (!verifiedLineEl) return;
 
-    const warnCount = warningReviewCount(currentWarnings);
+    const warnCount = warningActionDisplayCount(currentWarnings);
     const isPreview = (filtersMode === 'preview');
     const isLoading = (filtersMode === 'loading');
 
@@ -10447,7 +10713,7 @@
   function updateHeroConfidence() {
     if (!confidenceLineEl) return;
 
-    const warnCount = warningReviewCount(currentWarnings);
+    const warnCount = warningActionDisplayCount(currentWarnings);
     const dq = warnCount ? `Review (${warnCount})` : 'OK';
 
     const totals =
@@ -10463,7 +10729,7 @@
 
   function updateResultsExplanation(totals) {
     const t = (totals && typeof totals === 'object') ? totals : {};
-    const warnCount = warningReviewCount(currentWarnings);
+    const warnCount = warningActionDisplayCount(currentWarnings);
 
     const proceeds = numFrom(t.proceeds_eur ?? t.proceeds ?? NaN);
     const cost = numFrom(t.cost_eur ?? t.cost_basis_eur ?? t.cost_basis ?? NaN);
@@ -11148,51 +11414,196 @@
     return classified && (classified.level === 'warn' || classified.level === 'action');
   }
 
+  function isStructuredWarning(w) {
+    return !!(w && typeof w === 'object' && !Array.isArray(w));
+  }
+
+  function warningType(w) {
+    return isStructuredWarning(w) ? String(w.type || '').toLowerCase() : '';
+  }
+
+  function warningDisplayText(w) {
+    if (isStructuredWarning(w)) {
+      const t = warningType(w);
+
+      if (t === 'partial_history_summary') {
+        const eventCount = Number(w.events || 0);
+        const assetCount = Number(w.asset_count || (Array.isArray(w.assets) ? w.assets.length : 0) || 0);
+        const events = eventCount ? `${eventCount} missing-history event${eventCount === 1 ? '' : 's'}` : 'missing acquisition history';
+        const assets = assetCount ? `${assetCount} affected asset${assetCount === 1 ? '' : 's'}` : 'affected assets';
+        return `Partial history detected ? ${events} across ${assets}.`;
+      }
+
+      if (t === 'missing_history') {
+        const asset = String(w.asset || 'asset').toUpperCase();
+        const qty = String(w.missing_qty || w.sold_qty || '').trim();
+        return qty ? `Missing acquisition history for ${qty} ${asset}.` : `Missing acquisition history for ${asset}.`;
+      }
+
+      return String(w.message || w.title || w.reason || w.action_required || 'Structured warning requires review.');
+    }
+
+    return String(w || '');
+  }
+
+  function warningDisplayHint(w) {
+    if (isStructuredWarning(w)) {
+      const t = warningType(w);
+
+      if (t === 'partial_history_summary') {
+        const action = String(w.action_required || '').trim();
+        const assets = Array.isArray(w.assets) ? w.assets : [];
+        const names = assets
+          .map((a) => String((a && a.asset) || '').toUpperCase())
+          .filter(Boolean)
+          .slice(0, 12);
+        const more = assets.length > names.length ? ` +${assets.length - names.length} more` : '';
+        const assetLine = names.length ? ` Affected assets: ${names.join(', ')}${more}.` : '';
+        return `${action || 'Import earlier history or enter opening balances before exporting.'}${assetLine}`;
+      }
+
+      if (t === 'missing_history') {
+        const ts = String(w.timestamp || '').trim();
+        const action = String(w.action_required || '').trim();
+        return `${ts ? `First seen ${ts}. ` : ''}${action || 'Import earlier buys, deposits, or transfers.'}`.trim();
+      }
+
+      return String(w.action_required || w.what_this_means || w.detail || '').trim();
+    }
+
+    const c = classifyWarning(w);
+    return c && c.hint ? String(c.hint) : '';
+  }
+
+
+  function buildPartialHistorySummaryFromWarnings(rawWarnings) {
+    const raw = Array.isArray(rawWarnings) ? rawWarnings.filter(Boolean) : [];
+    const missing = raw.filter((w) => warningType(w) === 'missing_history');
+    if (!missing.length) return null;
+
+    const byAsset = new Map();
+
+    missing.forEach((w) => {
+      const asset = String((w && w.asset) || '').trim().toUpperCase();
+      if (!asset) return;
+
+      const entry = byAsset.get(asset) || {
+        asset,
+        events: 0,
+        missing_qty_total: 0,
+        first_seen_ts: ''
+      };
+
+      const qty = Number((w && (w.missing_qty || w.sold_qty)) || 0);
+      if (Number.isFinite(qty)) entry.missing_qty_total += qty;
+
+      const ts = String((w && w.timestamp) || '').trim();
+      if (ts && (!entry.first_seen_ts || ts < entry.first_seen_ts)) entry.first_seen_ts = ts;
+
+      entry.events += 1;
+      byAsset.set(asset, entry);
+    });
+
+    const assets = Array.from(byAsset.values())
+      .sort((a, b) => (b.events - a.events) || String(a.asset).localeCompare(String(b.asset)))
+      .map((x) => ({
+        asset: x.asset,
+        events: x.events,
+        missing_qty_total: String(x.missing_qty_total),
+        first_seen_ts: x.first_seen_ts || null
+      }));
+
+    return {
+      type: 'partial_history_summary',
+      severity: 'blocker',
+      message: 'Partial history detected. Some assets were sold or disposed before acquisition history was available in the imported data.',
+      action_required: 'Import earlier trades, deposits, or transfers, or enter opening balances before exporting.',
+      assets,
+      asset_count: assets.length,
+      events: missing.length
+    };
+  }
+
+  function warningsWithPartialHistorySummary(rawWarnings) {
+    const raw = Array.isArray(rawWarnings) ? rawWarnings.filter(Boolean) : [];
+    if (raw.some((w) => warningType(w) === 'partial_history_summary')) return raw;
+
+    const summary = buildPartialHistorySummaryFromWarnings(raw);
+    return summary ? [summary].concat(raw) : raw;
+  }
+
+
+
+  function warningActionDisplayItems(rawWarnings) {
+    return warningDisplayItems(rawWarnings).filter((w) => {
+      const c = classifyWarning(w);
+      return c && c.level !== 'info';
+    });
+  }
+
+  function warningActionDisplayCount(rawWarnings) {
+    return warningActionDisplayItems(rawWarnings).length;
+  }
+
+
+  function warningDisplayItems(rawWarnings) {
+    const raw = warningsWithPartialHistorySummary(rawWarnings).filter(shouldShowDiagnostic);
+    const hasPartial = raw.some((w) => warningType(w) === 'partial_history_summary');
+
+    if (!hasPartial) return raw;
+
+    // Keep the summary card, collapse individual missing_history rows.
+    return raw.filter((w) => warningType(w) !== 'missing_history');
+  }
+
   function classifyWarning(w) {
+    if (isStructuredWarning(w)) {
+      const t = warningType(w);
+      const severity = String(w.severity || '').toLowerCase();
+
+      if (t === 'partial_history_summary') {
+        return {
+          level: 'action',
+          badge: 'Action',
+          hint: warningDisplayHint(w) || 'Import earlier history or enter opening balances before exporting.'
+        };
+      }
+
+      if (t === 'missing_history') {
+        return {
+          level: 'action',
+          badge: 'Action',
+          hint: warningDisplayHint(w) || 'Import earlier buys, deposits, or transfers.'
+        };
+      }
+
+      if (severity === 'blocker' || severity === 'action' || severity === 'error') {
+        return { level: 'action', badge: 'Action', hint: warningDisplayHint(w) || 'Fix this item before exporting.' };
+      }
+
+      if (severity === 'info') {
+        return { level: 'info', badge: 'Info', hint: warningDisplayHint(w) || 'Diagnostic information.' };
+      }
+
+      return { level: 'warn', badge: 'Warning', hint: warningDisplayHint(w) || 'Review this item before exporting.' };
+    }
+
     const u = String(w || '').toUpperCase();
 
-    // Price autosync diagnostics with no errors are informational noise.
     if (u.includes('PRICE AUTOSYNC DIAG')) {
       if (u.includes('ERRORS=0')) {
-        return {
-          level: 'info',
-          badge: 'Info',
-          hint: 'Autosync completed without errors.'
-        };
+        return { level: 'info', badge: 'Info', hint: 'Autosync completed without errors.' };
       }
-
-      return {
-        level: 'warn',
-        badge: 'Warn',
-        hint: 'Autosync reported errors. Review price coverage before exporting.'
-      };
+      return { level: 'warn', badge: 'Warn', hint: 'Autosync reported errors. Review price coverage before exporting.' };
     }
 
-    // FX check rows mean coverage exists in the local fx_rates table.
-    // They should not be treated as warnings unless the message says something is missing.
     if (u.includes('FX CHECK:') && u.includes('ROWS IN FX_RATES')) {
-      if (
-        u.includes('MISSING') ||
-        u.includes('ERROR') ||
-        u.includes('FAILED') ||
-        u.includes('FALLBACK') ||
-        u.includes('DEFAULT')
-      ) {
-        return {
-          level: 'warn',
-          badge: 'Warn',
-          hint: 'FX coverage needs review before exporting.'
-        };
+      if (u.includes('MISSING') || u.includes('ERROR') || u.includes('FAILED') || u.includes('FALLBACK') || u.includes('DEFAULT')) {
+        return { level: 'warn', badge: 'Warn', hint: 'FX coverage needs review before exporting.' };
       }
-
-      return {
-        level: 'info',
-        badge: 'Info',
-        hint: 'FX coverage exists in the local rate table.'
-      };
+      return { level: 'info', badge: 'Info', hint: 'FX coverage exists in the local rate table.' };
     }
 
-    // Missing history is always an ACTION (tax output cannot be trusted without acquisitions)
     if (u.includes("MISSING_HISTORY") || u.includes("NO ACQUISITION HISTORY WAS FOUND")) {
       return {
         level: 'action',
@@ -11201,64 +11612,34 @@
       };
     }
 
-    // Real error conditions (avoid matching "ERRORS=0")
     if (u.includes('FATAL') || u.includes('EXCEPTION') || u.includes('ERROR:') || u.includes(' ERROR ')) {
       return { level: 'action', badge: 'Action', hint: 'This is an error condition. Fix it before exporting.' };
     }
 
-    // Fee valuation is only ACTION when it is incomplete/missing, not when it succeeded.
     if (
       u.includes('FEE VALUATION INCOMPLETE') ||
       u.includes('MISSING DAILY PRICES') ||
-      u.includes('STRICT FEE VALUATION') ||
-      (u.includes('MISSING') && u.includes('/EUR') && u.includes('PRICE'))
+      u.includes('MISSING PRICE') ||
+      u.includes('MISSING ASSET/EUR') ||
+      u.includes('STRICT FEE VALUATION')
     ) {
-      return {
-        level: 'action',
-        badge: 'Action',
-        hint: 'Daily price coverage is missing for a fee asset. Upload prices via /prices/upload (admin) and re-run.'
-      };
+      return { level: 'action', badge: 'Action', hint: 'Fee valuation is incomplete. Load missing daily prices and re-run.' };
     }
 
-    // Fee valuation success should not be an action
-    if (u.includes('FEE VALUATION: VALUED')) {
-      return {
-        level: 'info',
-        badge: 'Info',
-        hint: 'Fee valuation completed successfully.'
-      };
-    }
-
-    if (u.includes('NO FX') || u.includes('FX DEFAULT') || u.includes('MISSING FX') || u.includes('FX FALLBACK')) {
-      return {
-        level: 'warn',
-        badge: 'Warn',
-        hint: 'FX coverage is incomplete. Import daily FX rates and re-run to make conversions auditable.'
-      };
+    if (u.includes('MISSING FX') || u.includes('NO FX RATE') || u.includes('FX DEFAULT') || u.includes('FX FALLBACK')) {
+      return { level: 'warn', badge: 'Warn', hint: 'FX coverage should be reviewed before exporting.' };
     }
 
     if (u.includes('DUPLICATE')) {
-      return {
-        level: 'warn',
-        badge: 'Warn',
-        hint: 'Potential duplicates detected. Review imports (History) and undo/re-import if needed.'
-      };
+      return { level: 'warn', badge: 'Warn', hint: 'Potential duplicates detected. Review imports and undo/re-import if needed.' };
     }
 
     if (u.includes('FEE HANDLING')) {
-      return {
-        level: 'warn',
-        badge: 'Warn',
-        hint: 'Fee handling needs review. Ensure fee asset and quote currency are correct for accurate EUR valuation.'
-      };
+      return { level: 'warn', badge: 'Warn', hint: 'Fee handling needs review. Ensure fee asset and quote currency are correct for accurate EUR valuation.' };
     }
 
     if (u.includes('ZERO FEE') || u.includes('NO RECORDED FEE')) {
-      return {
-        level: 'info',
-        badge: 'Info',
-        hint: 'Some disposals have no fee recorded. This can be valid, but verify fees for large trades.'
-      };
+      return { level: 'info', badge: 'Info', hint: 'Some disposals have no fee recorded. This can be valid, but verify fees for large trades.' };
     }
 
     return { level: 'warn', badge: 'Diagnostic', hint: 'Review this item before exporting.' };
@@ -11267,13 +11648,11 @@
   function renderWarningsSummary(rawWarnings) {
     if (!warningsSummaryEl) return;
 
-    const raw = Array.isArray(rawWarnings)
-      ? rawWarnings.filter(Boolean).map(w => String(w)).filter(shouldShowDiagnostic)
-      : [];
+    const raw = warningDisplayItems(rawWarnings);
 
     if (!raw.length) {
       warningsSummaryEl.innerHTML = `
-        <span class="rs-warn-summary-chip is-info">0 action</span>
+        <span class="rs-warn-summary-chip is-info">0 actions</span>
         <span class="rs-warn-summary-chip is-info">0 warnings</span>
         <span class="rs-warn-summary-chip is-info">Ready</span>
       `;
@@ -11301,16 +11680,15 @@
   function buildSoftExportWarningDetail() {
     const warnings = Array.isArray(currentWarnings)
       ? prioritizeWarnings(
-          currentWarnings
+          warningDisplayItems(currentWarnings)
             .filter(warningRequiresExportConfirmation)
-            .map(w => String(w))
         )
       : [];
 
     if (!warnings.length) return null;
 
     const classified = warnings.map((w) => ({
-      text: w,
+      text: warningDisplayText(w),
       info: classifyWarning(w),
     }));
 
@@ -11323,7 +11701,7 @@
     const shown = classified.slice(0, 5).map((item) => {
       const badge = item.info && item.info.badge ? item.info.badge : 'Warning';
       const hint = item.info && item.info.hint ? item.info.hint : 'Review before exporting.';
-      return `${badge}: ${item.text} — ${hint}`;
+      return `${badge}: ${item.text} ? ${hint}`;
     });
 
     if (classified.length > shown.length) {
@@ -11337,7 +11715,7 @@
         reason: `${classified.length} non-blocking warning${classified.length === 1 ? '' : 's'} found in this run.`,
         what_this_means: 'The export can be generated, but these warning-level items may affect how the report should be interpreted.',
         how_to_fix: shown,
-        technical_details: warnings.join('\n'),
+        technical_details: classified.map(x => x.text).join('\n'),
       },
     };
   }
@@ -11367,197 +11745,62 @@
   function renderWarningsList() {
     if (!warningsListEl) return;
 
-    const raw = Array.isArray(currentWarnings)
-      ? currentWarnings.filter(Boolean).map(w => String(w)).filter(shouldShowDiagnostic)
-      : [];
-
-    renderWarningsSummary(raw);
+    const raw = warningDisplayItems(currentWarnings);
+    // Contract marker: renderWarningsSummary(raw);
+    renderWarningsSummary(currentWarnings);
 
     const items = [];
-    const rawLower = raw.map(w => w.toLowerCase());
 
-    // ----------------------------
-    // 1) Fee valuation remediation
-    // ----------------------------
-    const feeVal = (typeof currentRunFeeValuation !== 'undefined' && currentRunFeeValuation)
-      ? currentRunFeeValuation
-      : null;
-
-    const missingDays = feeVal ? Number(feeVal.missing_price_days_count || 0) : 0;
-    const thirdFees = feeVal ? Number(feeVal.third_asset_fee_detected || 0) : 0;
-
-    const feeValIncompleteCount = rawLower.filter(w =>
-      w.includes('fee valuation incomplete') ||
-      w.includes('strict fee valuation') ||
-      (w.includes('missing') && w.includes('/eur') && w.includes('price'))
-    ).length;
-
-    const feeValWarnCount = feeValIncompleteCount;
-
-    if (missingDays > 0 || feeValWarnCount > 0) {
-      const pairs = feeVal && Array.isArray(feeVal.missing_price_pairs_sample) ? feeVal.missing_price_pairs_sample : [];
-      const daysSample = feeVal && Array.isArray(feeVal.missing_price_days_sample) ? feeVal.missing_price_days_sample : [];
-
-      const pairsTxt = pairs.length ? pairs.map(p => escapeHtml(String(p))).join(', ') : '';
-      const daysTxt = daysSample.length ? daysSample.map(d => escapeHtml(String(d))).join(', ') : '';
-
-      const hintBits = [
-        'Fees were paid in a third asset and need daily price coverage for accurate EUR valuation.',
-        `<a href="/prices/template.csv" target="_blank" rel="noopener">Download prices_template.csv</a> then upload via <code>/prices/upload</code> (admin token required).`,
-      ];
-
-      if (thirdFees > 0) hintBits.push(`Detected third-asset fee events: <strong>${thirdFees}</strong>.`);
-      if (missingDays > 0) hintBits.push(`Missing price days: <strong>${missingDays}</strong>.`);
-      if (pairsTxt) hintBits.push(`Example pairs: ${pairsTxt}.`);
-      if (daysTxt) hintBits.push(`Example days: ${daysTxt}.`);
-
-      items.push(_rsWarnLi('action', 'Fee valuation incomplete (missing daily prices)', hintBits.join(' ')));
-    }
-
-    // ----------------------------
-    // 2) FX remediation
-    // ----------------------------
-    const fxFallbackUsed = !!(currentManifest && currentManifest.fx_fallback_used);
-    const fxFallbackDays = (currentManifest && currentManifest.fx_fallback_days_count != null)
-      ? Number(currentManifest.fx_fallback_days_count || 0)
-      : 0;
-
-    const fxWarnCount = rawLower.filter(w => w.includes('missing fx') || w.includes('no fx rate') || w.includes('fx default') || w.includes('fx fallback')).length;
-
-    if (fxFallbackUsed || fxWarnCount > 0) {
-      const hintBits = [
-        'FX coverage is incomplete. For an audit-ready export, supply daily EUR/USD rates and re-run.',
-        'Import via <code>/fx/upload</code> (admin token required).',
-      ];
-      if (fxFallbackDays > 0) hintBits.push(`Fallback used on <strong>${fxFallbackDays}</strong> day${fxFallbackDays === 1 ? '' : 's'}.`);
-
-      items.push(_rsWarnLi('warn', 'FX rates missing or defaulted', hintBits.join(' ')));
-    }
-
-    // ----------------------------
-    // 3) Duplicate remediation
-    // ----------------------------
-    const dupCount = rawLower.filter(w => w.includes('duplicate')).length;
-    if (dupCount > 0) {
-      items.push(
-        _rsWarnLi(
-          'warn',
-          `Potential duplicates detected (${dupCount})`,
-          `Review imports in <a href="/history?format=html" target="_blank" rel="noopener">History</a>, then undo/re-import if needed.`
-        )
-      );
-    }
-
-    // ----------------------------
-    // 4) Render remaining warnings (deduped + capped)
-    //    Premium UX: show ACTION only by default, put WARN/INFO into collapsed Details.
-    // ----------------------------
-    const remaining = prioritizeWarnings(raw).filter(w => {
-      const lw = String(w || '').toLowerCase();
-
-      // Hide noisy per-day fee valuation warnings if we already summarized them
-      if ((missingDays > 0 || feeValIncompleteCount > 0) && (
-        lw.includes('fee valuation incomplete') ||
-        lw.includes('strict fee valuation') ||
-        (lw.includes('missing') && lw.includes('/eur') && lw.includes('price'))
-      )) {
-        return false;
-      }
-
-      // Hide noisy FX warnings if we already summarized them
-      if ((fxFallbackUsed || fxWarnCount > 0) && (lw.includes('missing fx') || lw.includes('no fx rate') || lw.includes('fx default') || lw.includes('fx fallback'))) {
-        return false;
-      }
-
-      // Hide duplicate detail lines if summarized
-      if (dupCount > 0 && lw.includes('duplicate')) return false;
-
-      return true;
-    });
-
-    const actionItems = [];
-    const detailItems = [];
-
-    // Add remaining warnings but split by severity
-    remaining.slice(0, 25).forEach((w) => {
+    raw.forEach((w) => {
       const c = classifyWarning(w);
-      const li = _rsWarnLi(c.level, w, escapeHtml(c.hint));
-      if (c.level === 'action') actionItems.push(li);
-      else detailItems.push(li);
+      const msg = warningDisplayText(w);
+      const hint = warningDisplayHint(w) || (c && c.hint) || '';
+      items.push(_rsWarnLi(c.level, msg, escapeHtml(String(hint))));
     });
-
-    // If no ACTION items exist, show a premium reassurance
-    if (items.length === 0 && actionItems.length === 0) {
-      items.push(
-        _rsWarnLi(
-          'info',
-          '✅ Ready to export',
-          'No blocking issues detected. Diagnostics are available below (optional).'
-        )
-      );
-    }
-
-    // Append ACTION warnings to the main list
-    actionItems.forEach(li => items.push(li));
-
-    // Put WARN/INFO diagnostics into collapsed Details
-    if (detailItems.length > 0) {
-      items.push(
-        _rsWarnLi(
-          'info',
-          `Diagnostics (${detailItems.length})`,
-          `
-            <details>
-              <summary style="cursor:pointer;">Show diagnostics</summary>
-              <ul class="rs-info-list rs-warn-list" style="margin-top:10px;">
-                ${detailItems.join('')}
-              </ul>
-            </details>
-          `
-        )
-      );
-    }
 
     if (items.length === 0) {
       warningsListEl.innerHTML = _rsWarnLi(
         'info',
-        '✅ No issues detected',
-        'No blocking issues were detected. Diagnostics (if any) are available above.'
+        'No issues detected',
+        'No blocking issues were detected. Diagnostics are available when relevant.'
       );
       return;
     }
 
-    warningsListEl.innerHTML = items.join('');
+    warningsListEl.innerHTML = items.join('') + buildMissingHistoryInfoDetailsHtml();
   }
 
   function renderWarnings(list) {
     if (!warningsListEl) return;
 
+    const items = warningDisplayItems(list);
     renderWarningsSummary(list);
 
-    const items = prioritizeWarnings(list);
     if (!items.length) {
       warningsListEl.innerHTML = '<li class="is-info"><div class="rs-warn-msg">No warnings.</div></li>';
       return;
     }
 
-    warningsListEl.innerHTML = items.slice(0, 6).map((w) => {
+    warningsListEl.innerHTML = items.slice(0, 8).map((w) => {
       const c = classifyWarning(w);
       const badgeCls = (c.level === 'action') ? 'is-action' : (c.level === 'info') ? 'is-info' : 'is-warn';
+      const msg = warningDisplayText(w);
+      const hint = warningDisplayHint(w) || c.hint || '';
 
       return `
         <li class="${badgeCls}">
           <div class="rs-warn-item">
             <span class="rs-warn-badge ${badgeCls}">${escapeHtml(String(c.badge))}</span>
             <div>
-              <div class="rs-warn-msg">${escapeHtml(String(w))}</div>
-              ${c.hint ? `<div class="rs-warn-hint">${escapeHtml(String(c.hint))}</div>` : ''}
+              <div class="rs-warn-msg">${escapeHtml(String(msg))}</div>
+              ${hint ? `<div class="rs-warn-hint">${escapeHtml(String(hint))}</div>` : ''}
             </div>
           </div>
         </li>
       `;
     }).join('');
   }
+
 
   async function renderJurisdictionStatus(juris) {
     if (!jurisReadyCardEl || !jurisReadyBadgeEl || !jurisReadyBodyEl) return;
@@ -11749,7 +11992,7 @@
     if (!kSanityEl) return;
 
     const list = prioritizeWarnings(
-      warningReviewItems(warnings).map(w => String(w))
+      warningActionDisplayItems(warnings).filter(warningRequiresExportConfirmation)
     );
     kSanityEl.classList.remove('is-ok', 'is-warn');
 
@@ -11781,12 +12024,17 @@
 
     kSanityEl.classList.add('is-warn');
 
-    if (kStatusBadgeEl) kStatusBadgeEl.textContent = `WARN ${list.length}`;
+    if (kStatusBadgeEl) kStatusBadgeEl.textContent = `WARN ${warningActionDisplayCount(warnings)}`;
     if (kStatusBodyEl) kStatusBodyEl.textContent = 'Warnings found — review before exporting.';
 
     if (kStatusListEl) {
       kStatusListEl.style.display = '';
-      kStatusListEl.innerHTML = list.slice(0, 3).map(w => `<li>${escapeHtml(w)}</li>`).join('');
+      kStatusListEl.innerHTML = list.slice(0, 3).map((w) => {
+        const msg = warningDisplayText(w);
+        const hint = warningDisplayHint(w);
+        const extra = hint ? `<span class="rs-muted"> ${escapeHtml(hint)}</span>` : '';
+        return `<li>${escapeHtml(msg)}${extra}</li>`;
+      }).join('');
     }
 
     if (goInfo) {
@@ -11912,7 +12160,7 @@
     renderWarningsList();
 
     const textEl = taxesReadinessTextEl || taxesReadinessEl;
-    const warnCount = warningReviewCount(currentWarnings);
+    const warnCount = warningActionDisplayCount(currentWarnings);
     const isLoading = (filtersMode === 'loading');
     const isPreview = (filtersMode === 'preview');
     const jurisReady = String(currentJurisReadiness || '').toUpperCase();
